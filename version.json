@@ -1,8 +1,9 @@
 {
  "format": 1,
- "version": "1.19.11",
+ "version": "1.20.0",
  "min_shell": 1,
  "notes": [
+  "Wefty has a new home: wefty.org. Open your old Wefty (or Vault) and tap Move to wefty.org: it signs you in there with one tap, no password, and brings your settings along. Then add the new one to your home screen and remove the old one. Your notes are all in your cloud, so nothing is lost. Notifications need turning on again there (Settings > Notifications).",
   "Tap a note attached in Chat to open it, and lots more things you see can now be tapped or dragged. After a test, Wefty asks once whether to keep its flash cards coming (they rest after 3 days if you don't answer). The note-taker: on a phone, use Pocket mode (black screen, double tap to wake) instead of turning the screen off; on a Chromebook, switch on \"Record while in another tab\" to keep it hearing while you use other tabs.",
   "Ask Chat to remind you (or set an alarm) and it sets it right away, then asks to add it to your calendar so it reminds you, even when Wefty is closed. The calendar file rings at the time itself (and 10 minutes before); Google Calendar uses your usual notification. In Safari on an iPhone it goes straight into the Calendar app.",
   "Chat stays where you're reading: scroll up to read an answer while it's still being written, and it no longer jumps you to the bottom when it finishes.",
@@ -18,7 +19,7 @@
   "Right-click, two-finger tap or a long press opens more options on almost everything: notes, folders, flash cards, chats, pictures and files.",
   "Snap a page: take a photo of your notes or a handout (from Today, a new note or Chat) and AI turns it into a tidy note you check before it's saved. Share links, screenshots and PDFs into Wefty from other apps; on an iPhone, copy them and tap Paste into Wefty."
  ],
- "build": "1.19.11-a165d18eacc9",
+ "build": "1.20.0-fbc1a5deae77",
  "files": {
   "fonts/Inter-Bold.woff2": {
    "sha256": "2fc67537708842a1cecebf596ce5b3aa0a790a2c92d31ac67d4915ff494c90de",
@@ -133,12 +134,12 @@
    "size": 7943
   },
   "index.html": {
-   "sha256": "8708fe3ba4a539641bb9ac64101cb50790429970f010f597d77c9e58bd6e8e0d",
-   "size": 6282
+   "sha256": "014f04b60ef164c65965485cf1fcfcffde3e5d992745842d23e654710950b5e7",
+   "size": 6300
   },
   "js/access.js": {
-   "sha256": "75ec8cc3f10c000d6d00ab8d98240d1f596710f149c09905a48caeeca6be6118",
-   "size": 58724
+   "sha256": "5ff16757ff4b1177024e8deabee31cdce4810f259a15cb6d035b55ce1cd6b193",
+   "size": 58707
   },
   "js/ai.js": {
    "sha256": "89b9fb20707522c56002aefb5d8012dab38e4fd8acffc2db4ed2a36187199148",
@@ -237,8 +238,8 @@
    "size": 7054
   },
   "js/moved.js": {
-   "sha256": "0e828f64d0c64ac71b733e8fb9fed3f7d96cd8bb24420da368ff16baf98198bc",
-   "size": 4894
+   "sha256": "fff0dab8d8c5c0e7b8f12ddc25e126ba855dc01840279b39538928600697f242",
+   "size": 6689
   },
   "js/news.js": {
    "sha256": "5c866bb9284f4dea4cd6223934a0a5130964314f2faa2fd630747c662f2772bc",
@@ -269,8 +270,8 @@
    "size": 14354
   },
   "js/reminders.js": {
-   "sha256": "f7c37033c10d691ee2e55854791a5aea6585a975451126beaf52c87fe256b642",
-   "size": 74188
+   "sha256": "33a41eca6acc42c75f7c239bb2427bcffe5b62cb870573e7d3ff226317e00619",
+   "size": 74171
   },
   "js/review.js": {
    "sha256": "f41ce98a1bde0e4934bbe45fdbd8666518a453771e40550417415f3d898616da",
@@ -293,8 +294,8 @@
    "size": 9199
   },
   "js/start.js": {
-   "sha256": "b04908b9f97d0a499e91b255b9dea06f2a0dff2c851e66428f9742143d59ff2b",
-   "size": 95452
+   "sha256": "1dbad1ccd63f20a99f7c45dfe223c7948c2f599ada0d676978e562e1f882a431",
+   "size": 108062
   },
   "js/starthere.js": {
    "sha256": "f34eeec9b28d8d37cd049bf4bdb55bfef488def75535692cc62176ce9a64a5fb",
@@ -329,8 +330,8 @@
    "size": 15845
   },
   "js/util.js": {
-   "sha256": "1c034596eda794a1bb33766f5f96f8c51e88170f7eba62d098c40b088846c52a",
-   "size": 74344
+   "sha256": "4acb7fd048817a6901d616e4287f4a4d2923f5db17a167f704889d2fdf9600d7",
+   "size": 74343
   },
   "js/week.js": {
    "sha256": "fc7876e2759528ccc85183afdb8286c4b25cef84418187deb68130d16d8e3c6f",
@@ -349,8 +350,8 @@
    "size": 329631
   },
   "sw.js": {
-   "sha256": "98f64d198c2e474f5e7e67769e05cea6bd2a327b718811d2abc3fd8ef31d9349",
-   "size": 12431
+   "sha256": "051369d099c22847f80ec936d18f3102519550316a9825690b01e6a5a76e5914",
+   "size": 12610
   },
   "vendor/LICENSE-supabase-js.txt": {
    "sha256": "334dd6820e2eaeab2064e7c59001b810566728a28a41a7c1dbf69bbee17d0936",

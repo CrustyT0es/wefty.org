@@ -35,7 +35,7 @@
 
 V.invites = (() => {
   const SLUG = 'vault-admin';
-  const PHONE_URL = 'https://crustyt0es.github.io/wefty/';  // vault/__init__.py's, for a device that doesn't say
+  const PHONE_URL = 'https://wefty.org/';  // vault/__init__.py's, for a device that doesn't say
   const JOIN_SINCE = 2;  // the helper's first version that makes join codes (vault/helper.py's JOIN_SINCE)
   const NEWS_SINCE = 3;  // ...and the first with announcements (vault/helper.py's NEWS_SINCE)
   const PUSH_SINCE = 4;  // ...and the first that sends phone notifications (vault/helper.py's PUSH_SINCE)
