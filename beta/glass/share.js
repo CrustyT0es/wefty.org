@@ -92,6 +92,7 @@ const lite = () => root.classList.contains('lite');
 const EASE = 'cubic-bezier(.2,.8,.2,1)';
 const SPRING = 'cubic-bezier(.34,1.45,.64,1)';
 const SLIDE = 'cubic-bezier(.22,1.06,.36,1)';   // (a slide that settles: no more than a touch past)
+const CAROUSEL = 'cubic-bezier(.22,1,.36,1)';  // (the parts' slide: quick, then settling, never past its place)
 const SHARE = /^(send|files|clips)$/;
 const zoomOf = () => { const b = document.body; return b && b.offsetWidth ? b.getBoundingClientRect().width / b.offsetWidth || 1 : 1; };
 function animate(el, keyframes, options) {
@@ -148,7 +149,7 @@ document.addEventListener('click', tapped, true);
 document.addEventListener('keydown', keyed, true);
 
 /* The switch's pill: one element behind the buttons, on the part shown; it slides there from `from` (a part's id). */
-function pill(sw, from) {
+function pill(sw, from, leader = null) {
   if (!sw) return;
   const picked = sw.querySelector(':scope > [aria-selected="true"]');
   if (!picked) return;
@@ -163,15 +164,16 @@ function pill(sw, from) {
   Object.assign(el.style, { width: `${picked.offsetWidth}px`, height: `${picked.offsetHeight}px`, transform: `translate(${picked.offsetLeft}px, ${picked.offsetTop}px)` });
   const old = from ? sw.querySelector(`:scope > [data-part="${from}"]`) : null;
   if (!old || old === picked || calm()) return;
-  animate(el, [{ transform: `translate(${old.offsetLeft}px, ${old.offsetTop}px)` }, { transform: `translate(${picked.offsetLeft}px, ${picked.offsetTop}px)` }],
-    { duration: lite() ? 200 : 460, easing: lite() ? EASE : 'cubic-bezier(.25,1.18,.35,1)' });
+  const into = (a) => { if (a && leader && leader.startTime != null) { try { a.startTime = leader.startTime; } catch (error) { /* it begins when it is ready */ } } return a; };
+  into(animate(el, [{ transform: `translate(${old.offsetLeft}px, ${old.offsetTop}px)` }, { transform: `translate(${picked.offsetLeft}px, ${picked.offsetTop}px)` }],
+    { duration: lite() ? 200 : 460, easing: lite() ? EASE : 'cubic-bezier(.25,1.18,.35,1)' }));
   if (!lite()) {
     // (its little stretch on the way, as the tab bar's pill does: the scale is its own property, under the slide's transform)
-    animate(el, [{ scale: '1 1' }, { scale: '1.08 .94', offset: 0.28 }, { scale: '.99 1.01', offset: 0.6 }, { scale: '1 1' }],
-      { duration: 460, easing: 'cubic-bezier(.25,.8,.3,1)' });
+    into(animate(el, [{ scale: '1 1' }, { scale: '1.08 .94', offset: 0.28 }, { scale: '.99 1.01', offset: 0.6 }, { scale: '1 1' }],
+      { duration: 460, easing: 'cubic-bezier(.25,.8,.3,1)' }));
   }
   // (the words under it: the part left keeps its words a moment, as the tab bar's do)
-  for (const button of [old, picked]) animate(button, [{ opacity: 0.55 }, { opacity: 1 }], { duration: 300, easing: EASE });
+  for (const button of [old, picked]) into(animate(button, [{ opacity: 0.55 }, { opacity: 1 }], { duration: 300, easing: EASE }));
 }
 
 /* What is in a part under its switch, in order. */
@@ -199,23 +201,78 @@ function shown(view) {
     // (the same tab: Share's top and its switch stay where they are; only what is under the switch moves. The shell's
     // slide for a change of tab comes after this, so it is let go once it has begun.)
     Promise.resolve().then(() => { for (const a of page.getAnimations()) if (a.id === 'g-slide') a.cancel(); });
-    // Sideways, from the side of the part tapped; the copy of the part left goes the other way and fades first.
+    // One part at a time, never both in the same place (the owner's recording: the part left and the part tapped were both
+    // drawn, see-through, on top of each other). A carousel: the part tapped slides in from its side as the copy of the part
+    // left slides out the other way, a whole screen's width, on one curve and one clock (the new part's rows may start a
+    // hair later, never sooner), so the gap between them is a screen's width at every moment and nothing of one is ever
+    // over the other. The copy is clipped to the screen's area; the real part is clipped sideways while it slides in.
     const order = sw ? [...sw.querySelectorAll(':scope > [data-part]')].map((b) => b.dataset.part) : ['send', 'files', 'clips'];
     const dir = order.indexOf(part) > order.indexOf(was.from) ? 1 : -1;
-    items.forEach((el, i) => {
-      const wait = lite() ? 0 : 60 + Math.min(i, 5) * 26;
-      animate(el, [{ transform: `translateX(${dir * 40}px)` }, { transform: 'none' }], { duration: lite() ? 200 : 460, delay: wait, easing: lite() ? EASE : SLIDE, fill: 'backwards' });
-      animate(el, [{ opacity: 0 }, { opacity: 1 }], { duration: lite() ? 160 : 240, delay: wait + (lite() ? 0 : 40), easing: EASE, fill: 'backwards' });
-    });
-    if (was.ghost) {
-      const copy = was.ghost.firstElementChild;
-      const goes = copy ? partsOf(copy) : [];
-      const gone = () => was.ghost.remove();
-      const done = goes.map((el) => animate(el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-dir * 32}px)` }],
-        { duration: 150, easing: 'cubic-bezier(.5,0,.8,.4)', fill: 'forwards' })).filter(Boolean);
-      if (done.length) Promise.all(done.map((a) => a.finished)).then(gone, gone); else gone();
-      setTimeout(gone, 500);
+    const holder = view.closest('main.view') || view;
+    const across = was.ghost && !lite() ? Math.ceil(holder.getBoundingClientRect().width / zoomOf()) : 0;
+    const ms = lite() ? 200 : 480;
+    const curve = lite() ? EASE : CAROUSEL;   // (no overshoot: a part that went past its place would be cut at the screen's edge)
+    const clipped = holder.style.overflowX;
+    if (across) holder.style.overflowX = 'hidden';
+    const settle = () => { if (holder.style.overflowX === 'hidden') holder.style.overflowX = clipped; };
+    const visible = (el) => el.getClientRects().length > 0;
+    const rows = (box) => (box ? partsOf(box).filter(visible).slice(0, 14) : []);
+    if (across && V.motion && V.motion.tween && V.motion.bezier) {
+      // The part tapped slides in as the copy of the part left slides out, both from one clock (V.motion.tween): the real
+      // part is found afresh at each frame, since Files, and any part that has to ask the cloud, is drawn again a moment after
+      // it opens (its box replaced by a new one: the owner's recording showed it whole and in place over the part going, and
+      // the classic pill, a faint second one, behind its button), and the switch's pill is put on the new one at once.
+      const copy = was.ghost ? was.ghost.firstElementChild : null;
+      const goes = copy ? partsOf(copy).slice(0, 14) : [];
+      let seen = null;
+      let eased = 0;
+      const put = (e) => {
+        const box = view.querySelector(':scope > .page');
+        if (box && box !== seen) { seen = box; if (box !== page && e < 1) pill(box.querySelector(':scope > .share-switch'), was.from); }
+        // (no transition while it moves: a button that springs on its transform, share.css, would lag behind the rest of its part)
+        for (const el of rows(box)) { el.style.transition = e >= 1 ? '' : 'none'; el.style.transform = e >= 1 ? '' : `translateX(${dir * across * (1 - e)}px)`; }
+        for (const el of goes) { el.style.transition = 'none'; el.style.transform = `translateX(${-dir * across * e}px)`; }
+      };
+      const watch = typeof MutationObserver === 'function' ? new MutationObserver(() => { if (eased < 1) put(eased); }) : null;
+      if (watch) watch.observe(view, { childList: true });
+      const clear = () => {
+        if (watch) watch.disconnect();
+        for (const el of rows(view.querySelector(':scope > .page'))) { el.style.transform = ''; el.style.transition = ''; }
+        was.ghost.remove();
+        settle();
+      };
+      const move = V.motion.tween(ms, V.motion.bezier(0.22, 1, 0.36, 1), (e) => { eased = e; put(e); });
+      move.finished.then(clear, clear);
+      setTimeout(clear, ms + 1500);
+      return;
     }
+    // (Lite, and anywhere no copy of the part left is made: the new part's rows slide in a short way and fade in, in place; nothing
+    // is left to overlap, so a part drawn again just has the same move put on it from where it had got to)
+    const redo = (box, elapsed) => {
+      const into = (a) => { if (a && elapsed > 0) { try { a.currentTime = elapsed; } catch (error) { /* from its start */ } } return a; };
+      rows(box).forEach((el, i) => {
+        const wait = lite() ? 0 : Math.min(i, 4) * 16;
+        into(animate(el, [{ transform: `translateX(${dir * 40}px)` }, { transform: 'none' }], { duration: ms, delay: wait, easing: curve, fill: 'backwards' }));
+        into(animate(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 160, delay: wait, easing: EASE, fill: 'backwards' }));
+      });
+    };
+    const at = performance.now();
+    redo(page, 0);
+    if (typeof MutationObserver === 'function') {
+      let last = page;
+      const watch = new MutationObserver(() => {
+        const now = view.querySelector(':scope > .page');
+        if (!now || now === last) return;
+        last = now;
+        if (performance.now() - at > ms + 60 || !on()) { watch.disconnect(); return; }
+        pill(now.querySelector(':scope > .share-switch'), was.from);
+        redo(now, performance.now() - at);
+      });
+      watch.observe(view, { childList: true });
+      setTimeout(() => watch.disconnect(), ms + 120);
+    }
+    if (was.ghost) was.ghost.remove();
+    settle();
     return;
   }
   // Share opened from another tab: its parts rise in, as Today's do.

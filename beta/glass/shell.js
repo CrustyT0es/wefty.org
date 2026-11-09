@@ -384,6 +384,9 @@ function typingNow() {
   return !!(el && el !== document.body && el.matches && el.matches(TEXT_ENTRY) && !el.disabled && !el.readOnly);
 }
 function checkTyping() {
+  // (a text box has the focus: the aurora's drift is paused meanwhile, glass.css; the owner's typing lag, 1.22.2)
+  if (on() && typingNow() !== root.classList.contains('g-field')) root.classList.toggle('g-field', typingNow());
+  else if (!on()) root.classList.remove('g-field');
   if (!on() || !touchy()) { root.classList.remove('g-typing'); return; }
   const height = screenHeight();
   const width = window.innerWidth;

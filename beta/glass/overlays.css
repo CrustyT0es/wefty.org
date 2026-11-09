@@ -118,6 +118,12 @@ html[data-look="glass"] .menu-head .av .dot { box-shadow: 0 0 0 2.5px var(--g-fl
 
 html[data-look="glass"] #toasts { gap: 10px; width: min(calc(100% - 32px), 440px); }  /* (100%, not 100vw: with the page zoomed, vw is the zoomed page's) */
 @media (min-width: 900px) { html[data-look="glass"] #toasts { width: 400px; } }
+/* (round-4 merge: on a phone the full-screen note asks its question (the note-taker's "Set a reminder?" right after "Notes
+   made") just above its tools, where a toast comes in, and the toast hid the question: while one is asked, toasts come in
+   at the top, as they do with a sheet up) */
+@media (max-width: 899px) {
+  html[data-look="glass"] body:has(.editor-layer .editor-ask .ask-card) #toasts { top: calc(10px + var(--safe-top)); bottom: auto; }
+}
 html[data-look="glass"] .toast {
   min-height: 52px; padding: 8px 8px 8px 18px; border-radius: 22px; gap: 10px;
   /* (filled backwards: once it has risen, nothing holds its transform, so a swipe and its leaving can move it) */
@@ -169,7 +175,7 @@ html[data-look="glass"] .toast.msg-card .toast-action {
 html[data-look="glass"] .toast.msg-card .toast-action::before { background: var(--g-lift-soft); }
 html[data-look="glass"] .toast.msg-card .toast-help.mc-more { padding: 0 12px; margin-left: -6px; }
 html[data-look="glass"] .toast.msg-card .mc-go {  /* the one purple button */
-  color: var(--on-primary); background: var(--g-grad); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 8px 20px var(--g-glow);
+  color: var(--on-primary); background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-3 merge: glass.css's one primary) */
 }
 html[data-look="glass"] .toast.msg-card .mc-go::before { background: rgba(255, 255, 255, .14); }
 html[data-look="glass"] .toast.msg-card .mc-x { margin: -2px 0 0; width: 44px; height: 44px; color: var(--muted); }

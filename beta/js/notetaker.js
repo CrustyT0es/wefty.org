@@ -643,6 +643,7 @@ V.notetaker = (() => {
         }
         if (!wanted) { got.getTracks().forEach((track) => track.stop()); return; }
         stream = got;
+        V.emit('notetaker-mic', got);  // (2.0 glass: the live screen's threads follow how loud it is; nobody listens in classic)
         // A track muted (an iPhone sending Wefty to the background, a call taking the microphone) records only
         // silence: the screen says words are missed, and it's opened again once Wefty is back.
         stream.getAudioTracks().forEach((track) => {
@@ -1899,6 +1900,7 @@ V.notetaker = (() => {
         closeLayer();
         openNote(id);
       }
+      V.emit('notetaker-made', { id, shown });  // (2.0 glass: the notes' sections come in; nobody listens in classic)
       V.toast(`Notes made${done.cut ? ' (cut short)' : ''}.${done.cost ? ` That cost about ${V.ai.money(done.cost)}.` : ' Free.'}`, { ms: 5000 });
       if (done.soonest && shown) setTimeout(() => offerReminder(id, done.soonest), 400);
     } finally {

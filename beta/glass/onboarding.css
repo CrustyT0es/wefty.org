@@ -1,5 +1,167 @@
 /* Wefty 2.0 "glass", area: Onboarding. This file belongs to the Onboarding builder; nobody else edits it.
    Everything before the app (js/start.js's gate screens, welcome.js, doors.js, pair.js, tour.js, help.js): sign-in, sign-up, the welcome steps, the tour, Help.
-   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   Rules (vault/web/glass/README.txt has the rest): every rule starts with html[data-look="glass"]; use the tokens in
    glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
-   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+   V.motion's helpers instead of writing your own; nothing here changes the classic look.
+
+   The board is GlassWelcome.dc.html: the logo in a soft breathing glow, big words, glass choices that lift when picked,
+   one gradient button with real depth at the bottom, a quiet glass one beside it, and on the welcome steps a top bar
+   (Back, the progress as a thread, "2 of 5"). glass/onboarding.js slides screen to screen and builds that top bar.
+
+   ONE GRID: everything in a screen before the app shares the box's two edges (the box is the app's .gate-box: 16 px
+   from a phone's sides, 460 px at most), the same gap (--go-gap) and the same heights (--go-h for a button, a field and
+   a row of chips' boxes). tests/test_wefty_20_settings.py measures it. */
+
+html[data-look="glass"] :is(#app.gate, .g-gate-ghost) {
+  --go-gap: 12px; --go-h: 52px; --go-r: 17px;
+  --go-chip: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .07));
+  --go-chip-edge: light-dark(#fff, rgba(255, 255, 255, .12));
+}
+
+/* ================================================================== the box, the logo and the words */
+
+html[data-look="glass"] .gate-box { gap: 10px; position: relative; }
+/* (round-4 merge: a screen slides in from the side, its parts a screen's width off to the right as it starts; on a phone
+   Chrome zoomed out to show them and stayed zoomed out (the page 330 px wide on a 320 px phone). Clipped sideways only:
+   nothing here scrolls or is cut, and the picture of the screen that goes is fixed, outside #app.) */
+html[data-look="glass"] #app.gate { overflow-x: clip; }
+/* (and its one column never grows past the box: a long class typed on the classes step ("Advanced Functions and
+   Calculus" at 320 px with bigger text) made the column, and every part in it, wider than the phone; now the chip shrinks
+   and its words end in "...", as its own rules mean them to. Classic still grows, and Chrome zooms the page out.) */
+html[data-look="glass"] .gate-box { grid-template-columns: minmax(0, 1fr); }
+/* The logo stays exactly as it is; a soft glow breathes behind it (the board's .glow: transform and opacity only). */
+html[data-look="glass"] .gate-brand { position: relative; isolation: isolate; margin-bottom: 26px; }
+html[data-look="glass"] .gate-brand::before {
+  content: ""; position: absolute; z-index: -1; left: 50%; top: 50%; width: 220px; height: 150px; margin: -75px 0 0 -110px;
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, light-dark(rgba(150, 108, 240, .26), rgba(150, 108, 240, .42)), light-dark(rgba(150, 108, 240, .08), rgba(150, 108, 240, .14)) 55%, rgba(150, 108, 240, 0));
+  animation: g-ob-breathe 4.5s ease-in-out infinite alternate;
+}
+@keyframes g-ob-breathe { from { opacity: .75; transform: scale(.94); } to { opacity: 1; transform: scale(1.06); } }
+html[data-look="glass"] .gate-box h1 { font: 700 30px/1.12 var(--font-display); letter-spacing: -.022em; color: var(--text); text-wrap: balance; }
+html[data-look="glass"] .gate-box > .doors-pitch { font: 700 26px/1.2 var(--font-display); letter-spacing: -.02em; margin: 0 0 10px; }
+html[data-look="glass"] .gate-box > :is(.muted, p:not([class])) { color: var(--text-2); font-size: 15.5px; line-height: 1.45; }
+html[data-look="glass"] .gate-box .label { color: var(--text-2); font-weight: 600; }
+html[data-look="glass"] .gate-box .field { min-height: var(--go-h); border-radius: 16px; font-size: 16px; }
+html[data-look="glass"] .gate-box .hint, html[data-look="glass"] .gate-box .doors-legal, html[data-look="glass"] .gate-box .doors-or { color: var(--muted); }
+html[data-look="glass"] .gate-box .error-text:not(:empty) {
+  padding: 10px 14px; border-radius: 14px; background: var(--danger-soft); box-shadow: inset 0 0 0 1px light-dark(rgba(160, 35, 58, .2), rgba(255, 163, 163, .25));
+  animation: g-ob-shake .42s var(--g-spring) both;
+}
+@keyframes g-ob-shake { 0% { transform: translateX(0); } 25% { transform: translateX(-6px); } 55% { transform: translateX(4px); } 100% { transform: none; } }
+html[data-look="glass"] .gate-box > .doors-note, html[data-look="glass"] .gate-box > .moved-waiting { border-radius: 16px; box-shadow: inset 0 0 0 1px light-dark(rgba(154, 85, 5, .2), rgba(255, 201, 106, .25)); }
+html[data-look="glass"] .gate-box > .moved-done { border-radius: 16px; }
+html[data-look="glass"] .gate-box > .moved-icon { border-radius: 20px; box-shadow: 0 12px 30px var(--g-glow); }
+
+/* ================================================================== buttons: one gradient with depth, quiet glass for the rest */
+
+html[data-look="glass"] .gate-box .btn.wide-btn {
+  min-height: var(--go-h); border-radius: var(--go-r); font: 600 16px/1.2 var(--font); padding: 0 20px;
+  transition: transform .22s var(--g-spring);
+}
+html[data-look="glass"] .gate-box .btn.wide-btn:not(.primary):not(.quiet) {
+  background: var(--go-chip); color: var(--text);
+  box-shadow: inset 0 1px 0 var(--go-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] :is(.gate-box, .help-sheet, .hs) .btn.primary {
+  --g-lift: rgba(255, 255, 255, .2);
+  background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-4 merge: glass.css's one primary) */
+}
+html[data-look="glass"] :is(.gate-box, .help-sheet, .hs) .btn.primary::after {
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] .gate-box .btn:active:not(:disabled) { transform: scale(.96); transition-duration: var(--d-press); }
+html[data-look="glass"] :is(.gate-box, .help-sheet, .hs) .btn.primary:active:not(:disabled)::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
+html[data-look="glass"] .gate-box .btn.primary:disabled { opacity: .42; }
+html[data-look="glass"] .gate-box .btn .icon { transition: transform .22s var(--g-spring); }
+@media (hover: hover) { html[data-look="glass"] .gate-box .btn.wide-btn:hover:not(:disabled):not(:active) .icon { transform: translateX(-1px) rotate(-6deg) scale(1.06); } }
+/* Continue with Google: a white glass button, as Google asks its button to be. */
+html[data-look="glass"] .gate-box .btn.doors-google { background: light-dark(#ffffff, rgba(255, 255, 255, .92)); color: #1f1f1f; box-shadow: inset 0 0 0 1px light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .4)), 0 8px 20px light-dark(rgba(76, 52, 160, .12), rgba(4, 2, 14, .35)); }
+html[data-look="glass"] .gate-box .link-btn { color: var(--accent-ink); font-weight: 600; border-radius: 12px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .gate-box .link-btn:active { transform: scale(.96); }
+html[data-look="glass"] .doors-stack { gap: var(--go-gap); }
+html[data-look="glass"] .doors-or::before, html[data-look="glass"] .doors-or::after { background: var(--line); }
+html[data-look="glass"] .doors-tick a, html[data-look="glass"] .doors-legal a { color: var(--accent-ink); }
+html[data-look="glass"] .doors-show { border-radius: 11px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .doors-show:active { transform: scale(.92); }
+html[data-look="glass"] .doors-pass .field { padding-right: 72px; }
+html[data-look="glass"] .doors-show { right: 8px; bottom: 8px; }
+html[data-look="glass"] .gate-box .field.doors-code { min-height: 60px; letter-spacing: .3em; }
+
+/* The Terms tick and the AI step's "I've read Google's terms": overlays.css's one tick box (the gradient layer fading in,
+   the tick springing into it), as in every sheet. (round-4 merge: this file's own tick drew under it, a second recipe.) */
+
+/* ================================================================== the welcome steps */
+
+/* The top bar (glass/onboarding.js): Back, the progress thread, "2 of 5". The logo makes way for it, as in the board. */
+html[data-look="glass"] .gate-box:has(> .g-wel-top) > .gate-brand { display: none; }
+html[data-look="glass"] .g-wel-top { display: grid; grid-template-columns: 44px minmax(0, 1fr) 52px; align-items: center; gap: 8px; min-height: 56px; margin: -8px 0 10px; }
+html[data-look="glass"] .g-wel-back { margin-left: -8px; transition: transform var(--d-press) var(--g-ease), opacity .25s var(--g-ease); }
+html[data-look="glass"] .g-wel-back:disabled { opacity: 0; pointer-events: none; }
+html[data-look="glass"] .g-wel-top .welcome-dots { display: flex; justify-content: center; margin: 0; }
+html[data-look="glass"] .g-wel-top .welcome-dots > span { display: none; }
+html[data-look="glass"] .g-wel-thread { display: block; width: 100%; max-width: 220px; height: 12px; overflow: visible; }
+html[data-look="glass"] .g-wel-thread path { fill: none; stroke-linecap: round; stroke-width: 3; }
+html[data-look="glass"] .g-wel-track { stroke: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .12)); }
+html[data-look="glass"] .g-wel-fill { stroke: var(--accent); stroke-dasharray: 100; }
+html[data-look="glass"] .g-wel-count { text-align: right; font: 500 13.5px/1 var(--font); color: var(--text-2); font-variant-numeric: tabular-nums; }
+html[data-look="glass"] .g-wel-done { grid-template-columns: 1fr; }
+/* The words of a step sit on the left, as the board's. */
+html[data-look="glass"] .gate-box:has(> .g-wel-top) > h1 { text-align: left; margin-top: 4px; }
+html[data-look="glass"] .gate-box:has(> .g-wel-top) > .muted { text-align: left; }
+
+/* The study loop: three glass rows, a gradient tile each. */
+html[data-look="glass"] .welcome-loop { gap: var(--go-gap); }
+html[data-look="glass"] .welcome-loop > li {
+  position: relative; border: 0; border-radius: 22px; padding: 14px 14px 14px 16px; background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .welcome-loop > li::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .welcome-loop .loop-ic {
+  border-radius: 17px; color: #fff; background: linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 45%), var(--g-grad);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 8px 20px var(--g-glow);
+}
+html[data-look="glass"] .welcome-loop .loop-text span { color: var(--muted); }
+
+/* The steps' dots where there's no top bar (a sign-up's): short glass bars, the one now long and lit. */
+html[data-look="glass"] .gate-box > .welcome-dots { gap: 6px; }
+html[data-look="glass"] .gate-box > .welcome-dots > span { transition: none; width: 14px; height: 5px; border-radius: 3px; background: light-dark(rgba(110, 80, 200, .18), rgba(255, 255, 255, .14)); }
+html[data-look="glass"] .gate-box > .welcome-dots > span[data-state=done] { background: var(--accent); opacity: .7; }
+html[data-look="glass"] .gate-box > .welcome-dots > span[data-state=now] { width: 26px; background: var(--g-grad); box-shadow: 0 0 10px var(--g-glow); }
+
+/* Classes and the test's class: glass chips that spring; a picked one is lit and lifts. */
+html[data-look="glass"] .welcome-subjects { gap: 10px; }
+html[data-look="glass"] .gate-box:has(> .g-wel-top) .welcome-subjects { justify-content: flex-start; }
+html[data-look="glass"] .subject-chip { min-height: 44px; border-radius: 15px; padding: 0 14px 0 12px; transition: transform .3s var(--g-spring); }
+html[data-look="glass"] .subject-chip.on { transform: translateY(-2px); }
+html[data-look="glass"] .subject-chip:active { transform: scale(.95); transition-duration: var(--d-press); }
+html[data-look="glass"] .subject-chip.on:active { transform: translateY(-2px) scale(.95); }
+html[data-look="glass"] .welcome-own { gap: 10px; align-items: stretch; }
+html[data-look="glass"] .welcome-own > .field, html[data-look="glass"] .welcome-own > .btn { min-height: 48px; }
+html[data-look="glass"] .welcome-own > .btn { border-radius: 16px; }
+html[data-look="glass"][data-theme="dark"] .gate-box input[type=date].field { color-scheme: dark; background: var(--field); }
+html[data-look="glass"][data-theme="light"] .gate-box input[type=date].field { color-scheme: light; }
+html[data-look="glass"] .welcome-skip { justify-self: center; min-height: 44px; }
+
+/* ================================================================== the screen that goes (glass/onboarding.js) */
+
+html[data-look="glass"] .g-gate-ghost { position: fixed; z-index: 0; margin: 0; pointer-events: none; will-change: transform, opacity; }
+html[data-look="glass"] .g-gate-ghost > .gate-box { max-width: none; }
+
+/* ================================================================== Help, the home-screen popup, the tip */
+
+html[data-look="glass"] .help-search .field.help-box { min-height: 48px; border-radius: 24px; }
+html[data-look="glass"] .help-q { border-radius: 16px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .help-q:active { transform: scale(.98); }
+html[data-look="glass"] .help-card { border-radius: 20px; }
+html[data-look="glass"] .help-acts .btn { border-radius: 14px; }
+html[data-look="glass"] .coach { border-radius: 20px; }
+
+/* ================================================================== lite and calm */
+
+html[data-look="glass"].lite .gate-brand::before, html[data-look="glass"].calm .gate-brand::before { animation: none; }
+html[data-look="glass"].calm .gate-box .error-text:not(:empty) { animation: none; }
+html[data-look="glass"].calm :is(.subject-chip, .subject-chip.on, .gate-box .btn, .gate-box .link-btn, .gate-box input[type=checkbox], .help-q):is(:active, .on) { transform: none; }

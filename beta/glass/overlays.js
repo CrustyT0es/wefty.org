@@ -120,6 +120,18 @@ const plainToast = V.toast;
 V.toast = function toast(text, options = {}) {
   const o = options || {};
   const helps = !!o.help && !!(V.help && V.help.open);
+  // ---- round-3 merge block: one error at a time. A newer error takes the place of the ones still showing (a key typed
+  // wrong three times stacked three cards over the sheet, its Save under them); the other toasts (an Undo) stay.
+  if (on() && o.kind === 'err') {
+    const box = document.getElementById('toasts');
+    for (const old of box ? [...box.querySelectorAll(':scope > .toast.err:not(.leaving)')] : []) {
+      const x = old.querySelector(':scope > .mc-x');
+      if (x) { x.click(); continue; }  // (a message card closes itself: its own leaving and onClose)
+      old.classList.add('leaving');
+      setTimeout(() => old.remove(), 200);
+    }
+  }
+  // ---- end of the round-3 merge block
   if (on() && o.kind === 'err' && typeof text === 'string' && (helps || o.action || text.length > 60)) {
     try {
       const [title, icon] = (helps && CARDS[o.help]) || [PLAIN_TITLE, 'alert'];
@@ -287,7 +299,7 @@ function leaving(list) {
   document.body.appendChild(copy);
   const gone = () => copy.remove();
   const a = play(copy, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }],
-    { duration: lite() ? 90 : 130, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }, 'leave');
+    { duration: lite() ? 70 : 100, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }, 'leave');
   if (a) a.finished.then(gone, gone); else gone();
   setTimeout(gone, 400);
 }
@@ -332,8 +344,10 @@ function pop(list, anchor, options) {
     if (a) a.finished.then(gone, gone); else gone();
     return;
   }
-  const a = play(list, [{ opacity: 0, transform: 'scale(.9)' }, { opacity: 1, transform: 'none' }],
-    { duration: lite() ? 140 : 320, easing: lite() ? 'ease-out' : SPRING, fill: 'backwards' }, 'menu');
+  // (from well under its size, about the button it came from: a menu that began at nine tenths of its size looked as if it had
+  // simply been there, to the left of its button, the owner's recording)
+  const a = play(list, [{ opacity: 0, transform: lite() ? 'scale(.9)' : 'scale(.45)' }, { opacity: 1, transform: 'none' }],
+    { duration: lite() ? 140 : 360, easing: lite() ? 'ease-out' : SPRING, fill: 'backwards' }, 'menu');
   if (a) a.finished.then(gone, gone); else gone();
   if (lite()) return;
   [...list.children].filter((child) => child.classList.contains('menu-item')).slice(0, 8).forEach((item, i) => {

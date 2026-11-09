@@ -132,9 +132,7 @@ html[data-look="glass"] .send-row .btn {
 }
 html[data-look="glass"] .send-row .btn.primary {
   --g-lift: rgba(255, 255, 255, .2);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .24), rgba(255, 255, 255, 0) 42%), var(--g-grad);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 -10px 16px -8px rgba(40, 12, 120, .5),
-    0 10px 22px -4px var(--g-glow);
+  background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-3 merge: glass.css's one primary) */
 }
 html[data-look="glass"] .send-row .btn::after {
   background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 255, 255, 0) 65%);

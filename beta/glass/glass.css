@@ -157,7 +157,7 @@ html[data-look="glass"][data-tod="day"] #g-aurora .tl-d,
 html[data-look="glass"][data-tod="night"] #g-aurora .tl-n { opacity: 1; }
 /* (the tints are tokens, so a screen opened over the app can paint the same canvas: --g-canvas-image, below) */
 html[data-look="glass"][data-theme="dark"] {
-  --g-aurora-m: radial-gradient(38% 26% at 18% 14%, rgba(198, 96, 178, .65), rgba(198, 96, 178, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(240, 146, 112, .36), rgba(240, 146, 112, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .29), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(128, 72, 196, .36), rgba(128, 72, 196, 0) 70%);
+  --g-aurora-m: radial-gradient(38% 26% at 18% 14%, rgba(176, 92, 206, .62), rgba(176, 92, 206, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(122, 96, 232, .38), rgba(122, 96, 232, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .29), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(128, 72, 196, .36), rgba(128, 72, 196, 0) 70%);
   --g-aurora-d: radial-gradient(38% 26% at 18% 14%, rgba(132, 86, 224, .74), rgba(132, 86, 224, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(92, 78, 222, .48), rgba(92, 78, 222, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .31), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(80, 60, 190, .36), rgba(80, 60, 190, 0) 70%);
   --g-aurora-n: radial-gradient(38% 26% at 18% 14%, rgba(90, 58, 192, .53), rgba(90, 58, 192, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(54, 50, 168, .34), rgba(54, 50, 168, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(110, 62, 198, .18), rgba(110, 62, 198, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(42, 32, 126, .36), rgba(42, 32, 126, 0) 70%);
 }
@@ -182,6 +182,9 @@ html.away[data-look="glass"] #g-aurora, html.g-idle[data-look="glass"] #g-aurora
 html.g-scrolling[data-look="glass"] #g-aurora { animation-play-state: paused; }  /* (its layer is kept: dropping and redrawing it would cost more than the drift) */
 /* (a sheet open: its blur sits on the page, which doesn't need to drift under it) */
 html[data-look="glass"]:has(#layers > .layer:not(.menu-layer)) #g-aurora { animation-play-state: paused; }
+/* (and while a box has the keyboard: a letter typed needn't have the drift, and the bars' blur over it, drawn again
+   every frame; Wefty 1.22.2, the owner: typing in Chat got slow) */
+html.g-field[data-look="glass"] #g-aurora { animation-play-state: paused; }  /* (html.g-field: glass/shell.js, a text box has the focus; a :has(:focus) rule on <html> cost a long frame at every focus) */
 
 /* ================================================================== base: selection, focus, scrollbars, icons */
 
@@ -273,6 +276,12 @@ html[data-look="glass"].lite .menu { background: light-dark(rgba(250, 247, 255, 
 
 /* Toasts. */
 html[data-look="glass"] #toasts { bottom: calc(var(--g-bar-space) + 14px + var(--safe-bottom)); }
+/* (round-3 merge: on a phone a sheet fills the lower screen with its boxes and buttons, and a message card at the bottom
+   covered its Save, so a second try after "that key isn't valid" couldn't be pressed: with a sheet up, toasts come in
+   at the top, as they do while folders are arranged) */
+@media (max-width: 899px) {
+  html[data-look="glass"] body:has(.sheet) #toasts { top: calc(10px + var(--safe-top)); bottom: auto; }
+}
 html[data-look="glass"] .toast {
   border: 0; border-radius: 18px; background: var(--toast);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 0 0 1px var(--toast-edge), 0 10px 26px rgba(0, 0, 0, .45);
@@ -343,6 +352,24 @@ html[data-look="glass"] .fab::after {
 }
 html[data-look="glass"]:is(.lite, .calm) .fab::after { display: none; }
 /* ---- end of the round-2 fixes block */
+/* ---- round-3 merge: one primary for every screen. Share's Send, Chat's Send and the study screen's I know it each had
+   the board's glass depth while every other primary (sheets, Settings, Notes, the message cards) stayed flat. The
+   recipe is here once, as two tokens: a gloss over the upper part laid on the gradient, and the depth (a light along the
+   top edge, a rim, a darker inside along the foot, a soft coloured shadow). The areas use the same tokens. The gloss is
+   gone by 28% of the height, above the words: lower, white words on it read under 4.5 to 1 in the light theme. */
+html[data-look="glass"] {
+  --g-gloss: linear-gradient(180deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 28%);
+  --g-primary-depth: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 -10px 16px -8px rgba(40, 12, 120, .5),
+    0 10px 22px -4px var(--g-glow);
+}
+html[data-look="glass"] .btn.primary, html[data-look="glass"] .btn.primary:hover:not(:disabled),
+html[data-look="glass"] .toast.msg-card .mc-go, html[data-look="glass"] .editor .ask-btn.primary {
+  background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);
+}
+html[data-look="glass"] .btn.primary::after {
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 255, 255, 0) 65%);
+}
+/* ---- end of the round-3 merge block */
 
 html[data-look="glass"] .icon-btn { border-radius: 15px; transition: transform var(--d-press) var(--g-ease); }
 html[data-look="glass"] .icon-btn:active { transform: scale(.9); }
@@ -446,6 +473,9 @@ html[data-look="glass"] .badge:not([hidden]) { animation: g-pop .55s var(--g-spr
   html[data-look="glass"] .view[data-tab=notes] .notes-layout.selecting .list-column { padding-bottom: calc(170px + var(--safe-bottom)); }
   /* (cards change height by a pixel as picking starts and ends: the place isn't moved by the browser's scroll anchoring) */
   html[data-look="glass"] .view[data-tab=notes] .list-column { overflow-anchor: none; }
+  /* (round-3 merge: something brought into sight, by the keyboard's focus or a scrollIntoView, stops above the floating
+     bar, never under it: a long press there landed on the bar, so a card's menu never opened) */
+  html[data-look="glass"] .view, html[data-look="glass"] .view[data-tab=notes] .list-column { scroll-padding-bottom: var(--g-bar-space); }
   /* A fade under the bar, like the board's, so the last words don't run into the glass. */
   html[data-look="glass"] #app.ready:not(.gate):not([data-view=settings])::after {
     content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(128px + var(--safe-bottom)); z-index: 4; pointer-events: none;
@@ -709,6 +739,10 @@ html[data-look="glass"].calm [data-phase="syncing"] > .g-pull-hint.g-pull-pill::
 /* ================================================================== lite and calm */
 
 html[data-look="glass"].lite *, html[data-look="glass"].lite *::before, html[data-look="glass"].lite *::after { transition-duration: min(var(--g-lite-cap, .14s), 1s); }
+/* (round 3: a duration alone would make every element without a transition of its own move "all" its properties, sizes
+   and margins too, as transition-property starts as "all". With no weight at all, this "none" only holds where no rule
+   names a property, so real transitions keep theirs and are only shortened.) */
+:where(html[data-look="glass"].lite *, html[data-look="glass"].lite *::before, html[data-look="glass"].lite *::after) { transition-property: none; }
 html[data-look="glass"].lite .g-enter { animation-duration: .18s; }
 html[data-look="glass"].lite .badge:not([hidden]) { animation-duration: .25s; }
 html[data-look="glass"].lite .g-tabslide { transition-duration: .22s; }

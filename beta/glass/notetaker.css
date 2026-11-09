@@ -1,22 +1,501 @@
 /* Wefty 2.0 "glass", area: Note-taker. This file belongs to the Note-taker builder; nobody else edits it.
    The note-taker (js/notetaker.js, dictation.js, capture.js): its start screen, live screen, strip and problem screens.
-   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   Rules (vault/web/glass/README.txt has the rest): every rule starts with html[data-look="glass"]; use the tokens in
    glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
-   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+   V.motion's helpers instead of writing your own; nothing here changes the classic look.
 
-/* ---- the 2.0 hotfix (the owner's phone, bigger text, while it listened: its top was cut off under the bar and couldn't be
-   scrolled to, Pocket mode's words were squeezed into a narrow column beside its button, and "Stop and make notes" was cut
-   at its right edge). On a phone the live screen is one scroller from its top, under the bar: the words keep their own box,
-   which follows them, at least 140 px tall, and when the rest needs more room than the screen has, the whole screen scrolls
-   (glass/notetaker.js starts it at its top: the start screen may have been scrolled down to its Start button). One 16 px
-   gutter for every row, as for the buttons at its foot; Pocket mode's words take the width, its button under them; the two
-   buttons at the foot share a row while their words fit, else each has a row of its own. */
+   The board is GlassNoteTaker.dc.html. What's here, in order: the screen itself (a phone: full screen over its own
+   aurora; from 700 px a glass dialog), its top row (Hide | title | Stop on one grid), the start screen, the live screen
+   (the status line with the recording dot, the three threads that move with the sound, the words rising in), the foot
+   (one gradient button, quiet glass beside it, on the same edges as everything above), writing the notes and the problem
+   screen, the bar at the top while it's hidden, Pocket mode, the "Before you record" box, the dictation pill, then lite
+   and calm.
+
+   ONE set of edges: --nt-pad is the room on both sides of everything on the screen (the bar, the words, the cards, the
+   buttons), the same 16 px gutter as Today's; --nt-gap is between the buttons and between the cards; --nt-h is every
+   foot button's height. glass/notetaker.js only adds what can't be drawn from CSS (the threads, the clock in the status
+   line, the dots while writing) and the motion. */
+
+/* ================================================================== the screen */
+
+html[data-look="glass"] .nt-layer {
+  --nt-pad: 16px; --nt-gap: 10px; --nt-h: 50px; --nt-r: 16px;
+  --nt-chip: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .07));  /* (round-4 merge: the quiet glass of the study screen, the note and the welcome) */
+  --nt-chip-edge: light-dark(rgba(255, 255, 255, .9), rgba(255, 255, 255, .12));
+  --nt-rec: light-dark(#c2334a, #ffa3a3);
+  --nt-rec-glow: light-dark(rgba(194, 51, 74, .45), rgba(255, 163, 163, .8));
+  overflow: hidden; background: var(--bg); isolation: isolate;
+  opacity: 0; transform: translateY(26px) scale(.985);
+  transition: opacity .18s var(--g-in), transform .2s var(--g-in);
+}
+html[data-look="glass"] .nt-layer.shown { opacity: 1; transform: none; transition: opacity .26s var(--g-ease), transform .5s var(--g-slide); }
+/* Its own aurora (the app's sits under the app, which this covers): the board's tint, still (a layer that drifted would
+   stick out past the screen's sides while it moved). */
+html[data-look="glass"] .nt-layer {
+  background: radial-gradient(38% 26% at 22% 16%, rgba(132, 86, 224, .58), rgba(132, 86, 224, 0) 70%),
+    radial-gradient(34% 24% at 86% 34%, rgba(92, 78, 222, .38), rgba(92, 78, 222, 0) 70%),
+    radial-gradient(46% 30% at 50% 86%, rgba(170, 92, 240, .24), rgba(170, 92, 240, 0) 70%),
+    radial-gradient(30% 22% at 8% 60%, rgba(80, 60, 190, .28), rgba(80, 60, 190, 0) 70%), var(--bg);
+}
+html[data-look="glass"][data-theme="light"] .nt-layer {
+  background: radial-gradient(38% 26% at 18% 14%, rgba(150, 105, 255, .5), rgba(150, 105, 255, 0) 70%),
+    radial-gradient(34% 24% at 88% 30%, rgba(186, 140, 255, .38), rgba(186, 140, 255, 0) 70%),
+    radial-gradient(46% 30% at 52% 82%, rgba(255, 150, 220, .32), rgba(255, 150, 220, 0) 70%),
+    radial-gradient(30% 22% at 8% 62%, rgba(140, 110, 250, .32), rgba(140, 110, 250, 0) 70%), var(--bg);
+}
+html[data-look="glass"][data-black] .nt-layer { background: light-dark(var(--bg), #000); }
+
+html[data-look="glass"] .nt { background: transparent; }
 @media (max-width: 699px) {
-  html[data-look="glass"] .nt-body:has(> .nt-live) { overflow-y: auto; overscroll-behavior-y: contain; padding: 16px 16px 12px; }
-  html[data-look="glass"] .nt-body > .nt-live { flex: 1 0 auto; min-height: 0; }
-  html[data-look="glass"] .nt-live .nt-words { flex: 1 1 0; min-height: 140px; }
-  html[data-look="glass"] .nt-pocket-tip { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; }
+  html[data-look="glass"] .nt { border: 0; }
+}
+/* From 700 px: a glass dialog over the scrim, its own soft aurora inside. */
+@media (min-width: 700px) {
+  html[data-look="glass"] .nt-layer { --nt-pad: 22px; }
+  html[data-look="glass"][data-theme] .nt-layer { background: var(--scrim); }
+  html[data-look="glass"] .nt {
+    position: relative; border: 0; border-radius: var(--r-xl);
+    background: radial-gradient(70% 40% at 12% 0%, light-dark(rgba(150, 105, 255, .22), rgba(132, 86, 224, .32)), transparent 70%),
+      radial-gradient(60% 40% at 100% 100%, light-dark(rgba(255, 150, 220, .16), rgba(92, 78, 222, .2)), transparent 70%),
+      light-dark(rgba(250, 247, 255, .9), rgba(26, 19, 52, .9));
+    -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+    box-shadow: inset 0 1px 0 var(--g-hi), var(--shadow-3);
+  }
+  html[data-look="glass"] .nt::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none; z-index: 2;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  }
+  html[data-look="glass"][data-black] .nt { background: light-dark(rgba(250, 247, 255, .92), rgba(12, 10, 24, .94)); }
+  html[data-look="glass"] .nt-layer { transform: none; }
+  html[data-look="glass"] .nt-layer .nt { transform: translateY(26px) scale(.97); transition: transform .2s var(--g-in); }
+  html[data-look="glass"] .nt-layer.shown .nt { transform: none; transition: transform .5s var(--g-slide); }
+}
+
+/* ================================================================== the top row: Hide | title | Stop (one grid) */
+
+/* Three columns: the sides share what's left equally, so the title sits in the middle of the screen; a long title is cut
+   with "..." between the two buttons. Before it listens: the X on the left. (Its clock is in the status line below:
+   glass/notetaker.js copies it there.) */
+html[data-look="glass"] .nt-bar {
+  display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, max-content) minmax(max-content, 1fr); align-items: center; gap: 8px;
+  min-height: 64px; padding: calc(10px + var(--safe-top)) var(--nt-pad) 6px; border-bottom: 0;
+}
+@media (min-width: 700px) { html[data-look="glass"] .nt-bar { padding-top: 14px; } }
+html[data-look="glass"] .nt-bar > .bar-spacer, html[data-look="glass"] .nt-bar > .nt-time { display: none; }
+html[data-look="glass"] .nt-bar > :is(.icon-btn:not(.nt-stop), .nt-hide) { grid-column: 1; justify-self: start; }
+html[data-look="glass"] .nt-bar > .nt-title { grid-column: 2; text-align: center; font: 600 14px/20px var(--font); color: var(--text-2); letter-spacing: -.005em; }
+html[data-look="glass"] .nt-bar > .nt-stop { grid-column: 3; justify-self: end; }
+/* (the start screen: only the X and the title; the title still in the middle) */
+html[data-look="glass"] .nt-bar > .icon-btn:not(.nt-stop) {
+  width: 44px; height: 44px; border-radius: 15px; color: var(--text-2); background: var(--nt-chip);
+  box-shadow: inset 0 1px 0 var(--nt-chip-edge), inset 0 0 0 1px var(--g-ring); transition: transform .22s var(--g-spring);
+}
+/* Hide and Stop: glass chips the same height, with their words. */
+html[data-look="glass"] .nt-bar .nt-hide, html[data-look="glass"] .nt-bar .nt-stop {
+  position: relative; display: inline-flex; align-items: center; gap: 5px; height: 44px; min-height: 44px; width: auto; overflow: hidden;
+  border: 0; border-radius: 15px; font: 600 15px/1 var(--font); transition: transform .22s var(--g-spring);
+}
+html[data-look="glass"] .nt-bar .nt-hide {
+  padding: 0 12px 0 8px; color: var(--text-2); background: var(--nt-chip);
+  box-shadow: inset 0 1px 0 var(--nt-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .nt-bar .nt-hide .icon { width: 18px; height: 18px; }
+html[data-look="glass"] .nt-bar .nt-stop {
+  flex-direction: row-reverse; padding: 0 13px 0 11px; color: var(--danger);
+  background: light-dark(rgba(194, 51, 74, .08), rgba(255, 120, 140, .12));
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .08)), inset 0 0 0 1px light-dark(rgba(194, 51, 74, .3), rgba(255, 163, 163, .35));
+}
+html[data-look="glass"] .nt-bar .nt-stop::before { content: "Stop"; }  /* (its name, "Stop listening", is its aria-label) */
+html[data-look="glass"] .nt-bar .nt-stop::after { inset: 0; }
+html[data-look="glass"] .nt-bar .nt-stop .icon { width: 15px; height: 15px; }
+html[data-look="glass"] .nt-bar .nt-stop:hover { background: light-dark(rgba(194, 51, 74, .13), rgba(255, 120, 140, .18)); color: var(--danger); }
+html[data-look="glass"] .nt-bar :is(.nt-hide, .nt-stop, .icon-btn):active:not(:disabled) { transform: scale(.94); transition-duration: var(--d-press); }
+@media (hover: hover) {
+  html[data-look="glass"] .nt-bar :is(.nt-hide, .icon-btn:not(.nt-stop)):hover:not(:disabled) { background: light-dark(rgba(110, 80, 200, .13), rgba(255, 255, 255, .1)); color: var(--text); }
+}
+/* A narrow screen (or big text): the words on the two buttons go, the icons stay (their names don't change). */
+@container g-nt (max-width: 340px) {
+  html[data-look="glass"] .nt-bar .nt-stop::before { content: none; }
+  html[data-look="glass"] .nt-bar .nt-stop { padding: 0 14px; }
+}
+html[data-look="glass"] .nt { container: g-nt / inline-size; }
+
+/* ================================================================== the body and the foot: one gutter */
+
+html[data-look="glass"] .nt-body { padding: 8px var(--nt-pad) 12px; }
+html[data-look="glass"] .nt-body:has(> .nt-live) { padding-bottom: 6px; }
+/* What scrolls fades out just above the foot, so its words never run into the buttons. */
+html[data-look="glass"] .nt-body:not(:has(> .nt-live)) {
+  padding-bottom: 24px;  /* (scrolled to its end, the last line sits above the fade) */
+  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent);
+}
+/* A phone, listening with the tabs in reach: what's under the screen (Today, Notes...) isn't drawn round the floating tab bar,
+   only the app's own background is (it's inert meanwhile: js/notetaker.js cover()). */
+@media (max-width: 699px) {
+  html[data-look="glass"]:has(#layers > .nt-layer.shown[data-tabs=below]) #app > :not(nav.tabs) { visibility: hidden; }
+}
+html[data-look="glass"] .nt-foot {
+  display: flex; flex-wrap: wrap; gap: var(--nt-gap); justify-content: stretch;
+  padding: 10px var(--nt-pad) calc(16px + var(--safe-bottom)); border-top: 0; background: transparent;
+}
+/* The foot's buttons: one height; the gradient one has a row of its own under the quiet ones, as wide as the screen. */
+html[data-look="glass"] .nt-foot > .btn {
+  flex: 1 1 0; min-width: 0; min-height: var(--nt-h); padding: 0 16px; border-radius: var(--nt-r); font: 600 15.5px/20px var(--font);
+  transition: transform .22s var(--g-spring);
+}
+html[data-look="glass"] .nt-foot > .btn:not(.primary) {
+  color: var(--text); background: var(--nt-chip); box-shadow: inset 0 1px 0 var(--nt-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .nt-foot > .btn.primary { flex: 1 1 100%; order: 9; }
+html[data-look="glass"] .nt-foot > .btn > .icon + .icon { display: none; }  /* (Resume came with its play icon twice) */
+html[data-look="glass"] .nt-foot > .btn .icon { width: 18px; height: 18px; transition: transform .22s var(--g-spring); }
+@media (max-width: 699px) { html[data-look="glass"] .nt-foot > .btn { min-height: var(--nt-h); } }
+/* From 700 px: the buttons in one row along the bottom of the dialog, the gradient one last. */
+@media (min-width: 700px) {
+  html[data-look="glass"] .nt-foot { flex-wrap: nowrap; justify-content: flex-end; padding-bottom: 18px; }
+  html[data-look="glass"] .nt-foot > .btn { flex: 0 1 auto; min-width: 132px; }
+  html[data-look="glass"] .nt-foot > .btn.primary { flex: 0 1 auto; min-width: 200px; }
+}
+/* The one gradient button, with glass depth (Share's Send recipe: the light along its top, a gloss over its upper part, a
+   darker inside along the bottom, a rim and a soft coloured shadow); a sheen sweeps across on a press. */
+html[data-look="glass"] :is(.nt-foot, .nt-setup) .btn.primary {
+  --g-lift: rgba(255, 255, 255, .2);
+  background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-4 merge: glass.css's one primary) */
+}
+html[data-look="glass"] .nt-foot .btn::after {
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] .nt-foot .btn:not(.primary)::after {
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, light-dark(rgba(255, 255, 255, .55), rgba(255, 255, 255, .14)) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] .nt-foot .btn:active:not(:disabled) { transform: scale(.96); transition-duration: var(--d-press); }
+html[data-look="glass"] .nt-foot .btn:active:not(:disabled)::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
+html[data-look="glass"] .nt-foot .btn:active:not(:disabled) .icon { transform: scale(.86); }
+html[data-look="glass"] .nt-foot .btn.primary:disabled { opacity: .55; }
+
+/* ================================================================== before it starts */
+
+html[data-look="glass"] .nt-ready { gap: 0; max-width: 560px; }
+@media (min-width: 700px) { html[data-look="glass"] .nt-ready { max-width: none; } }
+/* The listening picture: a glass tile, its icon in the accent, a soft glow that breathes. */
+html[data-look="glass"] .nt-hero {
+  position: relative; width: 60px; height: 60px; margin: 6px 0 16px; border-radius: 20px; color: #fff;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0) 46%), var(--g-grad);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), inset 0 0 0 1px rgba(255, 255, 255, .14), 0 12px 26px -6px var(--g-glow);
+}
+html[data-look="glass"] .nt-hero::after {
+  content: ""; position: absolute; inset: -6px; border-radius: 25px; pointer-events: none;
+  box-shadow: 0 0 0 2px light-dark(rgba(124, 91, 224, .35), rgba(214, 196, 255, .35)); opacity: 0;
+  animation: g-nt-hero 2.8s ease-out 1s infinite;
+}
+@keyframes g-nt-hero { 0% { opacity: .9; transform: scale(.92); } 70%, 100% { opacity: 0; transform: scale(1.32); } }
+html[data-look="glass"] .nt-ready h3 { font: 700 24px/30px var(--font-display); letter-spacing: -.022em; color: var(--text); }
+html[data-look="glass"] .nt-lead { margin: 8px 0 4px; color: var(--text-2); font: 400 15px/22px var(--font); }
+html[data-look="glass"] .nt-ready > .label { margin: 16px 0 0; gap: 7px; font: 600 13px/18px var(--font); color: var(--text-2); }
+html[data-look="glass"] .nt-ready .field { min-height: 50px; border-radius: var(--nt-r); font-size: 16px; padding-inline: 16px; }
+html[data-look="glass"] .nt-folder { padding-right: 44px; background-color: var(--field); }
+html[data-look="glass"][data-theme="dark"] .nt-folder { background-color: var(--field); }
+
+/* The switches (AI listening, Record while in another tab, Also make flash cards, Also my microphone): glass cards on the
+   same edges; switches that follow one another are one card with a thread between them. */
+html[data-look="glass"] :is(.nt-ready, .nt-source) > .switch-row {
+  position: relative; gap: 14px; min-height: 68px; margin: 12px 0 0; padding: 12px 16px; border: 0; border-radius: 18px;
+  background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), 0 8px 22px light-dark(rgba(98, 60, 210, .1), rgba(4, 2, 14, .32));
+}
+html[data-look="glass"] :is(.nt-ready, .nt-source) > .switch-row::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .nt-ready > .switch-row + .switch-row { margin-top: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+html[data-look="glass"] .nt-ready > .switch-row + .switch-row::after {
+  content: ""; position: absolute; left: 16px; right: 16px; top: 0; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--line) 12%, var(--line) 88%, transparent);
+}
+html[data-look="glass"] .nt-ready > .switch-row:has(+ .switch-row) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; box-shadow: inset 0 1px 0 var(--g-hi); }
+html[data-look="glass"] .nt-ready > .switch-row + .switch-row::before { border-top-left-radius: 0; border-top-right-radius: 0; }
+html[data-look="glass"] .nt-ready > .switch-row:has(+ .switch-row)::before { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+html[data-look="glass"] :is(.nt-ready, .nt-source) .switch-text strong { font: 600 15px/20px var(--font); color: var(--text); }
+html[data-look="glass"] :is(.nt-ready, .nt-source) .switch-text span { font: 400 13px/18px var(--font); color: var(--muted); }
+
+/* Listen to: Microphone | PC sound (the PC). The choice runs the full width, its two halves equal. */
+html[data-look="glass"] .nt-source { gap: 10px; margin-top: 16px; }
+html[data-look="glass"] .nt-source > .label { font: 600 13px/18px var(--font); color: var(--text-2); }
+html[data-look="glass"] .nt-source-pick { justify-self: stretch; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; }
+html[data-look="glass"] .nt-source-pick button { min-height: 44px; gap: 8px; justify-content: center; font: 600 14.5px/18px var(--font); }
+html[data-look="glass"] .nt-source-pick button .icon { width: 18px; height: 18px; }
+html[data-look="glass"] .nt-source > .switch-row { margin-top: 2px; }
+html[data-look="glass"] .nt-test .btn { min-height: 44px; border-radius: 14px; }
+html[data-look="glass"] .nt-hint { color: var(--muted); }
+
+/* What to know: no bullets out in the margin (every line starts on the same edge as the rest), small accent dots. */
+html[data-look="glass"] .nt-facts { list-style: none; gap: 8px; margin: 18px 0 4px; padding: 0; color: var(--muted); font: 400 13.5px/20px var(--font); }
+html[data-look="glass"] .nt-facts li { position: relative; padding-left: 16px; }
+html[data-look="glass"] .nt-facts li::before {
+  content: ""; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 3px; background: var(--accent); opacity: .7;
+}
+html[data-look="glass"] .nt-facts li.nt-consent { color: var(--text-2); font-weight: 500; }
+/* Warnings: a soft amber glass card, on the same edges. */
+html[data-look="glass"] .nt-warn {
+  gap: 10px; margin: 14px 0 0; padding: 12px 14px; border-radius: 16px; background: var(--warn-soft); color: var(--text);
+  box-shadow: inset 0 0 0 1px light-dark(rgba(154, 85, 5, .22), rgba(255, 201, 106, .25));
+}
+html[data-look="glass"] .nt-setup > .btn { min-height: 46px; margin-top: 10px; border-radius: 14px; }
+
+/* ================================================================== listening */
+
+html[data-look="glass"] .nt-live { gap: 12px; min-height: auto; }
+/* The words always keep room for a few lines: on a small screen (or with big text) the screen scrolls to the lines under them
+   instead of squeezing the words to nothing. */
+html[data-look="glass"] .nt-body:has(> .nt-live) { overflow-y: auto; overscroll-behavior: contain; }
+html[data-look="glass"] .nt-live > .nt-words { min-height: 150px; }
+@media (min-width: 700px) { html[data-look="glass"] .nt-live { max-width: none; } }
+/* The status line: the recording dot (red, breathing, a ring that grows from it), what it's doing and for how long, and how
+   many words on the right. Paused: amber; waiting or not hearing: grey. */
+html[data-look="glass"] .nt-state { gap: 10px; min-height: 28px; font: 600 15px/20px var(--font); font-variant-numeric: tabular-nums; }
+html[data-look="glass"] .nt-dot { position: relative; width: 10px; height: 10px; background: var(--faint); transition: opacity .3s var(--g-ease); }
+html[data-look="glass"] .nt-dot::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; opacity: 0;
+  box-shadow: 0 0 0 2px light-dark(rgba(194, 51, 74, .45), rgba(255, 163, 163, .55));
+}
+html[data-look="glass"] .nt-state[data-state=on] .nt-dot {
+  background: var(--nt-rec); box-shadow: 0 0 10px var(--nt-rec-glow); animation: g-nt-breathe 2.4s ease-in-out infinite;
+}
+html[data-look="glass"] .nt-state[data-state=on] .nt-dot::after { animation: g-nt-halo 2.4s ease-out infinite; }
+html[data-look="glass"] .nt-state[data-state=paused] .nt-dot { background: var(--warn); box-shadow: 0 0 8px light-dark(rgba(154, 85, 5, .4), rgba(245, 199, 106, .7)); }
+@keyframes g-nt-breathe { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(.72); opacity: .6; } }
+@keyframes g-nt-halo { 0% { opacity: .8; transform: scale(1); } 80%, 100% { opacity: 0; transform: scale(2.6); } }
+html[data-look="glass"] .g-nt-clock { margin-left: -10px; color: var(--text); white-space: pre; }  /* (its own space before the dot) */
+html[data-look="glass"] .g-nt-clock:empty { display: none; }
+html[data-look="glass"] .nt-count { font: 500 13px/18px var(--font); color: var(--muted); }
+html[data-look="glass"] .nt-live .nt-warn { margin: 0; }
+
+/* The threads: three wavy lines that flow along (a seamless loop, transform only) and swell with the sound (scaleY, eased by
+   a spring in glass/notetaker.js). Under them a soft glow. Paused: flat and still; waiting: dim. */
+html[data-look="glass"] .g-nt-threads { position: relative; flex: none; height: 82px; margin: 2px 0 0; overflow: hidden; pointer-events: none; contain: strict; }
+html[data-look="glass"] .g-nt-threads::before {
+  content: ""; position: absolute; left: 10%; right: 10%; top: 0; bottom: 0; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .22)), transparent);
+}
+html[data-look="glass"] .g-nt-wire { position: absolute; left: 0; right: 0; height: 24px; overflow: hidden; transform-origin: 50% 50%; transform: scaleY(.32); }
+html[data-look="glass"] .g-nt-wire:nth-child(1) { top: 4px; }
+html[data-look="glass"] .g-nt-wire:nth-child(2) { top: 30px; }
+html[data-look="glass"] .g-nt-wire:nth-child(3) { top: 56px; left: 46%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 30px); mask-image: linear-gradient(90deg, transparent, #000 30px); }
+/* Each thread is a wave drawn with a mask (one 40 px wave, repeated along) on a layer one wave longer than its thread, which
+   slides along by exactly one wave and starts again: a seamless loop that never stops part-way. */
+html[data-look="glass"] .g-nt-wire::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; right: -40px; pointer-events: none;
+  -webkit-mask: var(--g-nt-wave) repeat-x 0 50% / 40px 24px; mask: var(--g-nt-wave) repeat-x 0 50% / 40px 24px;
+  animation: g-nt-flow 2.8s linear infinite;
+}
+html[data-look="glass"] .g-nt-threads {
+  --g-nt-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='24' viewBox='0 0 40 24'%3E%3Cpath d='M-20 12Q-10 1 0 12T20 12T40 12T60 12' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --g-nt-wave-bold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='24' viewBox='0 0 40 24'%3E%3Cpath d='M-20 12Q-10 1 0 12T20 12T40 12T60 12' fill='none' stroke='%23000' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+html[data-look="glass"] .g-nt-wire:nth-child(1)::before { background: light-dark(#8b6fe0, #d7ccff); opacity: .85; }
+html[data-look="glass"] .g-nt-wire:nth-child(2)::before {
+  background: light-dark(#6b47d6, #b2a4ee); animation-duration: 3.6s; animation-direction: reverse;
+  -webkit-mask-image: var(--g-nt-wave-bold); mask-image: var(--g-nt-wave-bold);
+}
+html[data-look="glass"] .g-nt-wire:nth-child(3)::before { background: #9c82ec; opacity: .9; animation-duration: 2.2s; animation-delay: -1.1s; }
+@keyframes g-nt-flow { from { transform: translateX(0); } to { transform: translateX(-40px); } }
+html[data-look="glass"] .g-nt-threads:not([data-state=on]) .g-nt-wire::before { animation-play-state: paused; }
+html[data-look="glass"] .g-nt-threads { transition: opacity .4s var(--g-ease); }
+html[data-look="glass"] .g-nt-threads[data-state=wait] { opacity: .45; }
+html[data-look="glass"] .g-nt-threads[data-state=paused] { opacity: .7; }
+html.away[data-look="glass"] .g-nt-wire::before { animation-play-state: paused; }
+/* A short screen (a phone on its side, big text): two threads, less room. */
+@media (max-height: 640px) {
+  html[data-look="glass"] .g-nt-threads { height: 52px; }
+  html[data-look="glass"] .g-nt-wire:nth-child(3) { display: none; }
+}
+
+/* The words: bigger, softer, a fade at the top where they scroll away. A new paragraph rises in (glass/notetaker.js); the
+   words still being heard are muted, and take their full colour once they're final. */
+html[data-look="glass"] .nt-words {
+  padding: 14px 2px 14px; font: 400 16.5px/25px var(--font); color: light-dark(#2a2245, #e6e0f7);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 26px); mask-image: linear-gradient(180deg, transparent, #000 26px);
+}
+html[data-look="glass"] .nt-para { margin: 0 0 18px; }
+html[data-look="glass"] .nt-interim { color: var(--muted); }
+html[data-look="glass"] .nt-empty { margin: 36px auto; color: var(--muted); font: 400 15px/22px var(--font); }
+/* The lines under the words: a phone can't hear in the background, Pocket mode's offer, the small print. */
+html[data-look="glass"] .nt-bg { color: var(--text-2); font: 500 13.5px/19px var(--font); }
+html[data-look="glass"] .nt-pocket-tip {
+  position: relative; gap: 12px; padding: 10px 10px 10px 14px; border: 0; border-radius: 18px; background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 8px 22px light-dark(rgba(98, 60, 210, .1), rgba(4, 2, 14, .32));
+}
+html[data-look="glass"] .nt-pocket-tip::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .nt-pocket-tip p { color: var(--text-2); font: 400 13px/18px var(--font); }
+html[data-look="glass"] .nt-pocket-tip .btn {
+  min-height: 44px; border-radius: 14px; padding: 0 14px; color: var(--text); background: var(--nt-chip);
+  box-shadow: inset 0 1px 0 var(--nt-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .nt-small { color: var(--muted); font: 400 12.5px/18px var(--font); }
+/* Hearing this PC's sound: a red glass band that says so the whole time. */
+html[data-look="glass"] .nt-pcsound {
+  min-height: 52px; padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px light-dark(rgba(194, 51, 74, .25), rgba(255, 163, 163, .3));
+}
+html[data-look="glass"] .nt-pcsound > .btn { min-height: 40px; border-radius: 12px; }
+
+/* ================================================================== writing the notes, finishing, and the problem screen */
+
+/* A glass card in the middle: the three dots that bob (glass/notetaker.js adds them in place of the spinner), what's being
+   written, how long it's taking, and a thread of light that runs along its foot while it works. */
+html[data-look="glass"] .nt-making {
+  position: relative; width: 100%; max-width: 420px; gap: 8px; padding: 26px 22px 24px; border-radius: 22px; overflow: hidden;
+  background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .nt-making::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .nt-making h3 { margin: 8px 0 0; font: 700 19px/26px var(--font-display, var(--font)); letter-spacing: -.015em; color: var(--text); }
+html[data-look="glass"] .nt-making p { color: var(--text-2); font: 400 14px/20px var(--font); }
+html[data-look="glass"] .nt-making-time { color: var(--muted); font: 500 13px/18px var(--font); font-variant-numeric: tabular-nums; }
+html[data-look="glass"] .nt-making-slow { color: var(--text-2); }
+html[data-look="glass"] .nt-making:has(.g-nt-dots) > .spinner { display: none; }
+html[data-look="glass"] .g-nt-dots { display: flex; gap: 6px; height: 34px; align-items: center; }
+html[data-look="glass"] .g-nt-dots i {
+  display: block; width: 9px; height: 9px; border-radius: 5px; background: light-dark(#7a54d8, #c9b8ff);
+  box-shadow: 0 0 10px light-dark(rgba(124, 91, 224, .35), rgba(201, 184, 255, .5)); animation: g-nt-bob 1.05s ease-in-out infinite;
+}
+html[data-look="glass"] .g-nt-dots i:nth-child(2) { animation-delay: .15s; }
+html[data-look="glass"] .g-nt-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes g-nt-bob { 0%, 100% { opacity: .3; transform: translateY(0) scale(.85); } 50% { opacity: 1; transform: translateY(-5px) scale(1); } }
+/* (a thread of light along the card's foot: a soft gradient that runs across, linear and seamless) */
+html[data-look="glass"] .g-nt-run { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; overflow: hidden; pointer-events: none; }
+html[data-look="glass"] .g-nt-run::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, light-dark(#7a54d8, #c9b8ff), transparent);
+  animation: g-nt-run 1.6s cubic-bezier(.45, 0, .55, 1) infinite; transform: translateX(-100%);
+}
+@keyframes g-nt-run { from { transform: translateX(-100%); } to { transform: translateX(225%); } }
+/* The problem screen: the same card, its edge and icon red. */
+html[data-look="glass"] .nt-problem::before {
+  background: linear-gradient(140deg, light-dark(rgba(194, 51, 74, .6), rgba(255, 163, 163, .5)), rgba(255, 255, 255, .05) 36%, rgba(255, 255, 255, .03) 64%, light-dark(rgba(194, 51, 74, .3), rgba(255, 120, 140, .35)));
+}
+html[data-look="glass"] .nt-problem-icon {
+  width: 52px; height: 52px; border-radius: 18px; background: var(--danger-soft); color: var(--danger);
+  box-shadow: inset 0 0 0 1px light-dark(rgba(194, 51, 74, .25), rgba(255, 163, 163, .35)), 0 0 22px light-dark(rgba(194, 51, 74, .14), rgba(255, 120, 140, .2));
+}
+html[data-look="glass"] .nt-finishing-trouble { color: var(--warn); }
+
+/* ================================================================== the bar at the top while it's hidden */
+
+/* Glass across the top (opaque, as the 2.0 hotfix made it: the page scrolls under it and must never show through; no blur to pay for), a thin thread of the accent along its foot, the red recording dot that
+   breathes (amber when paused or not hearing), and Stop as a red glass chip. It slides down on the spring as it comes. */
+html[data-look="glass"] .nt-strip {
+  --nt-rec: light-dark(#c2334a, #ffa3a3);
+  background: var(--g-sheet); color: var(--text);
+  box-shadow: inset 0 -1px 0 var(--g-ring), 0 8px 22px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .45));
+  animation: g-nt-fade .3s var(--g-ease) both;
+}
+/* (its glass fades in where it stands, so its box never moves; what's on it drops in on the spring) */
+html[data-look="glass"] .nt-strip > * { animation: g-nt-strip-in .5s var(--g-slide) backwards; }  /* (backwards: a press can still spring it after) */
+html[data-look="glass"] .nt-strip > .nt-strip-stop { animation-delay: .05s; }
+html[data-look="glass"] .nt-strip::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, light-dark(rgba(124, 91, 224, .55), rgba(214, 196, 255, .6)) 30%, light-dark(rgba(124, 91, 224, .55), rgba(214, 196, 255, .6)) 70%, transparent);
+}
+@keyframes g-nt-strip-in { from { opacity: 0; transform: translateY(-110%); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .nt-strip-dot { position: relative; background: var(--faint); }
+html[data-look="glass"] .nt-strip-dot::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; opacity: 0; pointer-events: none;
+  box-shadow: 0 0 0 2px light-dark(rgba(194, 51, 74, .45), rgba(255, 163, 163, .55));
+}
+html[data-look="glass"] .nt-strip[data-state=on] .nt-strip-dot { background: var(--nt-rec); box-shadow: 0 0 8px light-dark(rgba(194, 51, 74, .4), rgba(255, 163, 163, .8)); animation: g-nt-breathe 2.4s ease-in-out infinite; }
+html[data-look="glass"] .nt-strip[data-state=on] .nt-strip-dot::after { animation: g-nt-halo 2.4s ease-out infinite; }
+html[data-look="glass"] .nt-strip:is([data-state=paused], [data-state=trouble]) .nt-strip-dot { background: var(--warn); box-shadow: none; }
+html[data-look="glass"] .nt-strip-word { font-weight: 600; }
+html[data-look="glass"] .nt-strip-title { color: var(--text-2); }
+html[data-look="glass"] .nt-strip-time { color: var(--text); font-weight: 600; }
+html[data-look="glass"] .nt-strip-open, html[data-look="glass"] .nt-strip-stop { transition: transform .2s var(--g-spring); }
+html[data-look="glass"] .nt-strip-open { border-radius: 12px; }
+html[data-look="glass"] .nt-strip-stop {
+  height: 28px; border: 0; border-radius: 11px; color: var(--danger);
+  background: light-dark(rgba(194, 51, 74, .08), rgba(255, 120, 140, .14));
+  box-shadow: inset 0 0 0 1px light-dark(rgba(194, 51, 74, .3), rgba(255, 163, 163, .38));
+}
+html[data-look="glass"] .nt-strip-open:hover { background: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .06)); }
+html[data-look="glass"] .nt-strip-open:active { background: light-dark(rgba(110, 80, 200, .12), rgba(255, 255, 255, .09)); transform: scale(.985); }
+html[data-look="glass"] .nt-strip-stop:hover { background: light-dark(rgba(194, 51, 74, .13), rgba(255, 120, 140, .2)); }
+html[data-look="glass"] .nt-strip-stop:active { background: light-dark(rgba(194, 51, 74, .16), rgba(255, 120, 140, .24)); transform: scale(.94); }
+html[data-look="glass"] .nt-strip :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; box-shadow: none; }
+
+/* ================================================================== Pocket mode */
+
+/* Black (an OLED screen's pixels off): it fades in; the faint line fades in where it is, and again each time it moves
+   (glass/notetaker.js). Waking: the black fades away over the live screen (glass/notetaker.js's .g-nt-wake). */
+html[data-look="glass"] .nt-pocket { animation: g-nt-fade .5s var(--g-ease) both; }
+/* (the line keeps the classic grey, #5f5f5f: readable up close, nothing lit on a black OLED screen) */
+html[data-look="glass"] .nt-pocket-text { animation: g-nt-fade 2.4s ease-in-out .3s both; }
+@keyframes g-nt-fade { from { opacity: 0; } to { opacity: 1; } }
+html[data-look="glass"] .g-nt-wake { position: fixed; inset: 0; z-index: 1001; background: #000; pointer-events: none; }
+
+/* ================================================================== "Before you record" (the PC's sound) */
+
+html[data-look="glass"] .nt-never { gap: 12px; min-height: 44px; margin-top: 14px; color: var(--text-2); font: 500 14.5px/20px var(--font); }
+/* (its tick box is overlays.css's one recipe) */
+
+/* ================================================================== dictating (js/dictation.js) */
+
+/* A small glass pill with the words not final yet, the dot breathing red while it hears. It springs up as it comes. */
+html[data-look="glass"] .dictate-pill {
+  border: 0; border-radius: 18px; background: var(--g-float, var(--raised)); color: var(--muted);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-2); animation: g-nt-pill .42s var(--g-spring) both;
+}
+html[data-look="glass"] .dictate-pill.heard { color: var(--text-2); }
+html[data-look="glass"] .dictate-dot { position: relative; background: light-dark(#c2334a, #ffa3a3); animation: g-nt-breathe 2.4s ease-in-out infinite; box-shadow: 0 0 8px light-dark(rgba(194, 51, 74, .4), rgba(255, 163, 163, .7)); }
+html[data-look="glass"] .dictate-pill[data-state=wait] .dictate-dot { background: var(--faint); box-shadow: none; animation: none; }
+html[data-look="glass"] .dictate-stop { border-radius: 12px; transition: transform .2s var(--g-spring); }
+html[data-look="glass"] .dictate-stop:active { transform: scale(.88); }
+@keyframes g-nt-pill { from { opacity: 0; transform: translateY(10px) scale(.94); } to { opacity: 1; transform: none; } }
+
+/* ================================================================== the note-taker's way in and its chip */
+
+html[data-look="glass"] .note-meta .nt-chip { color: var(--accent-ink); background: var(--g-grad-soft); box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .5), rgba(255, 255, 255, .16)), inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .nt-card-chip { border-radius: 10px; background: light-dark(rgba(194, 51, 74, .08), rgba(255, 120, 140, .14)); color: var(--danger); box-shadow: inset 0 0 0 1px light-dark(rgba(194, 51, 74, .25), rgba(255, 163, 163, .3)); }
+html[data-look="glass"] .nt-card-dot { background: light-dark(#c2334a, #ffa3a3); animation: g-nt-breathe 2.4s ease-in-out infinite; }
+
+/* ================================================================== lite and calm */
+
+html[data-look="glass"].lite .nt { -webkit-backdrop-filter: none; backdrop-filter: none; }
+@media (min-width: 700px) { html[data-look="glass"].lite .nt { background: light-dark(rgba(250, 247, 255, .99), rgba(28, 21, 54, .99)); } }
+html[data-look="glass"].lite .g-nt-threads .g-nt-wire::before, html[data-look="glass"].lite .nt-hero::after { animation: none; }
+html[data-look="glass"].lite .g-nt-wire { transform: scaleY(.5); }
+html[data-look="glass"].lite .nt-dot::after, html[data-look="glass"].lite .nt-strip-dot::after { animation: none; }
+html[data-look="glass"].lite .nt-pocket-text { animation-duration: .6s; }
+html[data-look="glass"].lite .g-nt-run::before { animation-duration: 2.2s; }
+html[data-look="glass"].calm .nt-layer, html[data-look="glass"].calm .nt-layer .nt { transform: none !important; }
+html[data-look="glass"].calm .g-nt-wire::before, html[data-look="glass"].calm .g-nt-dots i, html[data-look="glass"].calm .g-nt-run::before,
+html[data-look="glass"].calm .nt-dot, html[data-look="glass"].calm .nt-dot::after, html[data-look="glass"].calm .nt-strip-dot,
+html[data-look="glass"].calm .nt-strip-dot::after, html[data-look="glass"].calm .nt-hero::after, html[data-look="glass"].calm .dictate-dot,
+html[data-look="glass"].calm .nt-card-dot { animation: none !important; }
+html[data-look="glass"].calm .g-nt-wire { transform: scaleY(.5) !important; }
+html[data-look="glass"].calm .g-nt-dots i { opacity: .8; }
+html[data-look="glass"].calm .g-nt-run { display: none; }
+html[data-look="glass"].calm .nt-strip, html[data-look="glass"].calm .nt-strip > *, html[data-look="glass"].calm .dictate-pill { animation-name: g-nt-fade !important; }
+html[data-look="glass"].calm :is(.nt-bar .nt-hide, .nt-bar .nt-stop, .nt-bar .icon-btn, .nt-foot .btn, .nt-strip-open, .nt-strip-stop, .dictate-stop):active { transform: none; }
+html[data-look="glass"].calm .nt-foot .btn::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-look="glass"] .g-nt-wire::before, html[data-look="glass"] .g-nt-dots i,
+  html[data-look="glass"] .nt-dot, html[data-look="glass"] .nt-dot::after, html[data-look="glass"] .nt-strip-dot,
+  html[data-look="glass"] .nt-strip-dot::after, html[data-look="glass"] .nt-hero::after { animation: none !important; }
+  html[data-look="glass"] .g-nt-wire { transform: scaleY(.5) !important; }
+}
+@media (forced-colors: active) {
+  html[data-look="glass"] .g-nt-threads, html[data-look="glass"] .g-nt-run { display: none; }
+}
+
+/* ---- the 2.0 hotfix, kept on round 3's screen (the owner's phone, bigger text, while it listened: its top was cut off under the
+   bar and couldn't be scrolled to, and Pocket mode's words were squeezed into a narrow column beside its button). The live screen
+   already scrolls as one under its bar here, and glass/notetaker.js starts it at its top (the start screen may have been
+   scrolled down to its Start button); Pocket mode's words take the width, its button under them. */
+@media (max-width: 699px) {
+  html[data-look="glass"] .nt-pocket-tip { flex-direction: column; align-items: stretch; gap: 10px; }
   html[data-look="glass"] .nt-pocket-tip .btn { width: 100%; justify-content: center; }
-  html[data-look="glass"] .nt-foot { padding-left: 16px; padding-right: 16px; }
-  html[data-look="glass"] .nt-foot > .btn { flex: 1 1 auto; min-width: 0; }
 }

@@ -170,6 +170,51 @@ function opened(id) {
   }
 }
 
+/* A note growing out of its card and shrinking back (the owner's recordings: the card turned into an empty dark box before the
+   note's words came, the words faded in late and dim, and on the way back an empty box landed where the card was).
+   The real note is a full-screen layer; what shows of it is a rounded window that starts as the card and grows to the whole
+   screen, the note scaled evenly (never squashed) from the card's width up to full size, solid from the first frame. The
+   card's own copy lies over it for the first moments and fades as the note's words are there, so there is never an empty
+   box; going back it is the other way round, ending in the card itself (the real card is shown under the layer as it
+   goes). Only the layer's transform and a clip-path animate (one element). */
+const hiddenCards = new WeakSet();
+function hideCard(card) { if (card && card.isConnected) { card.style.visibility = 'hidden'; hiddenCards.add(card); } }
+function showCard(card) { if (card && hiddenCards.has(card)) { hiddenCards.delete(card); card.style.visibility = ''; } }
+
+function windowOf(card) {
+  if (!card || !card.isConnected) return null;
+  const z = zoomOf();
+  const from = card.getBoundingClientRect();
+  const W = window.innerWidth || 0;
+  const H = window.innerHeight || 0;
+  if (!(from.width > 10 && from.height > 10 && W > 0 && H > 0 && from.bottom > 0 && from.top < H && from.right > 0 && from.left < W)) return null;
+  const s = from.width / W;
+  const radius = parseFloat(getComputedStyle(card).borderTopLeftRadius) || 22;
+  const tall = H / z;
+  const window_ = from.height / s / z;   // (the card's height, in the layer's own size)
+  return {
+    s, z, width: from.width / z, height: from.height / z,
+    small: { transform: `translate(${from.left / z}px, ${from.top / z}px) scale(${s})`, clipPath: `inset(0px 0px ${Math.max(0, tall - window_)}px 0px round ${radius / s}px)` },
+    full: { transform: 'none', clipPath: 'inset(0px 0px 0px 0px round 0px)' },
+  };
+}
+
+/* The card's own look, copied (a phone's cards are styled by their own class), sitting at the layer's top left at its natural
+   size: its scale is the opposite of the layer's, so it never looks bigger or smaller than the card did. */
+function cardCopy(card, w) {
+  const copy = card.cloneNode(true);
+  copy.classList.add('g-grow-card');
+  copy.removeAttribute('id');
+  copy.removeAttribute('data-id');
+  for (const el of copy.querySelectorAll('[id]')) el.removeAttribute('id');
+  copy.setAttribute('aria-hidden', 'true');
+  copy.tabIndex = -1;
+  copy.inert = true;
+  Object.assign(copy.style, { position: 'absolute', left: '0', top: '0', width: `${w.width}px`, height: `${w.height}px`, margin: '0',
+    transformOrigin: '0 0', pointerEvents: 'none', zIndex: '3', visibility: 'visible', transition: 'none' });
+  return copy;
+}
+
 function growIn(grow, layer, editor) {
   grow.resolve(layer);
   layer.classList.add('g-growing');
@@ -189,8 +234,27 @@ function growIn(grow, layer, editor) {
     end();
     return;
   }
+  if (!grow.run) { riseIn(editor, { delay: 90 }); setTimeout(end, 1200); return; }
+  // the window: the note itself, scaled evenly and solid from the first frame, a rounded window that grows out of the card
+  const w = windowOf(grow.card);
+  if (w && HAS_WAAPI) {
+    const T = lite() ? 240 : 460;
+    const OUT = 'cubic-bezier(.16,1,.3,1)';   // (quick off the mark, so the note covers the list at once, and no overshoot: a corner can't go negative)
+    layer.classList.add('g-window');
+    layer.style.transformOrigin = '0 0';
+    hideCard(grow.card);
+    const copy = cardCopy(grow.card, w);
+    layer.appendChild(copy);
+    const move = play(layer, [w.small, w.full], { duration: T, easing: OUT, fill: 'backwards' }, 'grow');
+    play(copy, [{ transform: `scale(${1 / w.s})` }, { transform: 'scale(1)' }], { duration: T, easing: OUT, fill: 'forwards' }, 'grow');
+    play(copy, [{ opacity: 1 }, { opacity: 0 }], { duration: T * 0.34, easing: 'linear', fill: 'forwards' }, 'fade');
+    play(editor, [{ opacity: 0 }, { opacity: 1 }], { duration: T * 0.3, easing: 'linear', fill: 'backwards' }, 'in');
+    const landed = () => { copy.remove(); layer.classList.remove('g-window'); layer.style.transformOrigin = ''; end(); };
+    if (move) move.finished.then(landed, landed); else landed();
+    setTimeout(landed, T + 600);
+    return;
+  }
   riseIn(editor, { delay: 90 });
-  if (!grow.run) { setTimeout(end, 1200); return; }
   const flip = M() ? M().flip(grow.card, layer, { duration: 460 }) : null;
   // (round-2 fix R2-07: the layer is solid from its first frame, so the card turns into the note rather than the list
   // showing through it; this opacity runs over the flip's own, as the close's 'hold' does, and its transform is kept)
@@ -210,6 +274,23 @@ function editorLeaving(layer, id) {
     return 140;
   }
   const card = id ? cardOf(id) : null;
+  const w = card ? windowOf(card) : null;
+  if (w) {
+    // back into the card: the window shrinks onto it, the note's words give way to the card's own copy as it lands (never an
+    // empty box), and the layer lets go last, with the real card under it
+    const T = lite() ? 240 : 440;
+    layer.classList.add('g-growing', 'g-window');   // (g-window: square, with the window's own corners; the older name stays for what looks for it)
+    layer.style.transformOrigin = '0 0';
+    const copy = cardCopy(card, w);
+    layer.appendChild(copy);
+    play(layer, [w.full, w.small], { duration: T, easing: 'cubic-bezier(.3,.9,.3,1)', fill: 'forwards' }, 'grow');
+    play(copy, [{ transform: 'scale(1)' }, { transform: `scale(${1 / w.s})` }], { duration: T, easing: 'cubic-bezier(.3,.9,.3,1)', fill: 'forwards' }, 'grow');
+    play(copy, [{ opacity: 0 }, { opacity: 0, offset: 0.3 }, { opacity: 1, offset: 0.72 }, { opacity: 1 }], { duration: T, easing: 'linear', fill: 'forwards' }, 'fade');
+    if (editor) play(editor, [{ opacity: 1 }, { opacity: 1, offset: 0.22 }, { opacity: 0, offset: 0.62 }, { opacity: 0 }], { duration: T, easing: 'linear', fill: 'forwards' }, 'in');
+    play(layer, [{ opacity: 1 }, { opacity: 1, offset: 0.74 }, { opacity: 0 }], { duration: T, easing: 'linear', fill: 'forwards' }, 'hold');
+    setTimeout(() => showCard(card), Math.round(T * 0.6));
+    return T + 30;
+  }
   if (card && M()) {
     if (editor) play(editor, [{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: 'linear', fill: 'forwards' }, 'in');
     layer.classList.add('g-growing');

@@ -19,6 +19,7 @@
   let page = '';            // the page showing ('' = the home, on a phone)
   let pageStep = false;     // a phone's page has a step in history: Back goes to the home
   let query = '';
+  let drawnPage = null;     // the page drawn last ('' = the home, null = not drawn since Settings opened): for 2.0's glass motion
   const open = new Set();   // pages whose More options are open
   let lit = null;           // { key, at }: a row to light up once drawn (a search result, a link to a row)
   let aiAsked = false;      // the home's AI line asked js/ai.js where the keys are, once a visit
@@ -363,6 +364,7 @@
   function redrawList() {
     if (!listBox) return;
     V.clear(listBox, query.trim() ? results() : homeList(V.wide()));
+    V.emit('settings-list', { searching: !!query.trim() });  // (2.0: the glass layer's own touches, glass/settings.js; nothing in classic)
   }
 
   const pageLine = (cat) => {
@@ -410,9 +412,14 @@
       aiAsked = true;
       try { V.ai.check(); } catch (error) { /* (said on the AI page) */ }
     }
+    const was = drawnPage;
+    drawnPage = cat ? cat.id : '';
+    const old = root.querySelector(':scope > .page') || root.firstElementChild;  // (2.0: a pull-to-sync pill can come first in the glass look)
+    if (old) V.emit('settings-leaving', { old, page: drawnPage, was, wide });  // (2.0: glass/settings.js measures what goes)
     V.clear(root, body);
     kept();
     light();
+    V.emit('settings-drawn', { root, page: drawnPage, was, wide, old, searching: !!query.trim() });  // (2.0: glass/settings.js)
   }
 
   /* A row asked for (a search result, a link to Settings > AI's Gemini key): in view, lit up for 1.5 s. */
@@ -487,6 +494,7 @@
     pageStep = false;
     aiAsked = false;
     typed.clear();
+    drawnPage = null;
     page = '';  // (opened again: a phone's home; wide, the page that needs you, else the one used last)
   });
   V.onWide(() => { pageStep = false; draw(); });

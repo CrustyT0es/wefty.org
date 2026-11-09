@@ -358,6 +358,8 @@ V.ai = (() => {
      after all, is still taken (unless something else has said where the keys are since), a failed check is asked
      again by the next request, and a check that fails never forgets what an earlier one found. */
   let triedAt = 0;  // when the last look at the keys started (recheck)
+  let geminiChecked = null;  // Settings' Check Gemini: { running } or its { found } / { error }, kept through redraws
+  let geminiPaint = null;    // paints it into the row on the page now
   function check() {
     if (!looking) {
       const asked = mode;  // (a look from before "Use Claude too" changed tells nothing about now)
@@ -2336,32 +2338,47 @@ V.ai = (() => {
       const net = V.h('p.ai-gemini-net', { hidden: true });
       const times = V.h('ul.ai-gemini-times', { hidden: true });
       const lead = V.h('p.ai-gemini-first', { hidden: true });
-      const timeBtn = V.button('Check Gemini', { onClick: async () => {
-        timeBtn.disabled = true;
-        hint.dataset.state = '';
-        hint.textContent = 'Checking… (a few seconds)';
+      // (2.0 merge: the page is drawn again on every 'ai' event, and a key check ends with one, so a check's result,
+      // or the check still on its way, lived only in the row it was asked from and vanished a second later. The
+      // latest one is kept here and painted into whichever row is on the page now.)
+      const paint = () => {
+        const shown = geminiChecked;
+        timeBtn.disabled = !!(shown && shown.running);
+        if (!shown) return;
         net.hidden = true;
         times.hidden = true;
         lead.hidden = true;
+        if (shown.running) { hint.dataset.state = ''; hint.textContent = 'Checking… (a few seconds)'; return; }
+        if (shown.error) { hint.dataset.state = 'blocked'; hint.textContent = shown.error; return; }
+        const found = shown.found;
+        const fine = found.models.some((r) => r.ok);
+        hint.dataset.state = fine ? 'reachable' : 'blocked';
+        hint.textContent = fine ? 'Gemini works ✓' : 'Gemini didn\'t answer from here.';
+        net.dataset.ok = found.network.ok ? 'yes' : 'no';
+        net.textContent = networkLine(found.network);
+        V.clear(times, found.models.map((r) => V.h('li', { dataset: { ok: r.ok ? 'yes' : 'no' }, text: timingLine(r) })));
+        lead.textContent = firstLine(found);
+        net.hidden = false;
+        times.hidden = false;
+        lead.hidden = !fine;
+      };
+      const timeBtn = V.button('Check Gemini', { onClick: async () => {
+        if (geminiChecked && geminiChecked.running) return;
+        const mine = { running: true };
+        geminiChecked = mine;
+        geminiPaint = paint;
+        paint();
         try {
           const found = await checkGemini();
-          const fine = found.models.some((r) => r.ok);
-          hint.dataset.state = fine ? 'reachable' : 'blocked';
-          hint.textContent = fine ? 'Gemini works ✓' : 'Gemini didn\'t answer from here.';
-          net.dataset.ok = found.network.ok ? 'yes' : 'no';
-          net.textContent = networkLine(found.network);
-          V.clear(times, found.models.map((r) => V.h('li', { dataset: { ok: r.ok ? 'yes' : 'no' }, text: timingLine(r) })));
-          lead.textContent = firstLine(found);
-          net.hidden = false;
-          times.hidden = false;
-          lead.hidden = !fine;
+          if (geminiChecked === mine) geminiChecked = { found };
         } catch (error) {
-          hint.dataset.state = 'blocked';
-          hint.textContent = error.message || String(error);
+          if (geminiChecked === mine) geminiChecked = { error: error.message || String(error) };
         } finally {
-          timeBtn.disabled = false;
+          if (geminiPaint) geminiPaint();
         }
       } });
+      geminiPaint = paint;
+      paint();
       geminiRow = V.h('div.setting.ai-gemini-check', { dataset: { setting: 'check-gemini' } },
         V.h('div.setting-text', {}, V.h('strong', { text: 'Gemini speed' }), hint, net, times, lead), timeBtn);
     }
@@ -2416,6 +2433,7 @@ V.ai = (() => {
   // 'signing-out': Settings' Sign out (V.cloud.signOut, then a reload); 'signed-out': the cloud said the sign-in ended.
   const forgetPerson = () => {
     key = null; geminiKey = null; known = null; seenOn = null; seenNotes = null; mode += 1; triedAt = 0; lateListing = null;
+    geminiChecked = null; geminiPaint = null;
     forgetList();
   };
   V.on('signing-out', forgetPerson);

@@ -109,6 +109,7 @@
     if (!shown) { askedFirst = view; return; }  // (main() shows it, once this device's notes are loaded)
     if (view === 'settings' && was !== 'settings') openedSettings(was, opts || {});
     else if (view !== 'settings' && was === 'settings') leftSettings();
+    if (was && was !== view) V.emit('screen-leaving', { was, view });  // (2.0: glass/settings.js takes a picture of what goes; nothing in classic)
     show(view, opts || {});
     // (its address: a step of its own, unless Back or Forward brought it, the tour is moving things, or it's still the
     // same screen; Settings makes its own on a phone, openedSettings)
@@ -500,8 +501,11 @@
   }
 
   function screen(...kids) {
+    const old = app.classList.contains('gate') ? app.querySelector(':scope > .gate-box') : null;
+    if (old) V.emit('gate-leaving', { old });  // (2.0: glass/onboarding.js measures what goes; nothing in classic)
     app.className = 'ready gate ' + (V.desktop ? 'on-pc' : 'on-phone');
     V.clear(app, V.h('div.gate-box', {}, V.h('div.gate-brand', {}, V.wordmark()), kids));
+    V.emit('gate-screen', { box: app.querySelector(':scope > .gate-box'), old });  // (2.0: its slide and rise)
     if (V.splash) V.splash.done('gate');  // (a screen before the app: the splash is not needed any more)
   }
 

@@ -1711,17 +1711,19 @@ V.chat = (() => {
 
   /* The box's words, notes and files sent as the next message. One at a time: what's in the box is taken out at once
      (a second tap or Enter has nothing to send, and the Send button waits), and put back if it can't go. */
-  async function send() {
+  async function send({ keep = '' } = {}) {
     const id = openId;
     const chat = chatOf(id);
     if (!chat || sendingId) return;
     const draft = draftOf(id);
-    const text = draft.text.trim();
-    if (!text && !draft.notes.length && !draft.files.length) return;
+    if (!hasDraft(draft)) return;
     if (busy) return V.toast('Wait for this answer to finish first (or press Stop).');
     if (draft.files.some((f) => f.state !== 'ready')) return V.toast('Wait for the files to finish going up.');
-    const taken = { text: draft.text, notes: draft.notes, files: draft.files };
-    drafts.set(id, { text: '', notes: [], files: [] });
+    // (2.0: a quote with no words asks what it means)
+    const quoted = draft.quote && draft.quote.text ? { text: draft.quote.text, from: draft.quote.from, of: draft.quote.of || 'answer' } : null;
+    const taken = { text: quoted && !draft.text.trim() ? QUICK_ASKS[0] : draft.text, notes: draft.notes, files: draft.files, quote: quoted };
+    // (a quick ask: what was typed in the box stays there for afterwards)
+    drafts.set(id, { text: keep, notes: [], files: [] });
     sendingId = id;
     drawBox();
     let started = false;
@@ -1744,11 +1746,14 @@ V.chat = (() => {
       const over = isGemini(model) ? null : await V.ai.overLimit();
       if (over) { trouble = { chatId: id, kind: 'limit', message: over.message }; return; }
       if (busy) { V.toast('Wait for this answer to finish first (or press Stop).'); return; }  // (one started meanwhile)
+      // A question about a quote: the plain line in front of it is what both brains (and older Weftys) read.
+      const asked = taken.quote ? `${quoteLine(current, taken.quote)}\n\n${taken.text.trim()}` : taken.text.trim();
       const turn = { id: V.uuid().slice(0, 8), at: now(), text: taken.text.trim(), model, think: !!current.think,
         search: !!current.search, notes: taken.notes.map((n) => ({ id: n.id, title: n.title })),
         files: taken.files.map((f) => ({ id: f.id, kind: f.kind, name: f.name, mime: f.mime, size: f.size, path: f.path,
           w: f.w, h: f.h, pages: f.pages, tokens: f.tokens })),
-        content: contentFor(taken.text.trim(), taken.notes, !!current.search), replies: [], state: 'answering' };
+        content: contentFor(asked, taken.notes, !!current.search), replies: [], state: 'answering' };
+      if (taken.quote) turn.quote = taken.quote;
       turn.tools = keyFor(turn, weftyFor(model));
       if (V.chatTools && V.chatTools.aboutSubs && !V.chatTools.subsOn() && V.chatTools.aboutSubs(turn.text)) turn.subsOff = true;
       sentNotes.set(turn, taken.notes);
@@ -1768,9 +1773,10 @@ V.chat = (() => {
       sendingId = null;
       if (!started) {  // it didn't go: back in the box (before anything typed meanwhile)
         const now2 = draftOf(id);
-        drafts.set(id, { text: [taken.text, now2.text].filter((t) => t.trim()).join('\n'),
+        const words = keep && now2.text === keep ? [keep] : [taken.text, now2.text];
+        drafts.set(id, { text: words.filter((t) => t.trim()).join('\n'),
           notes: [...taken.notes, ...now2.notes.filter((n) => !taken.notes.some((t) => t.id === n.id))],
-          files: [...taken.files, ...now2.files] });
+          files: [...taken.files, ...now2.files], quote: taken.quote || now2.quote || null });
         drawBox();
       }
     }
@@ -1825,10 +1831,50 @@ V.chat = (() => {
     return [...seen].slice(0, 6);
   }
 
+  /* (2.0) A Markdown table in an answer ("| Stage | Where |" over "| --- | --- |") as a real table, its cells' words through
+     the Read view's own marks; everything else as js/format.js draws it. A table inside a ``` block stays code. The table
+     scrolls sideways on its own (div.chat-table), never the page. Copy still copies the words as they were written. */
+  const TABLE_ROW = /^\s*\|.*\|\s*$/;
+  const TABLE_RULE = /^\s*\|?(\s*:?-{3,}:?\s*\|)+\s*(:?-{3,}:?\s*)?\|?\s*$/;
+  const cellsOf = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
+  function renderWithTables(text) {
+    const lines = String(text || '').split('\n');
+    const parts = [];
+    let plain = [];
+    let fence = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^\s*```/.test(line)) fence = !fence;
+      if (!fence && TABLE_ROW.test(line) && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1]) && cellsOf(line).length > 1) {
+        let end = i + 2;
+        while (end < lines.length && TABLE_ROW.test(lines[end])) end++;
+        if (plain.length) parts.push(plain.join('\n'));
+        plain = [];
+        parts.push({ head: cellsOf(line), rows: lines.slice(i + 2, end).map(cellsOf) });
+        i = end - 1;
+        continue;
+      }
+      plain.push(line);
+    }
+    if (!parts.some((p) => typeof p !== 'string')) return V.format.render(text);
+    if (plain.length) parts.push(plain.join('\n'));
+    const el = V.h('div.read-body');
+    const map = new WeakMap();
+    const words = (cell) => V.format.inline(cell, 0, 0, map, false, null);
+    for (const part of parts) {
+      if (typeof part === 'string') { if (part.trim()) el.append(...V.format.render(part).el.childNodes); continue; }
+      const width = Math.max(part.head.length, ...part.rows.map((r) => r.length));
+      const row = (cells, tag) => V.h('tr', {}, ...Array.from({ length: width }, (_, n) => V.h(tag, {}, words(cells[n] || ''))));
+      const table = V.h('table.chat-table-grid', {}, V.h('thead', {}, row(part.head, 'th')), V.h('tbody', {}, ...part.rows.map((r) => row(r, 'td'))));
+      el.append(V.h('div.chat-table', { role: 'region', 'aria-label': 'Table', tabindex: '0' }, table));
+    }
+    return { el, map };
+  }
+
   /* An answer's words as page elements (js/format.js's Read view), with a Copy button on each code block and tick
      boxes that are only to look at. */
   function rendered(text) {
-    const { el } = V.format.render(text);
+    const { el } = renderWithTables(text);
     el.classList.add('chat-md');
     for (const tick of el.querySelectorAll('.read-tick')) tick.disabled = true;
     for (const pre of el.querySelectorAll('pre.read-pre')) {
@@ -1855,7 +1901,9 @@ V.chat = (() => {
     const words = working(turn) ? 'Working in Wefty...'
       : lastIsSearch && searching.input && searching.input.query ? `Searching the web for "${searching.input.query}"...`
       : turn.partial || turn.waitWhy === 'cut' ? WORDS.finishing : 'Thinking...';  // (one cut off, being finished)
-    return V.h('div.chat-thinking', {}, V.h('div.spinner'), V.h('span', { text: words }));
+    // (2.0: the glass look draws three soft lines under "Thinking..."; they're hidden in the classic look, styles.css)
+    return V.h('div.chat-thinking', {}, V.h('div.spinner'), V.h('span', { text: words }),
+      V.h('span.chat-think-lines', { 'aria-hidden': 'true' }, V.h('i'), V.h('i'), V.h('i')));
   }
 
   /* ---------------------------------------------------------------- drawing */
@@ -1976,8 +2024,207 @@ V.chat = (() => {
       onRemove ? V.h('button.chat-chip-x', { type: 'button', 'aria-label': `Remove ${name}`, onclick: onRemove }, V.icon('x')) : null);
   };
 
+  /* ---------------------------------------------------------------- asking about words picked in a message (2.0)
+
+     The owner: words picked in an answer (or in your own message) get an "Ask about this" bar: on a phone just above
+     the box (never floating, so it's never over the phone's own Copy / Select all bar), on a wide screen a small
+     button beside the words. Quick asks send at once; "Ask your own" puts the words in the box as a quote to type a
+     question under. Sent as the message's own words with a plain line in front ('About this part of your last
+     answer: "..."'), so both brains, and older Weftys, read it as it is; the system prompt never changes (that would
+     drop the thinking kept). Kept as turn.quote { text, from: the turn it came from, of: 'answer' | 'message' }. */
+  const QUOTE_MOST = 600;
+  const QUICK_ASKS = ['What does this mean?', 'Explain it simpler', 'Give an example'];
+  const CARD_ASK = 'Make a flash card from this.';
+  let pickedNow = null;   // the words picked now: { text, from, of, chatId }
+  let askBar = null;      // a phone's bar above the box
+  let askPop = null;      // a wide screen's button beside the words
+  let barPressed = 0;     // when the bar or button was last pressed (a tap may clear the words before its click)
+  let pickFrame = 0;
+
+  /* At most 600 letters, one line (a picked list or table becomes words with spaces). */
+  const quoteOf = (text) => {
+    const line = String(text || '').replace(/\s+/g, ' ').trim();
+    return line.length > QUOTE_MOST ? line.slice(0, QUOTE_MOST - 1).trimEnd() + '…' : line;
+  };
+
+  /* The line sent in front of a question about a quote. */
+  function quoteLine(chat, quote) {
+    const turns = chat ? chat.turns : [];
+    const at = turns.findIndex((t) => t.id === quote.from);
+    const latest = at >= 0 && turns.slice(at + 1).every((t) => !SENT.has(t.state));
+    const where = quote.of === 'message' ? 'my message' : latest ? 'your last answer' : 'an earlier answer';
+    return `About this part of ${where}: "${quote.text}"`;
+  }
+
+  /* The words picked in the open chat's thread, inside one answer or one message of yours; else null. */
+  function pickedWords() {
+    const sel = document.getSelection ? document.getSelection() : null;
+    if (!sel || sel.isCollapsed || !sel.rangeCount || !parts || !parts.thread || !parts.thread.isConnected) return null;
+    const range = sel.getRangeAt(0);
+    const inside = (node) => {
+      const el = node && (node.nodeType === 1 ? node : node.parentElement);
+      return el ? el.closest('.chat-reply-body, .chat-you-text') : null;
+    };
+    const words = inside(range.startContainer);
+    if (!words || words !== inside(range.endContainer) || !parts.thread.contains(words)) return null;
+    const chat = chatOf(openId);
+    const box = words.closest('.chat-turn');
+    const turn = chat && box && chat.turns.find((t) => t.id === box.dataset.turn);
+    if (!turn || (busy && busy.turn === turn)) return null;  // (an answer still coming is drawn again every frame)
+    const text = quoteOf(sel.toString());
+    if (!text) return null;
+    return { text, from: turn.id, of: words.classList.contains('chat-you-text') ? 'message' : 'answer', chatId: chat.id };
+  }
+
+  const pressedBar = (event) => {
+    barPressed = Date.now();
+    if (event.pointerType === 'mouse') event.preventDefault();  // (a mouse keeps the words picked, and the focus)
+  };
+
+  function askChips(q) {
+    const chip = (label, onClick, icon) => V.h('button.chat-ask-chip', { type: 'button', onclick: (event) => onClick(event.currentTarget) },
+      icon ? V.icon(icon) : null, V.h('span', { text: label }));
+    return [
+      chip('Ask your own', () => askOwn(q), 'pencil'),
+      ...QUICK_ASKS.map((words) => chip(words, () => askQuick(q, words))),
+      chip('Add to a note', (button) => addToNote(q, button), 'notes'),
+      chip('Make a flash card', () => askQuick(q, CARD_ASK), 'cards'),
+    ];
+  }
+
+  function showAsk() {
+    const q = pickedNow;
+    if (!q || !parts || !parts.box) return;
+    if (V.wide()) {
+      if (askBar) { askBar.remove(); askBar = null; }
+      placePop();
+      return;
+    }
+    if (askPop) { askPop.remove(); askPop = null; }
+    const bar = V.h('div.chat-ask', { role: 'toolbar', 'aria-label': 'Ask about the words you picked', onpointerdown: pressedBar },
+      V.h('div.chat-ask-head', {}, V.icon('quote'), V.h('span.chat-ask-title', { text: 'Ask about this' }),
+        V.h('span.chat-ask-words', { text: `"${q.text}"` })),
+      V.h('div.chat-ask-chips', {}, askChips(q)));
+    if (askBar) askBar.replaceWith(bar); else parts.box.before(bar);
+    askBar = bar;
+    V.emit('chat-ask', 'bar');
+  }
+
+  /* A wide screen: "Ask about this" beside the end of the words picked; a click shows the asks in a menu. */
+  function placePop() {
+    const sel = document.getSelection();
+    if (!pickedNow || !sel || !sel.rangeCount) return;
+    const rects = [...sel.getRangeAt(0).getClientRects()].filter((r) => r.width || r.height);
+    const end = rects[rects.length - 1];
+    if (!end) return;
+    if (!askPop) {
+      askPop = V.h('button.chat-ask-pop', { type: 'button', 'aria-haspopup': 'menu', onpointerdown: pressedBar,
+        onclick: (event) => {
+          const q = pickedNow;
+          if (!q) return;
+          const button = event.currentTarget;
+          V.menu(button, [
+            { label: 'Ask your own', icon: 'pencil', onClick: () => askOwn(q) },
+            ...QUICK_ASKS.map((words) => ({ label: words, icon: 'spark', onClick: () => askQuick(q, words) })),
+            { sep: true },
+            { label: 'Add to a note', icon: 'notes', onClick: () => addToNote(q, button) },
+            { label: 'Make a flash card', icon: 'cards', onClick: () => askQuick(q, CARD_ASK) },
+          ], { label: 'Ask about this' });
+        } }, V.icon('quote'), V.h('span', { text: 'Ask about this' }));
+      document.body.append(askPop);
+      V.emit('chat-ask', 'pop');
+    }
+    // (the words scrolled out of sight: the button waits till they're back)
+    const view = parts && parts.scroll ? parts.scroll.getBoundingClientRect() : { top: 0, bottom: innerHeight };
+    askPop.hidden = end.bottom < view.top || end.top > view.bottom;
+    const w = askPop.offsetWidth || 140;
+    const h = askPop.offsetHeight || 36;
+    const left = Math.max(8, Math.min(innerWidth - w - 8, end.right + 6));
+    const below = end.bottom + 8;
+    const top = below + h + 8 > innerHeight ? Math.max(8, end.top - h - 8) : below;
+    askPop.style.left = `${Math.round(left)}px`;
+    askPop.style.top = `${Math.round(top)}px`;
+  }
+
+  function hideAsk() {
+    pickedNow = null;
+    if (askBar) { askBar.remove(); askBar = null; }
+    if (askPop) { askPop.remove(); askPop = null; }
+  }
+
+  function onPicked() {
+    pickFrame = 0;
+    const got = pickedWords();
+    if (got) {
+      const same = pickedNow && pickedNow.text === got.text && pickedNow.from === got.from;
+      pickedNow = got;
+      if (!same || (!askBar && !askPop)) showAsk(); else if (askPop) placePop();
+      return;
+    }
+    if (!pickedNow) return;
+    if (Date.now() - barPressed < 800) return;  // (the tap on the bar cleared the words: its click still comes)
+    hideAsk();
+  }
+  document.addEventListener('selectionchange', () => { if (!pickFrame) pickFrame = requestAnimationFrame(onPicked); });
+  document.addEventListener('scroll', () => { if (askPop) placePop(); }, true);
+  V.on('tab', (tab) => { if (tab !== 'claude') hideAsk(); });
+
+  const letGo = () => {
+    barPressed = 0;  // (done with the bar: the words picked going now hides nothing that's still wanted)
+    hideAsk();
+    try { document.getSelection().removeAllRanges(); } catch (error) { /* (nothing picked) */ }
+  };
+
+  /* The quote into the box, as a chip over the words. */
+  function useQuote(q) {
+    if (!q || openId !== q.chatId) return false;
+    draftOf(q.chatId).quote = { text: q.text, from: q.from, of: q.of };
+    letGo();
+    drawBox();
+    return true;
+  }
+
+  function askOwn(q) {
+    if (!useQuote(q)) return;
+    parts.input.focus({ preventScroll: true });
+  }
+
+  /* A quick ask: sent at once (what was typed in the box waits there for afterwards). */
+  async function askQuick(q, words) {
+    if (!useQuote(q)) return;
+    const id = q.chatId;
+    const typed = draftOf(id).text;
+    draftOf(id).text = words;
+    await send({ keep: typed });
+  }
+
+  /* "Add to a note": the words saved as a note, as an answer's Save to Inbox / Save to a folder do. */
+  function addToNote(q, anchor) {
+    const chat = chatOf(q.chatId);
+    const turn = chat && chat.turns.find((t) => t.id === q.from);
+    if (!turn) return;
+    const save = (folder) => { letGo(); saveNote(chat, turn, folder, q.text); };
+    const items = [
+      { label: 'Save to Inbox', icon: 'notes', onClick: () => save(V.notes.inbox()) },
+      { label: 'Save to a folder...', icon: 'folder', onClick: async () => {
+        const folder = await V.organise.chooseFolder({ title: 'Save to' });
+        if (folder) save(folder);
+      } },
+    ];
+    if (anchor && anchor.isConnected) V.menu(anchor, items, { label: 'Add to a note' });
+    else save(V.notes.inbox());
+  }
+
+  /* The quote over a message you sent: a tap goes to where it came from. */
+  const quotedEl = (quote) => V.h('button.chat-quoted', { type: 'button', 'aria-label': `About: ${quote.text}. Show where it came from`,
+    onclick: () => {
+      const from = parts && parts.thread.querySelector(`.chat-turn[data-turn="${quote.from}"] ${quote.of === 'message' ? '.chat-you' : '.chat-claude'}`);
+      if (from) from.scrollIntoView({ block: 'center', behavior: V.motion && V.motion.calm && V.motion.calm() ? 'auto' : 'smooth' });
+    } }, V.icon('quote'), V.h('span.chat-quoted-text', { text: quote.text }));
+
   function turnEl(chat, turn, last) {
     const you = youMenu(chat, turn, V.h('div.chat-you', {},
+      turn.quote && turn.quote.text ? quotedEl(turn.quote) : null,
       (turn.files || []).length || (turn.notes || []).length ? V.h('div.chat-attached', {},
         (turn.files || []).filter((f) => f.kind === 'image').map(sentPicture),
         (turn.files || []).filter((f) => f.kind !== 'image').map((f) => fileChip(f)),
@@ -1991,7 +2238,7 @@ V.chat = (() => {
       const finishing = isCut(turn) && !needsGemini(turn);
       const kept = hasWords(turn.partial) || workOf(turn).length > 0;  // (Stop keeps them; else Cancel, back in the box)
       return V.h('div.chat-turn', { dataset: { turn: turn.id, state: turn.state, ...(finishing ? { cut: 'true' } : {}) } }, you,
-        V.h('div.chat-claude', {},
+        V.h('div.chat-claude', { dataset: { who: nameOf(turn.model) } },
           before ? V.h('div.chat-reply-body.chat-partial', {}, rendered(before)) : null,
           finishing ? V.h('div.chat-thinking.chat-finishing', {}, V.h('div.spinner'), V.h('span', { text: WORDS.finishing }),
             V.button(kept ? 'Stop' : 'Cancel', { kind: 'quiet', icon: kept ? 'stop' : 'x', onClick: () => cancelWaiting(chat, turn) }))
@@ -2038,7 +2285,7 @@ V.chat = (() => {
       text && turn.state !== 'refused' ? moreButton('Answer: options') : null,
       V.h('span.chat-meta', { text: meta }));
     return V.h('div.chat-turn', { dataset: { turn: turn.id, state: turn.state } }, you,
-      answerMenu(chat, turn, last, V.h('div.chat-claude', {}, body,
+      answerMenu(chat, turn, last, V.h('div.chat-claude', { dataset: { who: nameOf(served) } }, body,
         notes.length ? V.h('p.chat-note', { text: notes.join(' ') }) : null,
         actionsEl(chat, turn),
         sources.length ? V.h('div.chat-sources', {}, V.h('span.chat-sources-label', { text: 'Sources' }),
@@ -2066,7 +2313,9 @@ V.chat = (() => {
       busy ? null : { label: 'Edit in the box', icon: 'edit', onClick: () => {
         if (!parts || !parts.input || openId !== chat.id) return;
         parts.input.value = turn.text;
+        if (turn.quote && turn.quote.text) draftOf(chat.id).quote = { ...turn.quote };
         parts.input.dispatchEvent(new Event('input', { bubbles: true }));
+        if (turn.quote) drawBox();
         parts.input.focus();
       } },
     ], { label: 'Your message: options' });
@@ -2249,6 +2498,19 @@ V.chat = (() => {
       draft.files.map((f) => fileChip(f, () => unattach(f))),
       draft.notes.map((n) => noteChip(n, () => { draft.notes = draft.notes.filter((x) => x !== n); drawBox(); })));
     parts.attached.hidden = !draft.files.length && !draft.notes.length;
+    // (2.0) words picked in a message, waiting as a quote over the question
+    const quote = draft.quote && draft.quote.text ? draft.quote : null;
+    if ((parts.quote.dataset.text || '') !== (quote ? quote.text : '')) {
+      V.clear(parts.quote, quote ? [V.icon('quote'), V.h('span.chat-quote-text', { text: quote.text }),
+        V.h('button.chat-quote-x', { type: 'button', 'aria-label': 'Remove the quote', title: 'Remove the quote', onclick: () => {
+          draftOf(openId).quote = null;
+          drawBox();
+          parts.input.focus({ preventScroll: true });
+        } }, V.icon('x'))] : []);
+      parts.quote.dataset.text = quote ? quote.text : '';
+      parts.quote.hidden = !quote;
+      if (quote) V.emit('chat-quote', parts.quote);
+    }
     parts.hint.textContent = pdf ? pdfHint(pdf, model) : '';
     parts.hint.hidden = !pdf;
     parts.model.querySelector('.chat-model-name').textContent = nameOf(model);
@@ -2264,8 +2526,11 @@ V.chat = (() => {
     parts.go.title = answering ? 'Stop' : 'Send';
     parts.go.setAttribute('aria-label', parts.go.title);
     parts.go.classList.toggle('stop', !!answering);
-    parts.go.disabled = old || (!answering && (!!busy || !!sendingId || (!draft.text.trim() && !draft.files.length && !draft.notes.length)));
+    parts.go.disabled = old || (!answering && (!!busy || !!sendingId || !hasDraft(draft)));
   }
+
+  /* Something in the box to send: words, a file, a note, or a quote (asked about with "What does this mean?"). */
+  const hasDraft = (draft) => !!(draft.text.trim() || draft.files.length || draft.notes.length || (draft.quote && draft.quote.text));
 
   function grow() {
     if (!parts || !parts.input) return;
@@ -2308,16 +2573,17 @@ V.chat = (() => {
     const troubleLine = V.h('div.chat-trouble', { role: 'status', hidden: true });
     const attached = V.h('div.chat-attached.in-box', { hidden: true });
     const hint = V.h('p.chat-hint', { hidden: true });
-    const box = V.h('div.chat-box', {}, attached, hint, input,
+    const quote = V.h('div.chat-quote', { hidden: true });
+    const box = V.h('div.chat-box', {}, quote, attached, hint, input,
       V.h('div.chat-tools', {}, clip, model, think, web, V.h('span.chat-tools-gap'), go));
-    Object.assign(parts, { input, clip, model, think, web, go, trouble: troubleLine, attached, hint, box });
+    Object.assign(parts, { input, clip, model, think, web, go, trouble: troubleLine, attached, hint, box, quote });
     return V.h('div.chat-composer', {}, troubleLine, box, pick, photo);
   }
 
   function drawSendButton() {
     if (!parts || !parts.go || (busy && busy.chatId === openId)) return;
     const draft = draftOf(openId);
-    parts.go.disabled = tooOld(chatOf(openId)) || !!busy || !!sendingId || (!draft.text.trim() && !draft.files.length && !draft.notes.length);
+    parts.go.disabled = tooOld(chatOf(openId)) || !!busy || !!sendingId || !hasDraft(draft);
   }
 
   function draw() {
@@ -2439,7 +2705,7 @@ V.chat = (() => {
       content: [V.h('div.model-choices', {}, offered.map((m) => {
         const r = V.ai.rates(m.id);
         const typical = (1500 * r.input + 600 * r.output) / 1e6;
-        const costLine = m.free ? 'Free — needs a free Google key (Settings > AI)' : `About ${cents(typical)} a short answer · ${per(r)}`;
+        const costLine = m.free ? 'Free: needs a free Google key (Settings > AI)' : `About ${cents(typical)} a short answer · ${per(r)}`;
         return V.h('button.model-choice' + (m.id === current ? '.on' : ''), { type: 'button', dataset: { model: m.id },
           'aria-current': m.id === current ? 'true' : null, onclick: async () => {
             sheet.close();

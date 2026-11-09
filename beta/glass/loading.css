@@ -182,21 +182,18 @@ html[data-look="glass"] #g-edge.ge-loop .ge-disc {
     rgb(var(--ge-rgb) / .9) 352deg, rgb(var(--ge-hi) / .95) 358.5deg, rgb(var(--ge-hi) / 0) 360deg);
 }
 
-/* The bloom: the whole edge lights up and fades. A ring of its own (a static mask) with a soft inner glow, whose opacity
-   is the only thing that moves. */
+/* The bloom: the whole edge lights up and fades. Only a soft glow coming in from the screen's edges (the owner: a ring with a
+   hard line round the note read as a frame, thickest at the corners): two wide inner shadows, no line, no mask, and its
+   opacity is the only thing that moves. */
 html[data-look="glass"] #g-edge .ge-bloom { position: absolute; inset: 0; border-radius: inherit; opacity: 0; }
-html[data-look="glass"] #g-edge .ge-bloom::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: var(--ge-w);
-  background: linear-gradient(140deg, rgb(var(--ge-hi) / .8), rgb(var(--ge-hi) / .2) 28%, rgb(var(--ge-hi) / .1) 62%, rgb(var(--ge-rgb) / .85));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
-}
+html[data-look="glass"] #g-edge .ge-bloom::before { content: none; }
 html[data-look="glass"] #g-edge .ge-bloom::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit;
-  box-shadow: inset 0 0 40px rgb(var(--ge-rgb) / .5), inset 0 0 5px rgb(var(--ge-hi) / .5), inset 0 0 120px rgb(var(--ge-rgb) / .25);
+  box-shadow: inset 0 0 36px 0 rgb(var(--ge-rgb) / .42), inset 0 0 90px 0 rgb(var(--ge-rgb) / .2);
 }
 /* lite: no filter anywhere; the thread's glow is a still, pre-blurred ring whose opacity follows the thread */
 html[data-look="glass"] #g-edge .ge-glow { position: absolute; inset: 0; border-radius: inherit; opacity: 0; box-shadow: inset 0 0 16px 1px rgb(var(--ge-rgb) / .55); }
 html[data-look="glass"].lite #g-edge .ge-run { filter: none; }
-html[data-look="glass"].lite #g-edge .ge-bloom::after { box-shadow: inset 0 0 26px rgb(var(--ge-rgb) / .5), inset 0 0 4px rgb(var(--ge-hi) / .5); }
+html[data-look="glass"].lite #g-edge .ge-bloom::after { box-shadow: inset 0 0 26px rgb(var(--ge-rgb) / .3); }
 /* calm: the bloom is a still ring (loading.js fades it); nothing travels */
 html[data-look="glass"].calm #g-edge .ge-run, html[data-look="glass"].calm #g-edge .ge-glow { display: none; }

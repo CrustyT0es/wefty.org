@@ -709,6 +709,13 @@ V.welcome = (() => {
     sendPlan(user);
   }
 
+  /* 2.0's glass look has a Back on the steps (glass/onboarding.js): the step showing is left and the one before it shown
+     again. Classic never calls it. */
+  const BACK = Symbol('back');
+  let goBack = null;
+  const back = () => { if (!goBack) return false; goBack(); return true; };
+  const canGoBack = () => !!goBack;
+
   const pending = (user) => { const kept = read(); return !!(user && kept && kept.user === user); };
 
   /* The steps left, one screen at a time (`screen` is js/start.js's: the gate's box with the wordmark). */
@@ -724,13 +731,31 @@ V.welcome = (() => {
     // (A step this device doesn't have, like the home screen in Vault already installed: on to "all set".)
     const at = list.indexOf(kept.step);
     const from = at >= 1 ? at : at === 0 ? 1 : list.length;
-    for (const step of list.slice(from)) {
+    const shown = [];  // (2.0: the steps shown in this run, for the glass look's Back: V.welcome.back())
+    let dir = 1;
+    for (let i = from; i < list.length; i += 1) {
+      const step = list[i];
       if (results[step] === 'skipped') continue;  // ("Skip setup": the study steps after it too)
       write({ user: user.id, step, done: results });
-      results[step] = step === 'loop' ? await loopStep(screen)
-        : step === 'classes' ? await classesStep(screen, user.id)
-          : step === 'test' ? await testStep(screen, user.id)
-            : step === 'ai' ? await aiStep(screen) : await installStep(screen, user);
+      shown.push(i);
+      const showing = step === 'loop' ? loopStep(screen)
+        : step === 'classes' ? classesStep(screen, user.id)
+          : step === 'test' ? testStep(screen, user.id)
+            : step === 'ai' ? aiStep(screen) : installStep(screen, user);
+      const asked = new Promise((answer) => { goBack = shown.length > 1 ? () => answer(BACK) : null; });
+      V.emit('welcome-step', { step, at: i, of: list.length, back: !!goBack, dir });
+      const result = await Promise.race([showing, asked]);
+      goBack = null;
+      if (result === BACK) {  // (what was answered from that step on is asked again)
+        shown.pop();
+        const to = shown.pop();
+        for (const one of list.slice(to)) delete results[one];
+        dir = -1;
+        i = to - 1;
+        continue;
+      }
+      dir = 1;
+      results[step] = result;
       if (results[step] === 'skip-study') {
         for (const one of STUDY_STEPS) if (!results[one]) results[one] = 'skipped';
         results[step] = 'skipped';
@@ -742,7 +767,7 @@ V.welcome = (() => {
     write(null);
   }
 
-  return { steps, dots, howToInstall, remember, pending, run, markConnect, iosIcon, GEMINI_PAGE, STATS_WORDS,
+  return { steps, dots, howToInstall, remember, pending, run, back, canGoBack, markConnect, iosIcon, GEMINI_PAGE, STATS_WORDS,
     applyPlan, starterFolders, planned, readPlan, emojiFor, loopSteps, loopIcon, SUBJECTS,
     guided, introId, introBody, INTRO_TITLE };
 })();

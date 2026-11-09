@@ -856,5 +856,64 @@ function watch(seconds = 5) {
   requestAnimationFrame(tick);
 }
 
-V.motion = { enter, press, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, spring, current, speed, rubber, springFrames, EASE, SLIDE, SPRING };
+
+/* A move driven from one clock, frame by frame, for moves that must keep step with each other (a screen going and the one
+   coming, a part and the copy of the part it replaces) and with whatever is drawn again while they go. Web Animations made in
+   one task can start a frame or two apart when the task is long (a screen being drawn), and one made on an element that is
+   then replaced is lost; here the first frame painted is the move's start, every frame it is told how far it has got (0 to 1,
+   through the curve), and `step` finds its elements afresh each time. `ease` is a function (see bezier). Returns
+   { finished, cancel() }; the move always ends on step(1), even if the page is hidden and no frames come. */
+function bezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = (t) => ((ax * t + bx) * t + cx) * t;
+  const sy = (t) => ((ay * t + by) * t + cy) * t;
+  const dx = (t) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const e = sx(t) - x;
+      if (Math.abs(e) < 1e-5) return sy(t);
+      const d = dx(t);
+      if (Math.abs(d) < 1e-6) break;
+      t -= e / d;
+    }
+    let lo = 0, hi = 1;
+    t = x;
+    for (let i = 0; i < 24; i++) {
+      const e = sx(t);
+      if (Math.abs(e - x) < 1e-5) break;
+      if (x > e) lo = t; else hi = t;
+      t = (hi - lo) / 2 + lo;
+    }
+    return sy(t);
+  };
+}
+function tween(duration, ease, step) {
+  let id = 0, timer = 0, stopped = false, over = false, t0 = null, settle = () => {};
+  const finished = new Promise((resolve) => { settle = resolve; });
+  const end = (arrived) => {
+    if (over) return;
+    over = true;
+    cancelAnimationFrame(id);
+    clearTimeout(timer);
+    if (arrived) { try { step(1, 1); } catch (error) { console.error(error); } }
+    settle(arrived);
+  };
+  const frame = (now) => {
+    if (stopped || over) return;
+    if (t0 === null) t0 = now;
+    const p = Math.min(1, (now - t0) / duration);
+    try { step(ease(p), p); } catch (error) { console.error(error); }
+    if (p < 1) id = requestAnimationFrame(frame); else end(true);
+  };
+  try { step(ease(0), 0); } catch (error) { console.error(error); }
+  id = requestAnimationFrame(frame);
+  timer = setTimeout(() => end(true), duration + 1200);   // (a page put out of sight gets no frames: it ends all the same)
+  return { finished, cancel() { stopped = true; end(false); } };
+}
+
+V.motion = { tween, bezier, enter, press, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, spring, current, speed, rubber, springFrames, EASE, SLIDE, SPRING };
 })();

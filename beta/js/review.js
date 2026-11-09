@@ -1061,6 +1061,9 @@ V.review = (() => {
     const actions = V.h('div.study-actions', { role: 'group', 'aria-label': 'Your answer' }, backButton, buttons.still, buttons.next, buttons.know);
     const snap = () => ({ queue: [...queue], aside: [...aside], round, roundSize, first: new Map(first),
       passed: new Set(passed), skipped: new Set(skipped) });
+    // (2.0: the glass look turns the card over, flies it off and brings the next one from the pile (glass/study.js); it
+    // hears of each move just before the card is drawn again. Nothing listens in the classic look.)
+    const moving = (kind) => { try { V.emit('study-move', { card, kind }); } catch (error) { /* (only a look) */ } };
 
     function drawCard(c) {
       const shownWords = flipped ? (c.kind === 'blank' ? c.term.replace(V.study.GAP, c.answer) : c.answer) : c.term;
@@ -1107,6 +1110,7 @@ V.review = (() => {
 
     function flip() {
       if (over || !queue.length) return;
+      moving(flipped ? 'unflip' : 'flip');
       flipped = !flipped;
       drawCard(queue[0]);
       turn();
@@ -1117,6 +1121,7 @@ V.review = (() => {
       if (over) return;
       const c = queue[0];
       if (!c) return;
+      moving(kind);
       dropUndo();
       const redo = ahead.length && ahead[ahead.length - 1].card === c ? ahead[ahead.length - 1] : null;
       // Next (or the same answer) on a card Back brought back: the answer it had stands, and the go goes on as it was.
@@ -1184,6 +1189,7 @@ V.review = (() => {
     function back() {
       const entry = trail.pop();
       if (!entry) return;
+      moving('back');
       dropUndo();
       entry.after = snap();
       ahead.push(entry);
@@ -1208,6 +1214,7 @@ V.review = (() => {
       if (over || notes < 2) return;
       const c = queue[0];
       if (!c) return;
+      moving('skip');
       dropUndo();
       undoAhead();
       const entry = { kind: 'skip', card: c, snap: snap() };

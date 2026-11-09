@@ -5105,3 +5105,64 @@ textarea.field.cap-words { min-height: 200px; max-height: 50vh; resize: vertical
 .install-how .install-open { margin-top: 8px; }
 .review-empty .review-make { flex-wrap: wrap; gap: 8px; }
 .review-make .btn.tonal { color: light-dark(var(--on-primary), var(--accent-ink)); }
+
+/* Ask about words picked in Chat (2.0, js/chat.js "asking about words picked"): a phone's bar above the box, a wide
+   screen's button beside the words, the quote waiting in the box, and the quoted line over a sent message. */
+.chat-ask {
+  display: grid; gap: 8px; max-width: 760px; margin: 0 auto 8px; padding: 10px 0 10px 12px; border: 1px solid var(--line);
+  border-radius: var(--r-lg); background: var(--card); min-width: 0;
+}
+.chat-ask-head { display: flex; align-items: center; gap: 8px; min-width: 0; padding-right: 12px; }
+.chat-ask-head > .icon { flex: none; width: 18px; height: 18px; color: var(--accent-ink); }
+.chat-ask-title { flex: none; color: var(--text); font: 600 13.5px/18px var(--font); }
+.chat-ask-words { flex: 1; min-width: 0; color: var(--muted); font: 400 13px/18px var(--font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-ask-chips { display: flex; gap: 8px; overflow-x: auto; padding: 0 12px 2px 0; scrollbar-width: none; overscroll-behavior-x: contain; }
+.chat-ask-chips::-webkit-scrollbar { display: none; }
+.chat-ask-chip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 40px; padding: 0 13px; border: 1px solid var(--line);
+  border-radius: var(--r-full); background: var(--surface-2); color: var(--text); font: 500 13.5px/1 var(--font); white-space: nowrap; cursor: pointer;
+}
+.chat-ask-chip .icon { width: 15px; height: 15px; color: var(--accent-ink); }
+.chat-ask-chip:hover { border-color: var(--line-strong); }
+@media (pointer: coarse) { .chat-ask-chip { min-height: 44px; } }
+.chat-ask-pop {
+  position: fixed; z-index: 60; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-full); background: var(--raised, var(--card)); color: var(--text);
+  font: 600 13px/1 var(--font); white-space: nowrap; box-shadow: var(--shadow-2, 0 6px 20px rgba(0, 0, 0, .18)); cursor: pointer;
+}
+.chat-ask-pop .icon { width: 15px; height: 15px; color: var(--accent-ink); }
+.chat-quote {
+  display: flex; align-items: flex-start; gap: 8px; min-width: 0; margin: 2px 2px 0; padding: 8px 4px 8px 10px;
+  border-left: 3px solid var(--accent); border-radius: 4px var(--r-md) var(--r-md) 4px; background: var(--surface-2);
+}
+.chat-quote > .icon { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--muted); }
+.chat-quote-text {
+  flex: 1; min-width: 0; color: var(--text-2); font: 400 13.5px/19px var(--font); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.chat-quote-x {
+  display: grid; place-items: center; flex: none; width: 28px; height: 28px; margin: -4px 0; padding: 0; border: none;
+  border-radius: var(--r-sm); background: none; color: var(--muted); cursor: pointer;
+}
+.chat-quote-x:hover { background: var(--surface); color: var(--text); }
+.chat-quote-x .icon { width: 15px; height: 15px; }
+@media (pointer: coarse) { .chat-quote-x { width: 40px; height: 40px; margin: -10px -4px -10px 0; } }
+.chat-quoted {
+  display: flex; align-items: flex-start; gap: 6px; max-width: 100%; min-width: 0; padding: 2px 4px 2px 10px; border: none;
+  border-left: 3px solid var(--accent-line, var(--line-strong)); border-radius: 2px; background: none; color: var(--muted);
+  font: 400 13px/18px var(--font); text-align: left; cursor: pointer;
+}
+.chat-quoted > .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+.chat-quoted-text { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.chat-quoted:hover .chat-quoted-text { color: var(--text-2); }
+/* (2.0: the glass look's three soft lines under "Thinking...", vault/web/glass/chat.css; none in the classic look) */
+.chat-think-lines { display: none; }
+
+/* A table in a Chat answer (2.0, js/chat.js renderWithTables): its own sideways scroll, never the page's. */
+.chat-table { max-width: 100%; margin: 6px 0 10px; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-md); overscroll-behavior-x: contain; }
+.chat-table:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chat-table-grid { width: 100%; border-collapse: collapse; font: 400 14px/20px var(--font); }
+.chat-table-grid :is(th, td) { padding: 8px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); min-width: 72px; }
+.chat-table-grid th { color: var(--text); font-weight: 600; background: var(--surface-2); white-space: nowrap; }
+.chat-table-grid td { color: var(--text-2); }
+.chat-table-grid tbody tr:last-child td { border-bottom: 0; }

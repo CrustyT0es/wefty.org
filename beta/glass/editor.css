@@ -66,6 +66,12 @@ html[data-look="glass"][data-black] { --g-ed-sky: #000000; --g-ed-pill: light-da
    Notes side grows it out of its card through V.glass.editorOpening, and neither may be fought by a transition here). */
 html[data-look="glass"] .editor-layer { background: var(--g-ed-sky); transform: none; opacity: 1; transition: none; }
 html[data-look="glass"] .editor-layer.g-growing { border-radius: 24px; overflow: hidden; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
+/* A note growing out of its card or going back into it is a window onto a square, full-screen layer (glass/editor.js windowOf):
+   its corners are the window's, never the layer's own, so the note at rest is square and full screen. The round + under it
+   goes while that happens (it would peek out from under the window). */
+html[data-look="glass"] .editor-layer.g-window { border-radius: 0; box-shadow: none; }
+html[data-look="glass"]:has(.editor-layer.g-window) .fab { opacity: 0; pointer-events: none; transition: opacity .12s linear; }
+html[data-look="glass"] .g-grow-card { transition: none; }
 html[data-look="glass"] .editor-layer.g-leaving { pointer-events: none; }
 html[data-look="glass"] .editor { background: transparent; }
 html[data-look="glass"] .editor.dropping { background: var(--accent-wash); box-shadow: inset 0 0 0 2px var(--accent-line); }
@@ -396,7 +402,7 @@ html[data-look="glass"] .editor .read-hint { color: var(--muted); }
 html[data-look="glass"] .editor-ask { background: transparent; border-top: 0; }
 html[data-look="glass"] .editor .ask-btn { border: 0; border-radius: 13px; background: var(--g-ed-chip); box-shadow: var(--g-ed-chip-edge); transition: transform var(--d-press) var(--g-ease); }
 html[data-look="glass"] .editor .ask-btn:active { transform: scale(.95); }
-html[data-look="glass"] .editor .ask-btn.primary { color: #fff; background: var(--g-grad); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 16px var(--g-glow); }
+html[data-look="glass"] .editor .ask-btn.primary { color: #fff; background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth); }  /* (round-3 merge: glass.css's one primary) */
 html[data-look="glass"] .editor .ask-btn.quiet { background: transparent; box-shadow: none; }
 
 /* the words not final yet while dictating: a floating glass pill over the tools, its dot breathing (transform and opacity) */
@@ -540,7 +546,7 @@ html[data-look="glass"] .ink-layer { container: g-ink / inline-size; }  /* (a co
    its "Until" day shows), the calendar sentence starts on the left like every other line, and the seven days are seven
    equal columns across the row, 44 px tall. */
 html[data-look="glass"] .sheet .repeat-end { grid-template-columns: minmax(0, 1fr); }
-html[data-look="glass"] .sheet .repeat-end:has(> .repeat-until:not([hidden]):not([style*="none"])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+html[data-look="glass"] .sheet .repeat-end:has(> .repeat-until:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 html[data-look="glass"] .sheet .repeat-end > .label, html[data-look="glass"] .sheet .repeat-ends { width: 100%; }
 html[data-look="glass"] .sheet .remind-hint { text-align: left; }
 html[data-look="glass"] .sheet .repeat-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }

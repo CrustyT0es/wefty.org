@@ -112,6 +112,17 @@ Added after the first review
   - V.motion.flip's handle has restore(); V.motion.shrink works through the stylesheet where scroll-driven animations exist.
 
 
+One recipe per kind of thing (the round-4 merge)
+------------------------------------------------
+Use the shared recipe; don't copy it into your area with other numbers (three areas did, and each looked a little off).
+  - the main button: glass.css's .btn.primary already is it; a rule of your own only sets the size, and an area that has
+    to repaint it uses background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth)
+  - a tick box: overlays.css's (add your box's class to its :is() list there); never a second one under it
+  - a segmented control's lit pill: overlays.css's .g-seg-hl i (glass/settings.js slides its own, with the same look)
+  - quiet glass on a full-screen screen (the note-taker, studying, the welcome, the note): white glass in light,
+    light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .07)), with a light top edge and a --g-ring rim
+  - errors that need more than a line: V.messageCard (a V.toast of kind 'err' with a help, an action or long words becomes one); questions: V.confirm / V.sheet
+
 Added after the owner's first look at the preview (the 2.0 hotfix)
 -------------------------------------------------------------------
   - A screen over a screen is never see-through. --page, --card and --surface-2 are tints in glass, so a full-screen layer
@@ -157,3 +168,20 @@ Added after the owner's first look at the preview (the 2.0 hotfix)
   - The phone's status bar (theme-color) is the aurora's top colour in glass (by time of day, light or dark, black in Pure
     black, a note's own top while one is open on a phone), and js/theme.js's own again when the look is off. Only the real
     phone shows the bars.
+
+
+The integration of the owner's second look (rec4 and six stills), on the merged tree
+-------------------------------------------------------------------------------------
+  - Moves that must keep step with each other are driven from one clock: V.motion.tween(ms, V.motion.bezier(...), step) calls
+    step(eased, linear) at every frame from the first one painted (never a frame later for one element than another, which Web
+    Animations made in one long task can do, and never lost when what they move is drawn again). Settings coming in over a
+    screen (and going back), and Share's parts, are carousels made with it: the screen that goes (a picture of it, taken at
+    'screen-leaving') and the one that comes are a screen's width apart at every frame, so nothing is ever over anything.
+  - A note grows out of its card as a WINDOW (glass/editor.js windowOf): the real note, full screen and square, scaled evenly from
+    the card's width, seen through a rounded clip-path that starts as the card and grows to the screen; the card's own copy lies
+    over it for the first moments, so there is never an empty box; going back is the same the other way, ending in the real card.
+  - Words sent (glass/send.js): the copy is worked out again at every frame from where its box and the real words are now, so a
+    keyboard going away or a chat scrolling changes nothing; the bubble forming never goes below the composer's top edge.
+  - The bloom of the edge light (loading.css .ge-bloom) is two soft inner glows, no ring and no line.
+  - A popover is opaque (Chat's "Ask about this" bar, the bar at the top while the note-taker is hidden); only a composer, a bar
+    that scrolls things under it, may be glass with blur.

@@ -1,8 +1,27 @@
 /* Wefty 2.0 "glass", area: Settings. This file belongs to the Settings builder; nobody else edits it.
    Settings (js/settings.js, settingsui.js, profile.js's menu): the home, the pages and their cards, the search.
-   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   Rules (vault/web/glass/README.txt has the rest): every rule starts with html[data-look="glass"]; use the tokens in
    glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
-   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+   V.motion's helpers instead of writing your own; nothing here changes the classic look.
+
+   The board is GlassSettings.dc.html: a big title with the thread under it, your account as a card of its own, a round
+   search pill, the categories in glass groups (a coloured tile, the name and how it's set, a chevron), and on a page
+   the sections' names above their cards. glass/settings.js adds the thread, the account card, the pill that slides in
+   the segmented controls and a phone's push and back.
+
+   ONE GRID (the owner's "the buttons don't quite line up"): every card in Settings has the same inner edges,
+     --gs-pad    the room inside a card, left and right (16 px: the board's rows)
+     --gs-tile   a category's tile (38 px), and --gs-gap the room after it (14 px), so every name starts at the same x
+   and the page's gutter is the app's own 16 px, Today's. Every row's control (switch, segmented, buttons, chevron)
+   ends on the card's inner right edge. tests/test_wefty_20_settings.py measures it. */
+
+html[data-look="glass"] :is(.view[data-tab=settings], .g-set-ghost) {
+  --gs-pad: 16px; --gs-tile: 38px; --gs-gap: 14px; --gs-row: 66px;
+  --gs-weft: light-dark(#7c5be0, #9c82ec);
+  --gs-press: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .06));
+  --gs-hair: linear-gradient(90deg, light-dark(rgba(110, 80, 200, 0), rgba(255, 255, 255, 0)), light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .10)) 20%,
+    light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .10)) 80%, light-dark(rgba(110, 80, 200, 0), rgba(255, 255, 255, 0)));
+}
 
 /* ================================================================== narrow screens and bigger text (fixes from round 1) */
 
@@ -21,3 +40,230 @@ html[data-look="glass"] .settings-card { container-type: inline-size; }
   html[data-look="glass"] .setting { flex-wrap: wrap; }
   html[data-look="glass"] .setting > .segmented { width: 100%; }
 }
+
+/* ================================================================== the head: a big title, the thread under it */
+
+/* A phone's home and pages: the back arrow on its own row (64 px), the big title under it, as the board's. */
+html[data-look="glass"] :is(.settings-home, .settings-sub) > header.app-head { flex-wrap: wrap; row-gap: 0; min-height: 0; padding-bottom: 0; }
+html[data-look="glass"] :is(.settings-home, .settings-sub) > header.app-head > .head-back { margin-left: -8px; }
+html[data-look="glass"] :is(.settings-home, .settings-sub) > header.app-head > .head-title { flex: 1 0 100%; padding: 4px 2px 0; }
+html[data-look="glass"] .settings .app-head h1, html[data-look="glass"] .settings-wide .set-title {
+  font: 700 34px/1.08 var(--font-display); letter-spacing: -.025em; color: var(--text);
+}
+html[data-look="glass"] .settings-wide .set-title { margin: 28px 2px 0; }
+/* The thread (glass/settings.js draws it once per page). */
+html[data-look="glass"] .g-set-weft { display: block; width: 100%; height: 12px; margin: 14px 0 18px; overflow: visible; flex: 1 0 100%; }
+html[data-look="glass"] .g-set-weft path { stroke: var(--gs-weft); stroke-width: 1.8; }
+html[data-look="glass"] .settings-wide .set-main > .g-set-weft { width: 358px; max-width: 100%; margin: 14px 2px 18px; }
+html[data-look="glass"] .settings-sub > .g-set-weft + .set-about, html[data-look="glass"] .settings-wide .g-set-weft + .set-about { margin-top: -4px; }
+html[data-look="glass"] .set-about { color: var(--text-2); margin-inline: 2px; }
+
+/* ================================================================== search: a round glass pill */
+
+html[data-look="glass"] .set-search { margin: 0 0 16px; }
+html[data-look="glass"] .set-search-box.field {
+  min-height: 48px; border-radius: 24px; padding-left: 46px;
+  background: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .06));
+  box-shadow: inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, .1)), inset 0 0 0 1px light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .09));
+}
+html[data-look="glass"] .set-search-box.field:hover:not(:focus) {
+  box-shadow: inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, .1)), inset 0 0 0 1px light-dark(rgba(110, 80, 200, .3), rgba(214, 196, 255, .3));
+}
+html[data-look="glass"] .set-search .set-search-ic { left: 16px; width: 18px; height: 18px; }
+html[data-look="glass"] .set-search .set-search-clear { right: 2px; border-radius: 22px; }
+
+/* ================================================================== the home: glass groups of categories */
+
+html[data-look="glass"] .set-home { gap: 16px; }
+html[data-look="glass"] .set-group.card { border-radius: var(--r-lg); overflow: hidden; }
+html[data-look="glass"] :is(.set-cat, .set-hit) {
+  gap: var(--gs-gap); min-height: var(--gs-row); padding: 10px 12px 10px 12px; overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+html[data-look="glass"] .set-hit { padding-left: var(--gs-pad); }
+/* The line between two rows: from under the names to the right edge, faded at both ends (the board's). */
+html[data-look="glass"] .set-group > .set-cat + .set-cat::before {
+  left: calc(12px + var(--gs-tile) + var(--gs-gap)); right: 14px; background: var(--gs-hair);
+}
+html[data-look="glass"] .set-group > .set-hit + .set-hit::before { left: var(--gs-pad); right: 14px; background: var(--gs-hair); }
+/* A press: a soft light fades in over the row and the tile springs in (only opacity and transform). */
+html[data-look="glass"] :is(.set-cat, .set-hit, .set-more-head)::after {
+  content: ""; position: absolute; inset: 0; background: var(--gs-press); opacity: 0; pointer-events: none;
+  transition: opacity var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] :is(.set-cat, .set-hit, .set-more-head):active::after { opacity: 1; }
+@media (hover: hover) {
+  html[data-look="glass"] :is(.set-cat, .set-hit, .set-more-head):hover { background: none; }
+  html[data-look="glass"] :is(.set-cat, .set-hit, .set-more-head):hover::after { opacity: .7; }
+  html[data-look="glass"] .set-cat:hover .set-chev, html[data-look="glass"] .set-hit:hover .set-chev { transform: translateX(2px); }
+}
+html[data-look="glass"] .set-chev { width: 18px; height: 18px; transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .set-cat .setting-text { gap: 4px; }
+html[data-look="glass"] .set-cat .setting-text strong { font: 500 16px/20px var(--font); color: var(--text); }
+html[data-look="glass"] .set-sum { font: 400 13.5px/18px var(--font); }
+html[data-look="glass"] .set-sum.warn { color: var(--warn); }
+
+/* The tiles: a soft colour each, as the board's (the icon in a lighter shade of it). */
+html[data-look="glass"] .set-ic {
+  --gs-tint: light-dark(rgba(154, 108, 242, .16), rgba(154, 108, 242, .30)); --gs-ink: light-dark(#5b36c2, #dcd0ff);
+  width: var(--gs-tile); height: var(--gs-tile); border-radius: 12px; background: var(--gs-tint); color: var(--gs-ink);
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .16)), inset 0 0 0 1px light-dark(rgba(110, 80, 200, .1), rgba(255, 255, 255, .08));
+  transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .set-ic .icon { width: 18px; height: 18px; }
+html[data-look="glass"] :is(.set-cat, .set-hit):active .set-ic { transform: scale(.9); }
+html[data-look="glass"] .set-cat[data-cat=ai] .set-ic { --gs-tint: light-dark(rgba(96, 112, 232, .15), rgba(96, 112, 232, .28)); --gs-ink: light-dark(#3446b8, #d2d7ff); }
+html[data-look="glass"] .set-cat[data-cat=devices] .set-ic { --gs-tint: light-dark(rgba(170, 96, 236, .15), rgba(170, 96, 236, .26)); --gs-ink: light-dark(#7a2fc0, #e8d4ff); }
+html[data-look="glass"] .set-cat[data-cat=notifications] .set-ic { --gs-tint: light-dark(rgba(214, 104, 170, .15), rgba(214, 104, 170, .24)); --gs-ink: light-dark(#a3266f, #ffd2ea); }
+html[data-look="glass"] .set-cat[data-cat=notes] .set-ic { --gs-tint: light-dark(rgba(92, 146, 236, .15), rgba(92, 146, 236, .24)); --gs-ink: light-dark(#1f5aa8, #cfe0ff); }
+html[data-look="glass"] .set-cat[data-cat=friends] .set-ic { --gs-tint: light-dark(rgba(226, 170, 92, .2), rgba(226, 170, 92, .22)); --gs-ink: light-dark(#8a4d00, #ffe4bc); }
+html[data-look="glass"] .set-cat[data-cat=about] .set-ic { --gs-tint: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .09)); --gs-ink: light-dark(#3d3560, #e6e0f7); }
+html[data-look="glass"] .set-ic:has(> .set-ic-av) { background: none; box-shadow: none; }
+html[data-look="glass"] .set-ic .set-ic-av { width: var(--gs-tile); height: var(--gs-tile); font-size: 16px; }
+html[data-look="glass"] .set-dot { box-shadow: 0 0 0 2.5px var(--bg), 0 0 8px light-dark(rgba(154, 85, 5, .4), rgba(255, 201, 106, .6)); }
+html[data-look="glass"] .set-dot:not([hidden]) { animation: g-pop .55s var(--g-spring) both; }
+
+/* Your account: a card of its own at the top (glass/settings.js moves its row there), the board's big round picture. */
+html[data-look="glass"] .g-set-profile .set-cat { min-height: 84px; padding: 14px 12px 14px 14px; }
+html[data-look="glass"] .g-set-profile .set-ic, html[data-look="glass"] .g-set-profile .set-ic .set-ic-av { width: 56px; height: 56px; }
+html[data-look="glass"] .g-set-profile .set-ic .set-ic-av {
+  font: 600 22px/1 var(--font);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 2px light-dark(rgba(124, 91, 224, .3), rgba(214, 196, 255, .35)), 0 8px 20px light-dark(rgba(98, 66, 200, .28), rgba(98, 66, 200, .45));
+}
+html[data-look="glass"] .g-set-profile .set-cat .setting-text strong { font: 600 18px/22px var(--font); }
+/* (a sheen sweeps across it when Settings opens, as the board's profile card) */
+html[data-look="glass"] .g-set-profile::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translateX(-130%);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, light-dark(rgba(255, 255, 255, .5), rgba(255, 255, 255, .13)) 50%, rgba(255, 255, 255, 0) 65%);
+  animation: g-set-sheen 1.1s var(--g-ease) .35s both;
+}
+@keyframes g-set-sheen { to { transform: translateX(130%); } }
+
+/* ================================================================== search results */
+
+html[data-look="glass"] .set-count { margin: 4px 2px 8px; color: var(--text-2); }
+html[data-look="glass"] .set-results .set-group { border-radius: var(--r-lg); }
+html[data-look="glass"] .set-hit mark { background: light-dark(rgba(124, 91, 224, .18), rgba(150, 108, 240, .38)); color: var(--text); border-radius: 4px; }
+html[data-look="glass"] .set-tip, html[data-look="glass"] .set-help-link {
+  border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .set-help-link { transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .set-help-link:active { transform: scale(.98); }
+
+/* ================================================================== a page: section names above glass cards */
+
+html[data-look="glass"] .set-page > .settings-card { padding: 4px var(--gs-pad); border-radius: var(--r-lg); }
+html[data-look="glass"] .set-page > .settings-card > h2 { left: 2px; color: var(--text-2); font: 600 15px/20px var(--font); }
+html[data-look="glass"] .set-page > .settings-card > h2[data-tag]::after { color: var(--muted); font-size: 13.5px; }
+html[data-look="glass"] .set-page > .settings-card:has(> h2:not(.page-same)) { margin-top: 42px; }
+/* Rows: the lines between them fade at both ends, as on the home. */
+html[data-look="glass"] .settings-card > * + .setting, html[data-look="glass"] .settings-card > .setting + * { border-top: 0; }
+html[data-look="glass"] .settings-card > :is(* + .setting, .setting + *) { position: relative; }
+html[data-look="glass"] .settings-card > :is(* + .setting, .setting + *):not(h2 + *)::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--gs-hair); pointer-events: none;
+}
+html[data-look="glass"] .setting { min-height: 64px; }
+html[data-look="glass"] .setting-text strong { font-weight: 600; color: var(--text); }
+html[data-look="glass"] .setting-text span { color: var(--muted); font-size: 13.5px; line-height: 19px; }
+/* Every control ends on the card's inner right edge (a segmented control, a switch, a row of buttons). */
+html[data-look="glass"] .setting > :is(.segmented, .switch, .setting-buttons, .btn) { margin-left: auto; margin-right: 0; }
+html[data-look="glass"] .setting-buttons { gap: 10px; }
+html[data-look="glass"] .setting-buttons .btn { min-height: 44px; border-radius: 14px; }
+/* A setting asked for (a search's result): lit for a moment by a light that fades (opacity only, no colour moving). */
+html[data-look="glass"] .set-page .setting.lit { animation: none; position: relative; }
+html[data-look="glass"] .set-page .setting.lit::after {
+  content: ""; position: absolute; inset: 2px -8px; border-radius: 14px; pointer-events: none;
+  background: light-dark(rgba(124, 91, 224, .14), rgba(150, 108, 240, .22)); box-shadow: inset 0 0 0 1px var(--accent-line);
+  animation: g-set-lit 1.5s var(--g-ease) both;
+}
+@keyframes g-set-lit { 0%, 40% { opacity: 1; } 100% { opacity: 0; } }
+
+/* More options: a glass row whose chevron turns on the spring. */
+html[data-look="glass"] .set-more { border-radius: var(--r-lg); }
+html[data-look="glass"] .set-more-head { position: relative; overflow: hidden; padding-inline: var(--gs-pad); }
+html[data-look="glass"] .set-more-chev { transition: transform .34s var(--g-spring); }
+html[data-look="glass"] .set-more-rows { padding: 0 var(--gs-pad) 4px; border-top: 0; position: relative; }
+html[data-look="glass"] .set-more-rows::before { content: ""; position: absolute; left: var(--gs-pad); right: var(--gs-pad); top: 0; height: 1px; background: var(--gs-hair); }
+html[data-look="glass"] .set-more-rows > .setting + .setting { border-top: 0; position: relative; }
+html[data-look="glass"] .set-more-rows > .setting + .setting::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--gs-hair); }
+html[data-look="glass"] .set-more[open] .set-more-rows, html[data-look="glass"] .set-more-head[aria-expanded=true] + .set-more-rows { animation: g-set-open .34s var(--g-ease) both; }
+@keyframes g-set-open { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .set-foot { color: var(--text-2); }
+
+/* Your e-mail on Account, the sync chip. */
+html[data-look="glass"] .account-who .who-av {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 2px light-dark(rgba(124, 91, 224, .3), rgba(214, 196, 255, .35)), 0 8px 20px light-dark(rgba(98, 66, 200, .28), rgba(98, 66, 200, .45));
+}
+html[data-look="glass"] .sync-chip { box-shadow: inset 0 0 0 1px var(--g-ring); }
+
+/* Friends' stats tiles, the AI month's meter, the people. */
+html[data-look="glass"] .stats-tile { border-radius: 18px; }
+html[data-look="glass"] .ai-meter { height: 6px; background: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .09)); box-shadow: inset 0 1px 1px light-dark(rgba(60, 40, 140, .12), rgba(0, 0, 0, .35)); }
+html[data-look="glass"] .ai-meter > span { background: var(--g-grad); }
+html[data-look="glass"] .invite-all { border-top: 0; position: relative; }
+html[data-look="glass"] .invite-all::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--gs-hair); }
+html[data-look="glass"] .qr { border: 0; border-radius: 18px; box-shadow: 0 10px 26px var(--g-glow); }
+
+/* ================================================================== the segmented controls: one lit pill that slides */
+
+/* glass/settings.js puts a pill (.g-seg-hl) under the picked option and slides it there with a stretch, as the board's
+   Theme picker; the picked option itself then draws nothing of its own. Without the script, the glass look's own
+   picked option shows (glass.css). */
+html[data-look="glass"] .segmented.g-seg { position: relative; isolation: isolate; }
+html[data-look="glass"] .segmented.g-seg > button { position: relative; z-index: 1; }
+html[data-look="glass"] .segmented.g-seg > button:is([aria-checked="true"], [aria-selected="true"]) { background: transparent; box-shadow: none; color: #fff; }
+html[data-look="glass"] .g-seg-hl { position: absolute; z-index: 0; pointer-events: none; }
+/* (round-4 merge: the pill itself is overlays.css's .g-seg-hl i, the same lit pill as in every sheet) */
+
+/* ================================================================== the one gradient button, with real glass depth */
+
+/* As Share's Send (the owner liked it once it had depth): a light along the top edge, a gloss over the upper part, a
+   darker inside along the bottom, a rim and a soft coloured shadow; a sheen sweeps across on a press and it springs. */
+html[data-look="glass"] :is(.view[data-tab=settings], .sheet:has(.ai-gemini-sheet, .connect, .invite-everyone, .news-everything, .person-sheet, .join-sheet, .help-body)) .btn.primary {
+  --g-lift: rgba(255, 255, 255, .2);
+  background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-4 merge: glass.css's one primary) */
+  transition: transform .22s var(--g-spring);
+}
+html[data-look="glass"] :is(.view[data-tab=settings], .sheet:has(.ai-gemini-sheet, .connect, .invite-everyone, .news-everything, .person-sheet, .join-sheet, .help-body)) .btn.primary::after {
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] :is(.view[data-tab=settings], .sheet:has(.ai-gemini-sheet, .connect, .invite-everyone, .news-everything, .person-sheet, .join-sheet, .help-body)) .btn.primary:active:not(:disabled) { transform: scale(.95); transition-duration: var(--d-press); }
+html[data-look="glass"] :is(.view[data-tab=settings], .sheet:has(.ai-gemini-sheet, .connect, .invite-everyone, .news-everything, .person-sheet, .join-sheet, .help-body)) .btn.primary:active:not(:disabled)::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
+/* Quiet buttons in Settings: glass chips that spring. */
+html[data-look="glass"] .view[data-tab=settings] .btn:not(.primary):not(.quiet):not(.danger-quiet) { transition: transform .2s var(--g-spring); }
+
+/* ================================================================== wide: the categories on the left, the page on the right */
+
+@media (min-width: 900px) {
+  html[data-look="glass"] .settings-wide .set-side {
+    background: light-dark(rgba(255, 255, 255, .28), rgba(11, 9, 24, .28)); border-right: 0;
+    box-shadow: inset -1px 0 0 var(--g-ring);
+  }
+  html[data-look="glass"] .settings-wide .set-side > header.app-head { padding-top: 22px; }
+  html[data-look="glass"] .settings-wide .set-side .app-head h1 { font-size: 30px; }
+  html[data-look="glass"] .settings-wide .set-group { gap: 4px; }
+  html[data-look="glass"] .settings-wide .set-home > .set-group + .set-group { border-top: 0; position: relative; }
+  html[data-look="glass"] .settings-wide .set-home > .set-group + .set-group::before {
+    content: ""; position: absolute; left: 12px; right: 12px; top: 0; height: 1px; background: var(--gs-hair);
+  }
+  html[data-look="glass"] .settings-wide .set-cat { min-height: 64px; border-radius: 16px; padding: 10px 12px; }
+  html[data-look="glass"] .settings-wide .set-cat .set-ic { width: 40px; height: 40px; }
+  html[data-look="glass"] .settings-wide .set-cat[aria-current=page] { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
+  html[data-look="glass"] .settings-wide .set-cat[aria-current=page] .set-ic:not(:has(> .set-ic-av)) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 6px 14px var(--g-glow); }
+  html[data-look="glass"] .settings-wide .set-main { padding: 0 40px 48px; }
+}
+
+/* ================================================================== the push and back (glass/settings.js) */
+
+/* The page that goes, as a picture for .46 s: under the new page as it comes in (push), over the home (back). */
+html[data-look="glass"] .g-set-ghost { position: fixed; z-index: 0; pointer-events: none; margin: 0; will-change: transform, opacity; }
+html[data-look="glass"] .g-set-ghost.over { z-index: 3; }
+html[data-look="glass"] .g-set-ghost > .page { margin: 0; max-width: none; }
+
+/* ================================================================== lite and calm */
+
+html[data-look="glass"].lite .g-set-profile::after, html[data-look="glass"].calm .g-set-profile::after { display: none; }
+html[data-look="glass"].calm :is(.set-cat, .set-hit):active .set-ic, html[data-look="glass"].calm .set-help-link:active,
+html[data-look="glass"].calm :is(.view[data-tab=settings], .sheet:has(.ai-gemini-sheet, .connect, .invite-everyone, .news-everything, .person-sheet, .join-sheet, .help-body)) .btn.primary:active:not(:disabled) { transform: none; }
+html[data-look="glass"].calm .set-dot, html[data-look="glass"].lite .set-dot { animation: none; }
+html[data-look="glass"].calm .set-more-head[aria-expanded=true] + .set-more-rows { animation: g-fade-in .12s linear both; }

@@ -326,8 +326,7 @@ html[data-look="glass"] .list-head .btn.primary.new-note:active::after,
 html[data-look="glass"] .empty-folder .btn.primary:active::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
 @media (hover: hover) { html[data-look="glass"] main.view[data-tab="notes"] > .fab:hover .icon { transform: rotate(90deg); } }
 html[data-look="glass"] .list-head .btn.primary.new-note, html[data-look="glass"] .empty-folder .btn.primary {
-  background: radial-gradient(120% 120% at 30% 0%, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 55%), var(--g-grad);
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, .42), inset 0 -6px 12px rgba(60, 30, 140, .28), 0 10px 24px var(--g-glow);
+  background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-3 merge: glass.css's one primary) */
 }
 
 /* ================================================================== picking several notes */

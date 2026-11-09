@@ -29,3 +29,388 @@ html[data-look="glass"] .chat-trouble[data-kind=setup] { background: var(--g-fil
 html[data-look="glass"] .chat-trouble > .icon { width: 22px; height: 22px; margin-top: 1px; justify-self: center; }
 html[data-look="glass"] .chat-trouble > span { min-width: 0; }
 html[data-look="glass"] .chat-trouble > .btn { grid-column: 1 / -1; width: 100%; min-height: 44px; font-size: 14.5px; }
+
+/* ================================================================== round 2: the whole Chat screen (GlassChat.dc.html)
+
+   Tokens for this screen (one set of edges, one gap, one height, as Share's):
+     --ch-pad    the room inside the box and the cards (all four sides)
+     --ch-gap    between what sits side by side in a row
+     --ch-btn    the round buttons of the box (Attach, Send): the board's 44 px
+     --ch-chip   a quiet glass chip's fill, --ch-chip-edge its light top edge
+     --ch-well   the darker inside of a note chip or a code block */
+html[data-look="glass"] .chat-app {
+  --ch-pad: 8px; --ch-gap: 6px; --ch-btn: 44px;
+  --ch-chip: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .07));
+  --ch-chip-hover: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .12));
+  --ch-chip-edge: light-dark(rgba(255, 255, 255, .9), rgba(255, 255, 255, .12));
+  --ch-well: light-dark(rgba(110, 80, 200, .07), rgba(11, 9, 24, .32));
+  --ch-bubble: linear-gradient(155deg, rgba(150, 108, 240, .30), rgba(98, 66, 200, .14) 60%, rgba(150, 108, 240, .18));
+}
+html[data-look="glass"][data-theme="light"] .chat-app {
+  --ch-bubble: linear-gradient(155deg, rgba(124, 91, 224, .17), rgba(124, 91, 224, .08) 60%, rgba(124, 91, 224, .12));
+}
+
+/* ---- the head: the chat's name, back and ⋯ (a glass strip, round 1) */
+html[data-look="glass"] .chat-title { font: 600 17px/22px var(--font); letter-spacing: -.01em; border-radius: 12px; }
+
+/* ---- the list of chats: rows of glass (a phone: cards with a gap; wide: flat rows in the side panel) */
+html[data-look="glass"] .chat-list { gap: 8px; }
+html[data-look="glass"] .chat-row {
+  position: relative; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+  transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .chat-row::before {  /* a light that fades in on a mouse and on a press */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--ch-chip); opacity: 0; pointer-events: none;
+  transition: opacity .2s var(--g-ease);
+}
+html[data-look="glass"] .chat-row:hover { background: var(--g-fill); }
+@media (hover: hover) { html[data-look="glass"] .chat-row:hover::before { opacity: 1; } }
+html[data-look="glass"] .chat-row:active { transform: scale(.985); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-row:active::before { opacity: 1; }
+html[data-look="glass"] .chat-row.on { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
+html[data-look="glass"] .chat-row-main { padding: 12px 14px; }
+html[data-look="glass"] .chat-row-title { font-weight: 600; }
+html[data-look="glass"] .chat-row.on .chat-row-title { color: var(--text); }
+html[data-look="glass"] .chat-row-dot { background: var(--g-grad); box-shadow: 0 0 8px var(--g-glow); }
+html[data-look="glass"] .chat-row-writing .chat-row-dot { animation: g-chat-breathe 1.8s ease-in-out infinite; }
+@keyframes g-chat-breathe { 0%, 100% { opacity: 1; transform: none; } 50% { opacity: .45; transform: scale(.8); } }
+@media (min-width: 900px) {
+  html[data-look="glass"] .chat-list { gap: 4px; }
+  html[data-look="glass"] .chat-row { background: transparent; box-shadow: none; }
+  html[data-look="glass"] .chat-row.on { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
+  /* New chat beside the list: the soft tonal glass (the box's Send is the screen's one gradient button) */
+  html[data-look="glass"] .chat-side-head .btn.primary {
+    background: var(--g-grad-soft); color: light-dark(#3a1d92, #ede6ff); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring);
+  }
+  html[data-look="glass"] .chat-side-head .btn.primary:hover:not(:disabled) { background: var(--g-grad-soft); filter: none; }
+}
+
+/* ---- your message: the board's glass bubble (iris tint, the light edge, the small corner towards you) */
+html[data-look="glass"] .chat-you-text {
+  position: relative; padding: 12px 16px; border-radius: 22px 22px 8px 22px; background: var(--ch-bubble);
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow); font: 400 15.5px/22px var(--font);
+}
+html[data-look="glass"] .chat-you-text::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .chat-more { border-radius: 14px; transition: transform .16s var(--g-spring), opacity .2s var(--g-ease); }
+html[data-look="glass"] .chat-more:active { transform: scale(.88); transition-duration: var(--d-press); }
+
+/* ---- what's attached: notes, files and pictures as glass chips with a dark well and a tile */
+html[data-look="glass"] .chat-attached { gap: 8px; }
+html[data-look="glass"] .chat-chip {
+  position: relative; height: 48px; gap: 10px; padding: 0 6px; border: 0; border-radius: 15px; background: var(--ch-well);
+  box-shadow: inset 0 0 0 1px var(--g-ring), inset 0 1px 0 var(--ch-chip-edge); transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .chat-chip.note { padding: 0 4px 0 0; }
+html[data-look="glass"] .chat-chip-open { gap: 10px; padding: 0 8px 0 6px; border-radius: 15px; }
+html[data-look="glass"] .chat-chip-open .icon, html[data-look="glass"] .chat-chip-kind {
+  box-sizing: border-box; width: 36px; height: 36px; padding: 9px; border-radius: 11px; background: var(--ch-chip); color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .chat-chip-kind { padding: 0; font-size: 10px; }
+html[data-look="glass"] .chat-chip .chat-pic { width: 36px; height: 36px; border-radius: 11px; }
+html[data-look="glass"] .chat-chip-name { color: var(--text); font: 600 14px/18px var(--font); }
+html[data-look="glass"] :is(button.chat-chip.opens, .chat-chip.note:has(.chat-chip-open)):active { transform: scale(.97); transition-duration: var(--d-press); }
+@media (hover: hover) { html[data-look="glass"] :is(button.chat-chip.opens:hover, .chat-chip.note:has(.chat-chip-open:hover)) { box-shadow: inset 0 0 0 1px var(--g-pill-ring), inset 0 1px 0 var(--ch-chip-edge); } }
+html[data-look="glass"] .chat-sent-pic img { border: 0; border-radius: 18px; box-shadow: inset 0 0 0 1px var(--g-ring), var(--g-shadow); }
+html[data-look="glass"] button.chat-sent-pic { border-radius: 18px; transition: transform .16s var(--g-spring); }
+html[data-look="glass"] button.chat-sent-pic:active { transform: scale(.97); transition-duration: var(--d-press); }
+
+/* ---- an answer: who wrote it on top (the board's star tile and the model's name), then the words */
+html[data-look="glass"] .chat-claude { position: relative; padding-top: 40px; }
+html[data-look="glass"] .chat-claude::before {  /* the tile with its star (the star twinkles while it thinks) */
+  content: ""; position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 10px;
+  background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring);
+}
+html[data-look="glass"] .chat-claude::after {  /* the name: "Gemini Fast" (data-who, js/chat.js) */
+  content: attr(data-who); position: absolute; left: 39px; top: 0; height: 30px; color: var(--text-2);
+  font: 600 13.5px/30px var(--font); white-space: nowrap; pointer-events: none;
+}
+html[data-look="glass"] .chat-claude > .chat-reply-body::before {  /* the star itself, over the tile */
+  content: ""; position: absolute; left: 7px; top: 7px; width: 16px; height: 16px; background: var(--accent-ink);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+html[data-look="glass"] .chat-claude:has(> .chat-reply-body > .chat-thinking:first-child) > .chat-reply-body::before { animation: g-chat-twinkle 1.3s ease-in-out infinite; }
+@keyframes g-chat-twinkle { 0%, 100% { transform: none; opacity: 1; } 50% { transform: scale(.8) rotate(25deg); opacity: .6; } }
+html[data-look="glass"] .chat-md { font-size: 16px; line-height: 1.58; }
+html[data-look="glass"] .chat-md :is(h2, h3, h4).read-heading { letter-spacing: -.015em; }
+html[data-look="glass"] .chat-md h2.read-heading { font: 700 20px/28px var(--font-display, var(--font)); }
+html[data-look="glass"] .chat-md strong { color: var(--text); font-weight: 650; }
+html[data-look="glass"] .chat-md .read-quote { border-left: 2px solid var(--accent-line); }
+/* a code block: a dark well with a hairline, its Copy a glass chip that springs */
+html[data-look="glass"] .chat-md .read-pre {
+  border: 0; border-radius: 16px; background: var(--ch-well); box-shadow: inset 0 0 0 1px var(--g-ring), inset 0 1px 0 light-dark(rgba(110, 80, 200, .06), rgba(0, 0, 0, .25));
+  color: var(--text); scrollbar-width: thin;
+}
+html[data-look="glass"] .chat-copy-code {
+  top: 8px; right: 8px; height: 30px; border: 0; border-radius: 10px; background: var(--raised); color: var(--text-2);
+  box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring); transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .chat-copy-code:hover { background: var(--raised); color: var(--text); }
+html[data-look="glass"] .chat-copy-code:active { transform: scale(.92); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-partial .chat-md { color: var(--text-2); }
+
+/* ---- thinking: three soft lines that shimmer under "Thinking..." until the first words come (the board's .tline) */
+html[data-look="glass"] .chat-thinking { flex-wrap: wrap; gap: 8px 10px; color: var(--muted); font: 500 13.5px/20px var(--font); }
+html[data-look="glass"] .chat-thinking .spinner {  /* a calm breathing dot instead of the spinner */
+  width: 8px; height: 8px; margin: 0 2px; border: 0; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--g-glow);
+  animation: g-chat-breathe 1.4s ease-in-out infinite;
+}
+html[data-look="glass"] .chat-reply-body > .chat-thinking:first-child .chat-think-lines {
+  display: grid; gap: 11px; flex-basis: 100%; margin: 4px 2px 0;
+}
+html[data-look="glass"] .chat-think-lines i {
+  position: relative; display: block; height: 11px; overflow: hidden; border-radius: 6px; background: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .07));
+}
+html[data-look="glass"] .chat-think-lines i:nth-child(1) { width: 92%; }
+html[data-look="glass"] .chat-think-lines i:nth-child(2) { width: 78%; }
+html[data-look="glass"] .chat-think-lines i:nth-child(3) { width: 54%; }
+html[data-look="glass"] .chat-think-lines i::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%); animation: g-chat-shimmer 1.2s linear infinite;
+  animation-delay: var(--g-shimmer-at, 0s);
+  background: linear-gradient(90deg, rgba(186, 160, 255, 0), light-dark(rgba(124, 91, 224, .22), rgba(186, 160, 255, .28)), rgba(186, 160, 255, 0));
+}
+html[data-look="glass"] .chat-think-lines i:nth-child(2)::after { animation-delay: calc(var(--g-shimmer-at, 0s) + .12s); }
+html[data-look="glass"] .chat-think-lines i:nth-child(3)::after { animation-delay: calc(var(--g-shimmer-at, 0s) + .24s); }
+@keyframes g-chat-shimmer { to { transform: translateX(100%); } }
+/* words landing (glass/chat.js wraps what has just come in): each piece rises 3 px into place as it fades in */
+html[data-look="glass"] .g-word { animation: g-chat-word .26s var(--g-ease) both; }
+@keyframes g-chat-word { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .g-word { display: inline-block; white-space: pre-wrap; }
+html[data-look="glass"] .g-caret {
+  display: inline-block; width: 2px; height: 1.05em; margin-left: 3px; vertical-align: -.16em; border-radius: 1px; background: var(--accent);
+  animation: g-chat-caret 1s steps(1) infinite;
+}
+@keyframes g-chat-caret { 50% { opacity: 0; } }
+
+/* ---- under an answer: Copy, Save as note, Send to, Retry, ⋯ (quiet glass chips that spring) and who answered */
+html[data-look="glass"] .chat-actions { gap: 4px; margin-left: -6px; }
+html[data-look="glass"] .chat-actions .btn {
+  position: relative; min-height: 36px; padding: 0 11px; border-radius: 12px; color: var(--text-2); transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .chat-actions .btn::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--ch-chip); opacity: 0; pointer-events: none;
+  transition: opacity .2s var(--g-ease);
+}
+@media (hover: hover) { html[data-look="glass"] .chat-actions .btn:hover::before { opacity: 1; } }
+html[data-look="glass"] .chat-actions .btn:active { transform: scale(.94); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-actions .btn:active::before { opacity: 1; }
+html[data-look="glass"] .chat-meta { color: var(--muted); }
+html[data-look="glass"] .chat-note { color: var(--muted); }
+html[data-look="glass"] .chat-source {
+  border: 0; border-radius: 12px; background: var(--ch-chip); box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+
+/* ---- waiting to send, or finishing an answer cut off: a glass strip, its buttons quiet chips */
+html[data-look="glass"] .chat-waiting {
+  position: relative; padding: 10px 8px 10px 14px; border: 0; border-radius: 18px; background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .chat-waiting-text > .icon { color: var(--accent-ink); }
+html[data-look="glass"] :is(.chat-waiting-actions, .chat-finishing) .btn {
+  min-height: 36px; padding: 0 12px; border-radius: 12px; background: var(--ch-chip); color: var(--text);
+  box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring); transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] :is(.chat-waiting-actions, .chat-finishing) .btn:active { transform: scale(.94); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-waiting-actions { gap: 6px; }
+
+/* ---- what Chat did in Wefty (js/chattools.js): one glass card, a row each with a tile, the words and quiet chips;
+   an ask to delete above it in a soft red glass; the calendar card in the soft iris. */
+html[data-look="glass"] .chat-actions-done { gap: 10px; }
+html[data-look="glass"] .chat-actions-card {
+  position: relative; border: 0; border-radius: 22px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow); overflow: visible;
+}
+html[data-look="glass"] .chat-actions-card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .chat-actions-card.asks {
+  background: linear-gradient(150deg, light-dark(rgba(176, 42, 64, .08), rgba(255, 120, 140, .14)), light-dark(rgba(176, 42, 64, .03), rgba(255, 120, 140, .05)));
+}
+html[data-look="glass"] .chat-actions-card.shows { background: var(--g-fill); }
+html[data-look="glass"] .chat-actions-head { min-height: 44px; padding: 4px 8px 0 14px; border-bottom: 0; color: var(--muted); font: 600 13px/18px var(--font); }
+html[data-look="glass"] .chat-action-row { position: relative; }
+html[data-look="glass"] .chat-action-row + .chat-action-row { border-top: 0; }
+html[data-look="glass"] .chat-action-row + .chat-action-row::before {  /* the board's fading hairline, from the words to the end */
+  content: ""; position: absolute; left: 58px; right: 14px; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line) 20%, var(--line) 80%, transparent);
+}
+html[data-look="glass"] .chat-action {
+  grid-template-columns: 32px minmax(0, 1fr) auto; column-gap: 12px; min-height: 56px; padding: 8px 8px 8px 14px;
+  color: var(--text); font: 600 14px/19px var(--font);
+}
+html[data-look="glass"] .chat-action-mark {
+  box-sizing: border-box; width: 32px; height: 32px; padding: 8px; border-radius: 11px; background: var(--ch-chip); color: var(--accent-ink);
+  box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring); transition: opacity .25s var(--g-ease);
+}
+html[data-look="glass"] .chat-action.ask .chat-action-mark { background: var(--danger-soft); color: var(--danger); }
+html[data-look="glass"] .chat-action-label { padding: 2px 0; transition: opacity .28s var(--g-ease); }
+html[data-look="glass"] .chat-action.undone .chat-action-label { opacity: .72; }
+html[data-look="glass"] .chat-action.undone .chat-action-mark { opacity: .45; }
+html[data-look="glass"] .chat-action-done { animation: g-pop .46s var(--g-spring) both; }
+html[data-look="glass"] .chat-action-btns { gap: 6px; }
+html[data-look="glass"] .chat-action-about { padding: 0 8px 4px 0; }
+/* the board's mini chips: Open, Undo, Undo all, Delete, Cancel, Save, Copy here (a 44 px target round a 32 px chip) */
+html[data-look="glass"] .chat-action-btn {
+  position: relative; min-height: 32px; padding: 0 11px; border-radius: 11px; background: var(--ch-chip); color: var(--text);
+  box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring); transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .chat-action-btn:hover:not(:disabled) { background: var(--ch-chip-hover); }
+html[data-look="glass"] .chat-action-btn:active:not(:disabled) { transform: scale(.93); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-action-btn.danger { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px light-dark(rgba(176, 42, 64, .25), rgba(255, 163, 163, .3)); }
+html[data-look="glass"] .chat-action-btn.danger:hover:not(:disabled) { background: var(--danger-soft); }
+html[data-look="glass"] .chat-action-btn.chat-show-btn { background: var(--g-grad-soft); background-color: var(--accent-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
+@media (pointer: coarse) {
+  html[data-look="glass"] .chat-action-btn { min-height: 36px; border-radius: 12px; }  /* (a finger's 36 px, as the classic look's) */
+}
+html[data-look="glass"] .chat-actions-more { border-top: 0; border-radius: 0 0 22px 22px; }
+html[data-look="glass"] .chat-cal { border: 0; border-radius: 22px; background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
+
+/* ---- the box: one glass bar (blur: it's a bar), Attach / the model / Think / Web on the left, Send on the right,
+   each at the same inset from the box's edge (--ch-pad), all on one centre line. */
+html[data-look="glass"] .chat-box {
+  gap: 2px; padding: var(--ch-pad); border: 0; border-radius: 26px; background: var(--g-bar); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), var(--g-shadow); transition: box-shadow .2s var(--g-ease);
+}
+html[data-look="glass"].lite .chat-box { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+html[data-look="glass"] .chat-box:focus-within {
+  border: 0; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1.5px var(--accent-line), 0 0 0 5px light-dark(rgba(124, 91, 224, .14), rgba(150, 108, 240, .16)), var(--g-shadow);
+}
+html[data-look="glass"] .chat-input { min-height: 40px; padding: 9px 10px 5px; font-size: 16px; line-height: 22px; }
+html[data-look="glass"] .chat-input::placeholder { color: var(--placeholder); }
+html[data-look="glass"] .chat-tools { gap: var(--ch-gap); min-height: var(--ch-btn); }
+html[data-look="glass"] .chat-tools .icon-btn {
+  width: var(--ch-btn); height: var(--ch-btn); border-radius: 15px; color: var(--text-2); transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .chat-tools .icon-btn:active { transform: scale(.9); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-pill {
+  position: relative; height: 34px; padding: 0 12px; border: 0; border-radius: 17px; background: var(--ch-chip); color: var(--text);
+  box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring); font-weight: 600; transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .chat-pill:hover { background: var(--ch-chip-hover); }
+html[data-look="glass"] .chat-pill:active { transform: scale(.95); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-pill .icon { color: var(--accent-ink); }
+html[data-look="glass"] .chat-toggle[aria-pressed=true] { background: var(--g-grad-soft); color: var(--text); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
+html[data-look="glass"] .chat-model-name { display: inline-block; }
+/* Send: the screen's one gradient button, with glass depth (a light along the top, a gloss over its upper half, a
+   darker inside along the bottom, a rim and a soft coloured shadow), a sheen sweeping across on a press, and a spring.
+   Nothing to send yet: a quiet glass circle. */
+html[data-look="glass"] .chat-go {
+  position: relative; width: var(--ch-btn); height: var(--ch-btn); overflow: hidden; color: #fff;
+  background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-3 merge: glass.css's one primary) */
+  transition: transform .22s var(--g-spring), opacity .2s var(--g-ease);
+}
+html[data-look="glass"] .chat-go::after {  /* the sheen (this also replaces glass.css's 44 px target: the button is 44 px itself) */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translateX(-130%);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .42) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] .chat-go:hover:not(:disabled):not(.stop) { background: linear-gradient(180deg, rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 46%), var(--g-grad); }
+html[data-look="glass"] .chat-go:active:not(:disabled) { transform: scale(.88); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-go:active:not(:disabled)::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
+html[data-look="glass"] .chat-go .icon { transition: transform .26s var(--g-spring); }
+html[data-look="glass"] .chat-go:active:not(:disabled) .icon { transform: translateY(-2px); }
+html[data-look="glass"] .chat-go:disabled {
+  background: var(--ch-chip); color: var(--control); box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .chat-go.stop { background: var(--raised); color: var(--text); box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--line-strong); }
+html[data-look="glass"] .chat-hint { margin: 0 10px; }
+/* The box, the bar above it and the notice share the thread's own edges: its 16 px gutter on a phone (Today's), and
+   the words' 728 px column (the thread's 760 less its padding) when wide. */
+html[data-look="glass"] :is(.chat-box, .chat-ask, .chat-trouble) { max-width: 728px; }
+@media (max-width: 899px) {
+  html[data-look="glass"] .chat-composer { padding: 6px 16px 10px; }
+}
+
+/* ---- the model sheet: a glass row per model, the one in use lit with the soft iris and a check */
+html[data-look="glass"] .model-choices { gap: 10px; }
+html[data-look="glass"] .model-choice {
+  position: relative; border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+  transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .model-choice:hover { box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong); }
+html[data-look="glass"] .model-choice:active { transform: scale(.98); transition-duration: var(--d-press); }
+html[data-look="glass"] .model-choice.on { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1.5px var(--g-pill-ring), 0 8px 22px -8px var(--g-glow); }
+html[data-look="glass"] .model-choice.on .mc-check { animation: g-pop .46s var(--g-spring) both; }
+
+/* ---- asking about words picked (js/chat.js, 2.0): a phone's bar above the box (opaque glass: a popover), the
+   quote waiting in the box (a dim chip that slides in), the quote over a sent message, and a wide screen's button */
+html[data-look="glass"] .chat-ask {
+  position: relative; gap: 10px; padding: 12px 0 12px 14px; border: 0; border-radius: 22px; background: var(--g-float);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), var(--g-shadow);
+  animation: g-chat-ask-in var(--d-slide) var(--g-slide) both;
+}
+/* (opaque, like every popover since the owner's first look: it floats over the answer being read, so words from under it must never show) */
+@keyframes g-chat-ask-in { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .chat-ask-head { padding-right: 14px; }
+html[data-look="glass"] .chat-ask-title { font-weight: 700; }
+html[data-look="glass"] .chat-ask-chips { gap: 8px; padding-right: 14px; }
+html[data-look="glass"] .chat-ask-chip {
+  position: relative; min-height: 40px; padding: 0 14px; border: 0; border-radius: 20px; background: var(--ch-chip); color: var(--text);
+  box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring); font-weight: 600;
+  transition: transform .16s var(--g-spring); animation: g-chat-chip-in .42s var(--g-spring) both;
+}
+html[data-look="glass"] .chat-ask-chip:nth-child(2) { animation-delay: .03s; }
+html[data-look="glass"] .chat-ask-chip:nth-child(3) { animation-delay: .06s; }
+html[data-look="glass"] .chat-ask-chip:nth-child(4) { animation-delay: .09s; }
+html[data-look="glass"] .chat-ask-chip:nth-child(5) { animation-delay: .12s; }
+html[data-look="glass"] .chat-ask-chip:nth-child(n+6) { animation-delay: .15s; }
+@keyframes g-chat-chip-in { from { opacity: 0; transform: translateY(8px) scale(.94); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .chat-ask-chip:first-child { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
+html[data-look="glass"] .chat-ask-chip:hover { background: var(--ch-chip-hover); }
+html[data-look="glass"] .chat-ask-chip:first-child:hover { background: var(--g-grad-soft); }
+html[data-look="glass"] .chat-ask-chip:active { transform: scale(.94); transition-duration: var(--d-press); }
+@media (pointer: coarse) { html[data-look="glass"] .chat-ask-chip { min-height: 40px; } html[data-look="glass"] .chat-ask-chip::after { content: ""; position: absolute; inset: -2px 0; } }
+html[data-look="glass"] .chat-quote {
+  position: relative; gap: 10px; margin: 0 0 4px; padding: 9px 4px 9px 14px; border: 0; border-radius: 16px; background: var(--ch-well);
+  box-shadow: inset 0 0 0 1px var(--g-ring); animation: g-chat-quote-in var(--d-slide) var(--g-slide) both;
+}
+html[data-look="glass"] .chat-quote::before {  /* the quote's line: a thin iris thread down its left */
+  content: ""; position: absolute; left: 6px; top: 9px; bottom: 9px; width: 2.5px; border-radius: 2px; background: var(--g-grad);
+}
+@keyframes g-chat-quote-in { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .chat-quote > .icon { color: var(--accent-ink); }
+html[data-look="glass"] .chat-quote-text { color: var(--text-2); }
+html[data-look="glass"] .chat-quote-x { border-radius: 12px; transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .chat-quote-x:active { transform: scale(.88); transition-duration: var(--d-press); }
+html[data-look="glass"] .chat-quoted { padding: 4px 6px 4px 12px; border-left: 0; border-radius: 12px; position: relative; color: var(--muted); }
+html[data-look="glass"] .chat-quoted::before { content: ""; position: absolute; left: 2px; top: 5px; bottom: 5px; width: 2.5px; border-radius: 2px; background: var(--accent-line); }
+html[data-look="glass"] .chat-ask-pop {
+  height: 36px; padding: 0 14px 0 12px; border: 0; border-radius: 18px; background: var(--raised); color: var(--text);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring), var(--g-shadow); animation: g-chat-pop-in .42s var(--g-spring) both;
+  transform-origin: 20% 0;
+}
+@keyframes g-chat-pop-in { from { opacity: 0; transform: translateY(-4px) scale(.88); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .chat-ask-pop:active { transform: scale(.94); transition: transform var(--d-press) var(--g-ease); }
+
+/* ---- lite: shorter, no sheen; calm: nothing travels (glass.css cuts every animation to a blink, these fade) */
+html[data-look="glass"].lite :is(.chat-ask, .chat-quote, .chat-ask-chip, .chat-ask-pop) { animation-duration: .16s; }
+html[data-look="glass"].lite .chat-go::after { display: none; }
+html[data-look="glass"].lite .chat-think-lines i::after { animation: none; }
+html[data-look="glass"].lite .g-word { animation-duration: .12s; }
+html[data-look="glass"].calm :is(.chat-ask, .chat-quote, .chat-ask-pop) { animation-name: g-fade-in; }
+html[data-look="glass"].calm :is(.chat-ask-chip, .g-word, .chat-action-done, .model-choice.on .mc-check) { animation-name: none; }
+html[data-look="glass"].calm :is(.chat-row-dot, .chat-thinking .spinner, .g-caret) { animation: none; }
+html[data-look="glass"].calm .chat-think-lines i::after { animation: none; }
+html[data-look="glass"].calm .chat-claude:has(> .chat-reply-body > .chat-thinking:first-child) > .chat-reply-body::before { animation: none; }
+html[data-look="glass"].calm .chat-go::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-look="glass"] :is(.chat-ask, .chat-quote, .chat-ask-pop) { animation-name: g-fade-in; }
+  html[data-look="glass"] :is(.chat-ask-chip, .g-word) { animation-name: none; }
+}
+/* the words' box draws no ring of its own: the whole box lights up (.chat-box:focus-within) */
+html[data-look="glass"] .chat-input:focus-visible { outline: none; box-shadow: none; }
+html[data-look="glass"] .chat-quote > .icon { display: none; }
+
+/* ---- round-3 merge: a table in an answer (js/chat.js renderWithTables) is a well like a code block: a hairline ring, the
+   head row a shade lighter, rows split by a faint line. It scrolls sideways inside itself. */
+html[data-look="glass"] .chat-md .chat-table {
+  border: 0; border-radius: 16px; background: var(--ch-well); scrollbar-width: thin;
+  box-shadow: inset 0 0 0 1px var(--g-ring), inset 0 1px 0 light-dark(rgba(110, 80, 200, .06), rgba(0, 0, 0, .25));
+}
+html[data-look="glass"] .chat-md .chat-table-grid th { background: light-dark(rgba(110, 80, 200, .07), rgba(255, 255, 255, .05)); color: var(--text); }
+html[data-look="glass"] .chat-md .chat-table-grid :is(th, td) { border-bottom: 1px solid var(--g-ring); padding: 9px 14px; }
+html[data-look="glass"] .chat-md .chat-table-grid tbody tr:last-child td { border-bottom: 0; }
+/* ---- end of the round-3 merge block */
