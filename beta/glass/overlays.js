@@ -145,15 +145,106 @@ V.toast = function toast(text, options = {}) {
 /* ================================================================== menus */
 
 const plainMenu = V.menu;
+/* ---- the 2.0 hotfix (the owner's + More, opened while typing a note: the menu came up at the top of the screen, far from
+   its button, its first tile in a heavy ring). What happened: the menu took the keyboard's focus from the note for its first
+   item, so the phone's keyboard went away and the screen grew, leaving the menu where it had been placed above the keyboard.
+   In glass a menu opened by a finger or the mouse lights nothing (V.menu's `pointer`: the menu itself has the keyboard), and
+   while a text field is being typed in, the menu doesn't take its focus at all: the caret stays, the keyboard stays, and the
+   menu is placed above it; Esc and a tap beside it still close it, and the caret is where it was. Opened from the keyboard
+   (Tab or the arrows used, a key, a click a key made) it is as before: its first item has the keyboard, with a ring. A menu
+   follows its button when the screen changes size (the keyboard coming or going). */
+const ENTRY = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=range]):not([type=color]):not([type=file])';
+function byKeyboard() {
+  if (root.classList.contains('g-kbd')) return true;
+  const ev = window.event;
+  if (!ev) return false;
+  if (/^key/.test(ev.type)) return true;
+  // (a click a key made: Enter or Space on a button; Chrome's clicks are pointer events, with no pointer type then)
+  return ev.type === 'click' && (ev.pointerType === '' || (ev.pointerType === undefined && ev.detail === 0));
+}
 V.menu = function menu(anchor, items, options) {
-  const handle = plainMenu.call(this, anchor, items, options);
-  if (on() && handle && handle.el && handle.el.isConnected) {
-    try { pop(handle.el, anchor, options || {}); } catch (error) { console.error(error); }
-    openMenus.add({ handle, anchor });
+  if (!on()) return plainMenu.call(this, anchor, items, options);
+  const opts = { ...(options || {}) };
+  const keyed = byKeyboard();
+  const active = document.activeElement;
+  const field = !keyed && active && active !== document.body && active.matches && active.matches(ENTRY)
+    && !active.disabled && !active.readOnly && !active.closest('.menu') ? active : null;
+  let handle;
+  if (!keyed) {
+    opts.pointer = true;
+    if (field) {
+      opts.returnFocus = false;
+      const theirs = opts.onClose;
+      opts.onClose = (how) => {
+        // (closed beside it or by Esc: the typing carries on where it was; a tool picked looks after the caret itself)
+        const now = document.activeElement;
+        if (how !== 'item' && field.isConnected && (!now || now === document.body || now === anchor)) {
+          try { field.focus({ preventScroll: true }); } catch (error) { /* gone */ }
+        }
+        if (theirs) theirs(how);
+      };
+      // (nothing in the menu takes the focus while it opens: the field keeps it, so the keyboard never goes)
+      const focus = HTMLElement.prototype.focus;
+      HTMLElement.prototype.focus = function focusOutsideMenus(o) {
+        if (this.closest && this.closest('.menu')) return undefined;
+        return focus.call(this, o);
+      };
+      try { handle = plainMenu.call(this, anchor, items, opts); } finally { HTMLElement.prototype.focus = focus; }
+    }
+  }
+  if (!handle) handle = plainMenu.call(this, anchor, items, opts);
+  if (handle && handle.el && handle.el.isConnected) {
+    const placed = place(handle.el, anchor, opts);
+    try { pop(handle.el, anchor, opts); } catch (error) { console.error(error); }
+    openMenus.add({ handle, anchor, at: opts.at || null, placed });
     goesSoftly(handle.el);
   }
   return handle;
 };
+
+/* Where a menu goes in glass. The editor's + More comes out of its button just above the floating tools strip (the note's
+   words stay in sight over it), as wide as the strip (a tray of two rows of tiles, glass/editor.css), never over the strip.
+   Any other menu stays where util.js put it; `placed` says how to put it back by its button after the screen changes size. */
+function place(list, anchor, opts) {
+  if (!anchor || !anchor.getBoundingClientRect || opts.at) return null;
+  const zoom = list.offsetWidth ? list.getBoundingClientRect().width / list.offsetWidth || 1 : 1;
+  const strip = anchor.closest && anchor.closest('.editor-tools');
+  if (strip && list.classList.contains('tools-more-menu')) {
+    const s = strip.getBoundingClientRect();
+    const a = anchor.getBoundingClientRect();
+    const width = Math.min(s.width, 460 * zoom);
+    const left = Math.max(s.left, Math.min(s.right - width, a.left + a.width / 2 - width / 2));
+    list.style.width = `${width / zoom}px`;
+    list.style.maxWidth = 'none';
+    list.style.left = `${left / zoom}px`;
+    // (a short screen, the keyboard up and bigger text: the tray keeps above the strip and its tiles scroll)
+    const room = (s.top - 8) / zoom - 8;
+    list.style.maxHeight = `${Math.max(120, room)}px`;
+    list.style.overflowY = 'auto';
+    list.style.top = `${Math.max(8, (s.top - 8) / zoom - list.offsetHeight)}px`;
+    return 'strip';
+  }
+  const r = list.getBoundingClientRect();
+  const a = anchor.getBoundingClientRect();
+  return r.bottom <= a.top + 1 ? 'above' : r.top >= a.bottom - 1 ? 'below' : null;
+}
+/* The screen changed size (the keyboard came or went, the phone turned): each open menu goes back by its button. */
+function replace() {
+  if (!on()) return;
+  for (const entry of openMenus) {
+    const { handle, anchor, placed } = entry;
+    const list = handle.el;
+    if (!list.isConnected || !placed || !anchor || !anchor.isConnected || !anchor.getClientRects().length) continue;
+    if (placed === 'strip') { place(list, anchor, {}); continue; }
+    const zoom = list.offsetWidth ? list.getBoundingClientRect().width / list.offsetWidth || 1 : 1;
+    const a = anchor.getBoundingClientRect();
+    const height = list.offsetHeight;
+    const top = placed === 'above' ? a.top / zoom - height - 4 : a.bottom / zoom + 4;
+    list.style.top = `${Math.max(8, Math.min(top, window.innerHeight / zoom - height - 8))}px`;
+  }
+}
+window.addEventListener('resize', replace);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', replace);
 
 /* ---- the 2.0 hotfix: a menu that closes goes quickly and softly from where it is (it shrinks a little towards where it came
    from and fades, 130 ms, quicker than it came) instead of vanishing; another menu opened meanwhile pops at once beside it.

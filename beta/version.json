@@ -26,7 +26,7 @@
   "Right-click, two-finger tap or a long press opens more options on almost everything: notes, folders, flash cards, chats, pictures and files.",
   "Snap a page: take a photo of your notes or a handout (from Today, a new note or Chat) and AI turns it into a tidy note you check before it's saved. Share links, screenshots and PDFs into Wefty from other apps; on an iPhone, copy them and tap Paste into Wefty."
  ],
- "build": "1.22.1-7c6daa7d2cc4",
+ "build": "1.22.1-2a264a175673",
  "files": {
   "chat/index.html": {
    "sha256": "802dc34f866842d852cce9553a19e737518690481030d5366160af4e01df5073",
@@ -89,8 +89,8 @@
    "size": 103336
   },
   "glass/README.txt": {
-   "sha256": "cf1cbb115d12cee2510f735de39284f8caefec0a91fb3b78174ea8fabb4f9bd6",
-   "size": 13040
+   "sha256": "5e2f963edb76ed4062b409c2658628f8bf15b6bb4ae22fc8942c0c3a4b408149",
+   "size": 13782
   },
   "glass/chat.css": {
    "sha256": "0465b8ca0806bb40be767261c13ebd66e5ec35d9a09c40d013f2a2d097138922",
@@ -101,8 +101,8 @@
    "size": 690
   },
   "glass/editor.css": {
-   "sha256": "e891cfa8f2696d49632c686039e70a5a61920a3a88d84734436195aebfa2b69c",
-   "size": 45327
+   "sha256": "5095437831d66c32c7b78f963fd206bc6f6a87afedfc020f8e58c699a3cb361d",
+   "size": 46831
   },
   "glass/editor.js": {
    "sha256": "83427906974e831c988db0c38f98d605be1ab6c89e1341e7752eff0f8a23f6e8",
@@ -133,12 +133,12 @@
    "size": 52447
   },
   "glass/notetaker.css": {
-   "sha256": "b4961bd752ea72867e49e04a0f0bdff47d8c0a8df7c2171319c28c1ec240bba7",
-   "size": 549
+   "sha256": "2b7df1925fb15b8d6fb3a64bb1ef2a4ed69bbc9e5da4a63d06423b5e6dcfd13b",
+   "size": 2076
   },
   "glass/notetaker.js": {
-   "sha256": "5c243d5549b0adb25a60e4bafd7809eaf1296a477020943fa31b2fd7db7ad3e7",
-   "size": 709
+   "sha256": "a559535596c8094cbccc1db50d4cb4352c471d4b73cd2b45020eafdaaca67efa",
+   "size": 1967
   },
   "glass/onboarding.css": {
    "sha256": "2e6289534b8262f5e10e4abadb1b3540a8ad4e849f1b6ec64dfa872f539e5573",
@@ -149,12 +149,12 @@
    "size": 749
   },
   "glass/overlays.css": {
-   "sha256": "34ae96a4606c6b34091c7c5133675e783fc253d201c75cb80264ac5a523b66f4",
-   "size": 31218
+   "sha256": "2fbfceaf9352f031ccbcc604c593ef6d69de90c9b2d21682e906a0d7c3b2de09",
+   "size": 31789
   },
   "glass/overlays.js": {
-   "sha256": "9dcb757a6dfa99aeeb9e21e5a68fc563fc69e04d6216ee86a6b0682cea49ed74",
-   "size": 28489
+   "sha256": "66499321bd7c34960811d2cc57190af40c62a95be8fccb52f4a2325345743171",
+   "size": 34106
   },
   "glass/send.js": {
    "sha256": "48b753fef75119d9921b387004bd859ca4d6d1a88425bf608da7259096d5cda6",
@@ -557,7 +557,7 @@
    "size": 354330
   },
   "sw.js": {
-   "sha256": "1ce0a46a6b86683375908cce9276cc2f4fba944a8d3ad5909c275ae1644f53e1",
+   "sha256": "fdc236ab504b7fe96a6bc5aceceb397139438ee0d05b8a59de8b137229183f9d",
    "size": 13539
   },
   "terms.html": {

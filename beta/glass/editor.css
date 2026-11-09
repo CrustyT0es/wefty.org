@@ -352,13 +352,28 @@ html[data-look="glass"] .more-tool {
   min-height: 80px; padding: 10px 4px 9px; gap: 7px; border-radius: 18px; isolation: isolate; color: var(--text);
   font: 500 13px/16px var(--font);
 }
+/* (2.0 hotfix: the owner, "it's placed inconveniently when it could be at the bottom where we can still see what we've
+   written") A compact tray just above the floating strip (glass/overlays.js places it there, as wide as the strip): the tiles
+   in two rows (as many columns as half the tiles), or, where a narrow phone with bigger text can't fit tiles that size, in
+   as many rows as they need, never sideways. The arrow keys still go along the rows (js/editor.js counts the first row). */
+html[data-look="glass"] .menu.tools-more-menu { padding: 6px; border-radius: 22px; }
+html[data-look="glass"] .tools-more-menu .more-tools {
+  --cols: 4; gap: 2px;
+  grid-template-columns: repeat(auto-fill, minmax(max(54px, calc((100% - (var(--cols) - 1) * 2px) / var(--cols) - .5px)), 1fr));
+}
+html[data-look="glass"] .tools-more-menu .more-tools:has(> :nth-child(9)) { --cols: 5; }
+html[data-look="glass"] .tools-more-menu .more-tools:has(> :nth-child(11)) { --cols: 6; }
+html[data-look="glass"] .tools-more-menu .more-tools:has(> :nth-child(13)) { --cols: 7; }
+html[data-look="glass"] .tools-more-menu .more-tool { min-height: 0; padding: 7px 2px 6px; gap: 4px; border-radius: 14px; font: 500 12px/15px var(--font); }
+html[data-look="glass"] .tools-more-menu .more-tool .icon { width: 18px; height: 18px; padding: 7px; border-radius: 12px; }
 html[data-look="glass"] .more-tool::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   background: var(--g-lift-soft, light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .085))); opacity: 0; transition: opacity .16s var(--g-ease);
 }
 html[data-look="glass"] .more-tool:hover, html[data-look="glass"] .more-tool:focus { background: transparent; }
-html[data-look="glass"] .more-tool:hover::before, html[data-look="glass"] .more-tool:focus::before { opacity: 1; }
-html[data-look="glass"] .more-tool:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+html[data-look="glass"] .more-tool:focus::before { opacity: 1; }
+@media (hover: hover) { html[data-look="glass"] .more-tool:hover::before { opacity: 1; } }  /* (a finger leaves no hover behind) */
+html[data-look="glass"] .more-tool:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus); }  /* (one rounded ring, for the keyboard: never the outline too) */
 html[data-look="glass"] .more-tool .icon {
   box-sizing: content-box; width: 20px; height: 20px; padding: 8px; border-radius: 13px; color: var(--accent-ink);
   background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line);

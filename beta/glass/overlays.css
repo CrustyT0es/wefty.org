@@ -360,3 +360,9 @@ html[data-look="glass"].calm :is(.covers-tick, .nt-never-box, input[name="terms"
   html[data-look="glass"] .toast, html[data-look="glass"] .notice, html[data-look="glass"] .tour-card, html[data-look="glass"] .tour-offer { animation-name: g-fade-in; }
   html[data-look="glass"] .drag-ghost { animation-name: g-fade-in; }
 }
+
+/* ---- the 2.0 hotfix: a ring in a menu or a sheet only for the keyboard (html.g-kbd: Tab or the arrows used). Opened by a
+   finger, nothing in it is ringed, even where the browser would show one (the owner's + More, its first tile in a heavy
+   double ring, right after typing in the note). */
+html[data-look="glass"]:not(.g-kbd) :is(.menu, .sheet, .g-menu-going) :is(button, a, [role=menuitem], [role=menuitemcheckbox], [role=radio], [role=tab], [tabindex]):focus-visible,
+html[data-look="glass"]:not(.g-kbd) .menu:focus-visible { outline: none; box-shadow: none; }

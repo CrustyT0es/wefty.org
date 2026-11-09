@@ -147,6 +147,13 @@ Added after the owner's first look at the preview (the 2.0 hotfix)
     where it is (V.motion.current), and it springs back from there with the finger's speed (V.motion.spring: a sampled spring,
     stiffness 520, damping 36). Sheets are opaque glass (--g-sheet: no backdrop blur to work out while they move) and open
     with a little overshoot (--g-sheet-spring); a menu's copy fades and shrinks away quicker than it came (.g-menu-going).
+  - The note-taker's live screen (glass/notetaker.css, .js): on a phone one scroller from its top (drawn at its top even when
+    the start screen was scrolled), the words' own box at least 140 px, one 16 px gutter, Pocket mode's button under its
+    words, the foot's buttons each on a row of their own when they don't fit side by side.
+  - Menus (glass/overlays.js): opened by a finger or the mouse they light nothing, and while a text field is typed in they
+    leave it the focus (the phone's keyboard stays); they follow their button when the screen changes size. A note's + More
+    is a tray of two rows of tiles just above the floating strip (glass/editor.css). A ring in a menu or a sheet only with
+    html.g-kbd, one rounded ring.
   - The phone's status bar (theme-color) is the aurora's top colour in glass (by time of day, light or dark, black in Pure
     black, a note's own top while one is open on a phone), and js/theme.js's own again when the look is off. Only the real
     phone shows the bars.

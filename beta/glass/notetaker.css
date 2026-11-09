@@ -3,3 +3,20 @@
    Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
    glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
    V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+
+/* ---- the 2.0 hotfix (the owner's phone, bigger text, while it listened: its top was cut off under the bar and couldn't be
+   scrolled to, Pocket mode's words were squeezed into a narrow column beside its button, and "Stop and make notes" was cut
+   at its right edge). On a phone the live screen is one scroller from its top, under the bar: the words keep their own box,
+   which follows them, at least 140 px tall, and when the rest needs more room than the screen has, the whole screen scrolls
+   (glass/notetaker.js starts it at its top: the start screen may have been scrolled down to its Start button). One 16 px
+   gutter for every row, as for the buttons at its foot; Pocket mode's words take the width, its button under them; the two
+   buttons at the foot share a row while their words fit, else each has a row of its own. */
+@media (max-width: 699px) {
+  html[data-look="glass"] .nt-body:has(> .nt-live) { overflow-y: auto; overscroll-behavior-y: contain; padding: 16px 16px 12px; }
+  html[data-look="glass"] .nt-body > .nt-live { flex: 1 0 auto; min-height: 0; }
+  html[data-look="glass"] .nt-live .nt-words { flex: 1 1 0; min-height: 140px; }
+  html[data-look="glass"] .nt-pocket-tip { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; }
+  html[data-look="glass"] .nt-pocket-tip .btn { width: 100%; justify-content: center; }
+  html[data-look="glass"] .nt-foot { padding-left: 16px; padding-right: 16px; }
+  html[data-look="glass"] .nt-foot > .btn { flex: 1 1 auto; min-width: 0; }
+}
