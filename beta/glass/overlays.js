@@ -149,9 +149,27 @@ V.menu = function menu(anchor, items, options) {
   const handle = plainMenu.call(this, anchor, items, options);
   if (on() && handle && handle.el && handle.el.isConnected) {
     try { pop(handle.el, anchor, options || {}); } catch (error) { console.error(error); }
+    openMenus.add({ handle, anchor });
   }
   return handle;
 };
+
+/* ---- the 2.0 hotfix (the owner's first look: a note's ⋯ menu left open over the Chat list). A menu never outlives the
+   screen it was opened on: Back (a phone's Back closes a full-screen note under its ⋯ menu) and a tab switch close every
+   open menu, and a menu whose button has gone (its screen closed under it) closes too. Glass only: classic is untouched. */
+const openMenus = new Set();  // { handle, anchor } of each menu opened in glass, until it's closed
+function closeMenus({ stranded = false } = {}) {
+  for (const entry of [...openMenus]) {
+    const { handle, anchor } = entry;
+    if (!handle.el.isConnected) { openMenus.delete(entry); continue; }
+    if (stranded && anchor && (anchor === document.body || (anchor.isConnected && anchor.getClientRects().length))) continue;
+    openMenus.delete(entry);
+    try { handle.close('outside'); } catch (error) { console.error(error); }
+  }
+}
+window.addEventListener('popstate', () => { if (on()) closeMenus(); });
+V.on('tab', () => { if (on()) closeMenus(); });
+V.on('note-left', () => { if (on()) closeMenus({ stranded: true }); });
 
 /* The menu comes out of where it was opened: scaled from the anchor's middle (or the pointer), with its items coming in a
    little after one another. (WAAPI, played after util.js has measured and placed the menu: a CSS animation's first frame
@@ -385,6 +403,8 @@ function start() {
   if (!layers || !toasts) return;
   const layerWatch = new MutationObserver((records) => {
     if (!on()) return;
+    // (a screen taken away from under a menu opened on it: the menu goes too, the 2.0 hotfix)
+    if (openMenus.size && records.some((record) => record.target === layers && record.removedNodes.length)) closeMenus({ stranded: true });
     for (const record of records) {
       for (const node of record.addedNodes) {
         if (node.nodeType !== 1) continue;

@@ -89,6 +89,12 @@ html[data-look="glass"] .page.today .wday:not([aria-selected=true]):active { tra
 }
 html[data-look="glass"] .page.today .wday.today:not([aria-selected=true]) { background: none; }
 html[data-look="glass"] .page.today .wd-label { font-size: 13px; line-height: 16px; transition: color .25s var(--g-ease); }
+/* (2.0 hotfix: a day's label is always one line, so every day card is the same height with bigger text too: today's date is a
+   step smaller beside "Today", a dot in the corner takes less room, and a label that still can't fit ends in "…") */
+html[data-look="glass"] .page.today .wd-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+html[data-look="glass"] .page.today .wd-label .g-wd-date { font-size: 11.5px; font-weight: 500; letter-spacing: -.005em; }
+html[data-look="glass"] .page.today .wday:has(.wd-dots) .wd-label { padding-right: 15px; }
+html[data-look="glass"] .page.today .wd-dots { top: 8px; right: 8px; }
 html[data-look="glass"] .page.today .wday.today:not([aria-selected=true]) .wd-label { color: var(--accent-ink); }
 html[data-look="glass"] .page.today .wd-item { font-size: 14px; color: var(--text-2); }
 /* the picked day: the sliding highlight sits behind it (glass/today.js), its words are white on it */

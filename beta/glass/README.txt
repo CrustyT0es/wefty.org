@@ -110,3 +110,20 @@ Added after the first review
   - The aurora stops drifting after 8 s without input (html.g-idle), and stands still while a page scrolls (html.g-scrolling) or a sheet is open; the frame monitor starts after the first sync; its
     verdict (wefty-lite-auto) lasts 7 days and Animations Auto or Full forgets it.
   - V.motion.flip's handle has restore(); V.motion.shrink works through the stylesheet where scroll-driven animations exist.
+
+
+Added after the owner's first look at the preview (the 2.0 hotfix)
+-------------------------------------------------------------------
+  - A screen over a screen is never see-through. --page, --card and --surface-2 are tints in glass, so a full-screen layer
+    never paints them as its page: on a phone it paints the app's canvas (--bg with --g-aurora, a still copy of the aurora's
+    tint: background-size 150%, centred), and from 700 px a dialog's card is --g-solid. Floating things (menus, tips, popovers)
+    are made of --raised / --g-float, which are opaque. tests/test_wefty_20_hotfix.py pictures each screen with the app under
+    it and again with the app hidden: the two must be the same.
+  - Text fields: no ring of their own (the global :focus-visible ring skips them); a rounded .field shows its inset glow, a
+    field inside a container lets the container glow (Chat's box). html.g-kbd (glass/shell.js: Tab or the arrows, gone at
+    the next press of a finger or the mouse) brings a clear rounded ring for the keyboard.
+  - html.g-typing (glass/shell.js: a text field has the typing on a touch screen and the screen lost 120 px or more, the
+    on-screen keyboard): the floating tab bar slides away and --g-bar-space is 0.
+  - A menu closes when Back is pressed, the tab changes, or the thing it was opened from goes (glass/overlays.js).
+  - Today's rows move by one plan (glass/today.js moveRows): a row that changes place fades out, the others slide, it fades
+    in where it now is; no two rows ever cross, and a row's copy is made only for its own moment.

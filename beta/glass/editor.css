@@ -243,6 +243,17 @@ html[data-look="glass"] .editor .play-btn {
 html[data-look="glass"] .editor .play-btn:hover { background: var(--g-grad); }
 html[data-look="glass"] .editor .play-btn:active { background: var(--g-grad); transform: scale(.9); }
 
+/* ---- the 2.0 hotfix (the owner's first look: with the keyboard up and the title being typed, the top edge of the empty card
+   the words sit on peeked out above the tools, a box cut off). On a phone the note's page fades out into the tools pill
+   under it, as the screens fade under the tab bar, so whatever is cut there (the card's top, a line of words) dissolves
+   instead of ending in a hard edge. Never while a box of the words has the typing: the line being written isn't faded. */
+@media (max-width: 899px) {
+  html[data-look="glass"] .editor-layer .editor-scroll:not(:has(.block-input:focus)) {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), rgba(0, 0, 0, .3) calc(100% - 12px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), rgba(0, 0, 0, .3) calc(100% - 12px), transparent);
+  }
+}
+
 /* ================================================================== the tools */
 
 /* A phone: a floating glass pill above the bottom edge (the board's .tools), in the flow (the words never scroll under it,

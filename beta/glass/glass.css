@@ -50,7 +50,7 @@ html[data-look="glass"] {
   --page: light-dark(rgba(255, 255, 255, .78), rgba(255, 255, 255, .07));
   --field: light-dark(rgba(255, 255, 255, .72), rgba(255, 255, 255, .06));
   --sunken: light-dark(rgba(110, 80, 200, .07), rgba(0, 0, 0, .28));
-  --raised: light-dark(rgba(252, 250, 255, .94), rgba(38, 30, 70, .9));
+  --raised: light-dark(rgb(252, 250, 255), rgb(36, 28, 67));  /* (what floats: menus, tips, popovers. Opaque: no words from under it ever show through, the owner's first look) */
   --selected: light-dark(#ffffff, rgba(255, 255, 255, .16));
   --line: light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .10));
   --line-soft: light-dark(rgba(110, 80, 200, .10), rgba(255, 255, 255, .07));
@@ -155,12 +155,20 @@ html[data-look="glass"] #g-aurora .tl { position: absolute; inset: 0; opacity: 0
 html[data-look="glass"][data-tod="morning"] #g-aurora .tl-m,
 html[data-look="glass"][data-tod="day"] #g-aurora .tl-d,
 html[data-look="glass"][data-tod="night"] #g-aurora .tl-n { opacity: 1; }
-html[data-look="glass"] #g-aurora .tl-m { background: radial-gradient(38% 26% at 18% 14%, rgba(198, 96, 178, .65), rgba(198, 96, 178, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(240, 146, 112, .36), rgba(240, 146, 112, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .29), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(128, 72, 196, .36), rgba(128, 72, 196, 0) 70%); }
-html[data-look="glass"] #g-aurora .tl-d { background: radial-gradient(38% 26% at 18% 14%, rgba(132, 86, 224, .74), rgba(132, 86, 224, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(92, 78, 222, .48), rgba(92, 78, 222, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .31), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(80, 60, 190, .36), rgba(80, 60, 190, 0) 70%); }
-html[data-look="glass"] #g-aurora .tl-n { background: radial-gradient(38% 26% at 18% 14%, rgba(90, 58, 192, .53), rgba(90, 58, 192, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(54, 50, 168, .34), rgba(54, 50, 168, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(110, 62, 198, .18), rgba(110, 62, 198, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(42, 32, 126, .36), rgba(42, 32, 126, 0) 70%); }
-html[data-look="glass"][data-theme="light"] #g-aurora .tl-d { background: radial-gradient(38% 26% at 18% 14%, rgba(150, 105, 255, .62), rgba(150, 105, 255, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(186, 140, 255, .46), rgba(186, 140, 255, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(255, 150, 220, .42), rgba(255, 150, 220, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(140, 110, 250, .40), rgba(140, 110, 250, 0) 70%); }
-html[data-look="glass"][data-theme="light"] #g-aurora .tl-m { background: radial-gradient(38% 26% at 18% 14%, rgba(255, 140, 200, .56), rgba(255, 140, 200, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(255, 190, 140, .42), rgba(255, 190, 140, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(190, 130, 255, .38), rgba(190, 130, 255, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(160, 120, 250, .38), rgba(160, 120, 250, 0) 70%); }
-html[data-look="glass"][data-theme="light"] #g-aurora .tl-n { background: radial-gradient(38% 26% at 18% 14%, rgba(120, 100, 255, .56), rgba(120, 100, 255, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(150, 140, 255, .44), rgba(150, 140, 255, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(210, 140, 240, .34), rgba(210, 140, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(120, 100, 240, .38), rgba(120, 100, 240, 0) 70%); }
+/* (the tints are tokens, so a screen opened over the app can paint the same canvas: --g-canvas-image, below) */
+html[data-look="glass"][data-theme="dark"] {
+  --g-aurora-m: radial-gradient(38% 26% at 18% 14%, rgba(198, 96, 178, .65), rgba(198, 96, 178, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(240, 146, 112, .36), rgba(240, 146, 112, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .29), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(128, 72, 196, .36), rgba(128, 72, 196, 0) 70%);
+  --g-aurora-d: radial-gradient(38% 26% at 18% 14%, rgba(132, 86, 224, .74), rgba(132, 86, 224, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(92, 78, 222, .48), rgba(92, 78, 222, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .31), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(80, 60, 190, .36), rgba(80, 60, 190, 0) 70%);
+  --g-aurora-n: radial-gradient(38% 26% at 18% 14%, rgba(90, 58, 192, .53), rgba(90, 58, 192, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(54, 50, 168, .34), rgba(54, 50, 168, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(110, 62, 198, .18), rgba(110, 62, 198, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(42, 32, 126, .36), rgba(42, 32, 126, 0) 70%);
+}
+html[data-look="glass"][data-theme="light"] {
+  --g-aurora-m: radial-gradient(38% 26% at 18% 14%, rgba(255, 140, 200, .56), rgba(255, 140, 200, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(255, 190, 140, .42), rgba(255, 190, 140, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(190, 130, 255, .38), rgba(190, 130, 255, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(160, 120, 250, .38), rgba(160, 120, 250, 0) 70%);
+  --g-aurora-d: radial-gradient(38% 26% at 18% 14%, rgba(150, 105, 255, .62), rgba(150, 105, 255, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(186, 140, 255, .46), rgba(186, 140, 255, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(255, 150, 220, .42), rgba(255, 150, 220, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(140, 110, 250, .40), rgba(140, 110, 250, 0) 70%);
+  --g-aurora-n: radial-gradient(38% 26% at 18% 14%, rgba(120, 100, 255, .56), rgba(120, 100, 255, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(150, 140, 255, .44), rgba(150, 140, 255, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(210, 140, 240, .34), rgba(210, 140, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(120, 100, 240, .38), rgba(120, 100, 240, 0) 70%);
+}
+html[data-look="glass"] #g-aurora .tl-m { background: var(--g-aurora-m); }
+html[data-look="glass"] #g-aurora .tl-d { background: var(--g-aurora-d); }
+html[data-look="glass"] #g-aurora .tl-n { background: var(--g-aurora-n); }
 html[data-look="glass"][data-black] #g-aurora { display: none; }
 @keyframes g-drift { to { transform: translate3d(-5%, 4%, 0) scale(1.07); } }
 html[data-look="glass"].lite #g-aurora, html[data-look="glass"].calm #g-aurora { animation: none; will-change: auto; }
@@ -589,6 +597,83 @@ html[data-look="glass"] .g-pull-hint { position: absolute; left: 0; right: 0; to
   html[data-look="glass"] .chat-pill::after { content: ""; position: absolute; inset: -5px 0; }
   html[data-look="glass"] .chat-tools .icon-btn::after { inset: -4px; }
   html[data-look="glass"] .list-go { min-height: 44px; margin: -13px -6px; }
+}
+
+/* ================================================================== the owner's first look at the preview (the 2.0 hotfix) */
+
+/* -- A screen opened over a screen is never see-through. Glass makes the app's own --page, --card and --surface-2 soft tints
+   (the aurora shows through the cards on a tab), but the classic full-screen layers paint --page as their page: the
+   note-taker's screens, the study screen and Help on a phone were see-through, and the owner read Chat through the
+   note-taker (and pressed Start listening through it, aiming at the Chat tab). Each of them now paints the app's own canvas:
+   its base colour and the aurora's tint of the time of day (a still copy of #g-aurora, which is 150% of the screen and
+   centred), never a glass fill. From 700 px they're dialogs: the scrim stays, and their card is opaque glass. (The note's
+   page, editor.css's --g-ed-sky, and the drawing screen were opaque already; sheets sit on the scrim, with blur.) */
+html[data-look="glass"] {
+  --g-aurora: var(--g-aurora-d);
+  --g-solid: light-dark(rgb(250, 247, 255), rgb(30, 23, 57));  /* an opaque glass card (a dialog on the scrim) */
+}
+html[data-look="glass"][data-tod="morning"] { --g-aurora: var(--g-aurora-m); }
+html[data-look="glass"][data-tod="night"] { --g-aurora: var(--g-aurora-n); }
+html[data-look="glass"][data-black] { --g-aurora: none; --g-solid: light-dark(rgb(250, 247, 255), rgb(14, 11, 26)); }
+@media (max-width: 699px) {
+  html[data-look="glass"] :is(.nt-layer, .layer.study-layer),
+  html[data-look="glass"] .layer.help-layer > .help-sheet {
+    background-color: var(--bg); background-image: var(--g-aurora); background-size: 150% 150%; background-position: 50% 50%; background-repeat: no-repeat;
+  }
+  /* (Help is a sheet that fills the screen: opaque, so its blur would only cost frames, and square, so no corner of the page
+     under it shows) */
+  html[data-look="glass"] .layer.help-layer > .help-sheet { -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 0; }
+  /* While the note-taker listens, Wefty's floating tab bar stays in reach under its screen (js/notetaker.js placeLayer): the
+     screen under it is put out of sight (it can't be used meanwhile: notetaker.js makes it inert), so the room round the
+     floating bar is the canvas, not a strip of the page under the note-taker. */
+  html[data-look="glass"]:has(#layers > .nt-layer.shown[data-tabs=below]) #app > main.view { opacity: 0; }
+}
+/* (the note-taker's own --page is a tint over that page; its foot sits on the same page, not on a second tint) */
+html[data-look="glass"] .nt-foot { background: transparent; }
+@media (min-width: 700px) {
+  html[data-look="glass"] :is(.nt, .layer.study-layer > .study, .layer.help-layer > .help-sheet) {
+    background: var(--g-solid); -webkit-backdrop-filter: none; backdrop-filter: none;
+    border: 0; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), var(--shadow-3);
+  }
+}
+/* The note-taker's bar across the top while it listens with its screen hidden: opaque (the page scrolls under it). */
+html[data-look="glass"] .nt-strip { background: linear-gradient(light-dark(var(--accent), var(--accent-soft)), light-dark(var(--accent), var(--accent-soft))), var(--surface); }
+
+/* -- Text fields: no box drawn round the words (the owner: a hard, bright, square-cornered rectangle inside the rounded composer,
+   and round a note's title). The classic look takes the browser's ring off its own text fields (the title, Chat's box, the
+   editor's boxes, Notes' search: their container shows where the typing goes) and glass's ring above brought it back. A
+   rounded field (.field) shows its own soft ring (inset, following its corners); a field inside a container shows none and
+   the container glows. With the keyboard (Tab: html.g-kbd, glass/shell.js) there's always a clear rounded ring. */
+html[data-look="glass"] :where(textarea, input:not([type=checkbox], [type=radio], [type=button], [type=submit], [type=reset], [type=range], [type=color], [type=file], [type=image]), [contenteditable]:not([contenteditable="false"])):not(.field):focus-visible { outline: none; box-shadow: none; }
+html[data-look="glass"] .field:focus-visible { outline: none; }
+html.g-kbd[data-look="glass"] .field:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* a note's title: nothing on a touch screen or a click (the caret says it), a rounded ring for the keyboard */
+html[data-look="glass"] .note-title { border-radius: 12px; }
+html.g-kbd[data-look="glass"] .note-title:focus-visible { box-shadow: 0 0 0 2px var(--focus), 0 0 0 6px light-dark(rgba(124, 91, 224, .16), rgba(178, 164, 238, .2)); }
+/* Chat's box: a soft glow on its own rounded edge while it has the typing, a clear ring with the keyboard */
+html[data-look="glass"] .chat-box:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 4px light-dark(rgba(124, 91, 224, .12), rgba(150, 108, 240, .16)), 0 10px 28px light-dark(rgba(118, 74, 220, .14), rgba(118, 74, 220, .22));
+}
+html.g-kbd[data-look="glass"] .chat-box:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus), 0 0 0 6px light-dark(rgba(124, 91, 224, .16), rgba(178, 164, 238, .2)); }
+/* Notes' search box (notes.css lights it): the keyboard's ring too */
+html.g-kbd[data-look="glass"] .search-box:focus-within { box-shadow: 0 0 0 2px var(--focus); }
+
+/* -- A phone's floating tab bar while the on-screen keyboard is up (a text field has the typing and the screen got shorter:
+   html.g-typing, glass/shell.js): it slides down out of the way and fades, and comes back when the keyboard goes, so it never
+   sits on the keyboard taking the room (the owner's New chat). The screen under it gets that room, and the fade under the
+   bar goes with it. (Classic is left as it is.) */
+@media (max-width: 899px) {
+  html[data-look="glass"] #app > nav.tabs { transition: transform .46s var(--g-slide), opacity .26s var(--g-ease); }
+  html.g-typing[data-look="glass"] #app > nav.tabs {
+    transform: translateY(calc(100% + 14px + var(--safe-bottom))); opacity: 0; pointer-events: none;
+    transition: transform .28s var(--g-in), opacity .2s var(--g-ease);
+  }
+  html.g-typing[data-look="glass"] { --g-bar-space: 0px; }
+  html[data-look="glass"] #app.ready:not(.gate)::after { transition: opacity .26s var(--g-ease); }
+  html.g-typing[data-look="glass"] #app.ready:not(.gate)::after { opacity: 0; }
+  html.g-typing[data-look="glass"] .fab { bottom: calc(12px + var(--safe-bottom)); }
+  html.g-typing[data-look="glass"].calm #app > nav.tabs { transform: none; }
 }
 
 /* ================================================================== lite and calm */

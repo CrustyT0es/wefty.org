@@ -25,7 +25,6 @@ if (!V || !V.look) return;
 const root = document.documentElement;
 const SVG = 'http://www.w3.org/2000/svg';
 const EASE = 'cubic-bezier(.2,.8,.2,1)';
-const SLIDE = 'cubic-bezier(.25,1.18,.35,1)';
 const HAS_WAAPI = typeof Element !== 'undefined' && typeof Element.prototype.animate === 'function';
 const ENTRANCE_MS = 1400;  // the first part of an opening, in which a redraw carries the entrance on
 
@@ -47,7 +46,7 @@ let opened = 0;           // when Today was opened (js/start.js's 'tab'), until 
 let openStart = 0;        // when the entrance now running began
 let sawPlaceholder = false;
 let finishedDay = '';     // the day whose last to-do was ticked here (its "All done" line stays while nothing is left on it)
-let moment = null;        // the last change on the rows (a tick), carried on into the draws that follow it: { t0, day, changed, tops, justDone }
+let moment = null;        // the last change on the rows (a tick), carried on into the draws that follow it: { t0, day, changed, gone, from, justDone, mine }
 let pending = null;       // a tick in flight: { key, to, t0, sparked, undo: [animations], timer }
 let sliderDay = '';
 let sliderFlip = 0;
@@ -114,6 +113,25 @@ function glowLine(elapsed = 0) {
   const glow = page && page.querySelector('.today-line .g-hglow');
   if (!glow || !full()) return;
   animate(glow, [{ opacity: 0 }, { opacity: 1, offset: 0.35 }, { opacity: 0 }], { duration: 1200, delay: 150 - elapsed, easing: EASE });
+}
+
+/* -- the week's days: today's label on one line (the 2.0 hotfix: "Today · Mon 9" broke onto two lines on the owner's phone,
+   with its bigger text and a reminder's dot beside it). "Today" keeps its size and the date beside it is a step smaller;
+   the label's words, and what a screen reader says, are the same. */
+function dayLabels(p) {
+  p.querySelectorAll('.today-week-days .wday .wd-label:not(.g-split)').forEach((label) => {
+    const found = /^(\S+) · (.+)$/.exec(label.textContent || '');
+    if (!found) return;
+    const name = document.createElement('span');
+    name.className = 'g-wd-name';
+    name.textContent = found[1];
+    const date = document.createElement('span');
+    date.className = 'g-wd-date';
+    date.textContent = ` · ${found[2]}`;
+    label.textContent = '';
+    label.append(name, date);
+    label.classList.add('g-split');
+  });
 }
 
 /* -- the week's sliding highlight */
@@ -345,94 +363,116 @@ function playTick(li, done, elapsed, first) {
   return out;
 }
 
-/* The rows that move when one is done slide to their new places, after the tick has been seen where it was. */
-function slideRows(panel, from, elapsed = 0) {
-  if (!HAS_WAAPI || calm() || !from) return;
-  const base = panel.getBoundingClientRect().top;
-  panel.querySelectorAll('.dp-list > li.today-row').forEach((li) => {
-    const tick = li.querySelector('.today-tick');
-    if (!tick || !from.has(tick.dataset.key)) return;
-    const delta = from.get(tick.dataset.key) - (li.getBoundingClientRect().top - base);
-    if (Math.abs(delta) < 2 || Math.abs(delta) > 600) return;
-    // Two rows swapping places can't slide through each other without their words landing on top of each other. So the row
-    // going down melts away where it was (the one going up takes its place a beat later) and forms again where it now is; the
-    // rows going up simply slide.
-    const up = delta > 0;
-    const quick = lite();
-    if (up) {
-      animate(li, [{ transform: `translateY(${delta}px)` }, { transform: 'none' }],
-        { duration: quick ? 200 : 460, delay: (quick ? 150 : 370) - elapsed, easing: SLIDE, fill: 'backwards' });
-    } else {
-      const there = `translateY(${delta}px)`;
-      animate(li, [{ transform: there, opacity: 1, offset: 0 }, { transform: there, opacity: 0, offset: 0.24 },
-        { transform: 'none', opacity: 0, offset: 0.25 }, { transform: 'none', opacity: 1, offset: 1 }],
-      { duration: quick ? 280 : 520, delay: (quick ? 100 : 280) - elapsed, easing: 'linear', fill: 'backwards' });
-    }
-  });
-}
+/* ---- the 2.0 hotfix (the owner's first look: two rows drawn on top of each other at the top of the day). The rows' moves have
+   one plan, and no two rows ever cross: (1) the tick is seen where it was tapped; (2) a row that is moving to another place
+   (ticked, unticked) fades out where it was, and a row that has gone (the last box of its note) fades out as a copy where it
+   was; (3) then the rows that make room slide, all together, with no overshoot, and what is under the list slides with
+   them; (4) last, the moved row fades in at its new place (so does a row that came back: an Undo, another device), once the
+   rows have left it. Before, a row going down melted and formed again while the others slid through it, and a later tick
+   played an earlier row's leaving again (the copy came back over the row now in its place, for as long as ticks kept
+   coming). A draw that comes while the plan plays (a sync) plays it on from where it had got to; a new change after the
+   first fades has begun starts a new plan from the rows' natural places. Calm: none of it, the rows are simply where they are. */
+const ROW_FULL = { out: 300, outMs: 160, slide: 460, slideMs: 420, in: 760, inMs: 240 };
+const ROW_LITE = { out: 140, outMs: 100, slide: 240, slideMs: 220, in: 380, inMs: 140 };
+const SETTLE = 'cubic-bezier(.22,1,.36,1)';  // (the rows' slide: no overshoot, so a row never swings into its neighbour)
+const rowPlan = () => (lite() ? ROW_LITE : ROW_FULL);
+const ROW_SELECTOR = '.dp-list > li.today-row:not(.g-ghost-row)';
+/* (the page's own px per screen px: with the page zoomed, bigger text, a box is measured in the screen's px, and moved in its own) */
+const zoomOf = (el) => (el && el.offsetWidth ? el.getBoundingClientRect().width / el.offsetWidth || 1 : 1);
 
 function readRows(panel) {
   const map = new Map();
   const tops = new Map();
-  const lis = new Map();  // (round-2 fix: the rows themselves and their heights, so a row gone after a draw can still leave smoothly)
+  const lis = new Map();  // (the rows themselves and their heights, so a row gone after a draw can still leave smoothly)
   const heights = new Map();
   const base = panel.getBoundingClientRect().top;
-  panel.querySelectorAll('.dp-list > li.today-row').forEach((li) => {
+  const z = zoomOf(panel);
+  panel.querySelectorAll(ROW_SELECTOR).forEach((li) => {
     const tick = li.querySelector('.today-tick');
     if (!tick) return;
+    const r = li.getBoundingClientRect();
     map.set(tick.dataset.key, tick.getAttribute('aria-pressed') === 'true');
-    tops.set(tick.dataset.key, li.getBoundingClientRect().top - base);
+    tops.set(tick.dataset.key, (r.top - base) / z);
     lis.set(tick.dataset.key, li);
-    heights.set(tick.dataset.key, li.getBoundingClientRect().height);
+    heights.set(tick.dataset.key, r.height / z);
   });
-  return { day: panel.dataset.day || '', map, tops, lis, heights };
+  const list = panel.querySelector('.dp-list') || panel.querySelector('.dp-none');
+  const listBottom = list ? (list.getBoundingClientRect().bottom - base) / z : 0;
+  return { day: panel.dataset.day || '', map, tops, lis, heights, listBottom };
 }
 
-/* ---- round-2 fixes (the fixer's block): the last box of a note ticked on Today. The note is done, so the draw that follows
-   has no row for it: the row the finger ticked comes back as a ghost where it was (aria-hidden, not tappable), its tick
-   and strike play on to the end, then it fades away while the rows under it, and everything below the list (Upcoming,
-   the sections after), slide up into its place together: nothing goes blank and nothing overlaps. */
-const GHOST_FADE = 300;   // ms after the tap the ghost starts to fade (the tick has been seen)
-function leaveRows(panel, before, keys, elapsed) {
-  if (!HAS_WAAPI || calm() || !keys.length) return;
+/* The plan played on `panel`'s rows, `elapsed` ms after the moment `m` began (m.from: the rows as they were before it). */
+function moveRows(panel, m, elapsed) {
+  if (!HAS_WAAPI || calm()) return;
+  const P = rowPlan();
+  const base = panel.getBoundingClientRect().top;
+  const z = zoomOf(panel);
+  const from = m.from;
+  const moved = new Set(m.changed.map(([key]) => key));
+  const here = new Set();
+  panel.querySelectorAll(ROW_SELECTOR).forEach((li) => {
+    const tick = li.querySelector('.today-tick');
+    if (!tick) return;
+    const key = tick.dataset.key;
+    here.add(key);
+    if (!from.tops.has(key)) {  // (came: it waits, then fades in once the others have made room)
+      animate(li, [{ opacity: 0 }, { opacity: 1 }], { duration: P.inMs, delay: P.in - elapsed, easing: EASE, fill: 'backwards' });
+      return;
+    }
+    const delta = from.tops.get(key) - (li.getBoundingClientRect().top - base) / z;
+    if (Math.abs(delta) < 2 || Math.abs(delta) > 2000) return;
+    if (moved.has(key)) {
+      // (moving to another place: out where it was, hidden while the others slide, in where it now is)
+      const span = P.in + P.inMs - P.out;
+      const there = `translateY(${Math.round(delta)}px)`;
+      const gone = P.outMs / span;
+      animate(li, [
+        { transform: there, opacity: 1, offset: 0, easing: EASE },
+        { transform: there, opacity: 0, offset: gone },
+        { transform: 'none', opacity: 0, offset: Math.min(1, gone + 0.0005) },
+        { transform: 'none', opacity: 0, offset: (P.in - P.out) / span, easing: EASE },
+        { transform: 'none', opacity: 1, offset: 1 },
+      ], { duration: span, delay: P.out - elapsed, easing: 'linear', fill: 'backwards' });
+    } else {
+      animate(li, [{ transform: `translateY(${Math.round(delta)}px)` }, { transform: 'none' }],
+        { duration: P.slideMs, delay: P.slide - elapsed, easing: SETTLE, fill: 'backwards' });
+    }
+  });
   const list = panel.querySelector('.dp-list') || panel.querySelector('.dp-none');
   if (!list) return;
-  const base = panel.getBoundingClientRect().top;
-  const listTop = list.getBoundingClientRect().top - base;
-  let lost = 0;
-  for (const key of keys) {
-    const old = before.lis && before.lis.get(key);
-    if (!old) continue;
-    const height = (before.heights && before.heights.get(key)) || 0;
-    const ghost = old.cloneNode(true);
-    ghost.classList.add('g-ghost-row');
-    ghost.setAttribute('aria-hidden', 'true');
-    ghost.inert = true;
-    const tick = ghost.querySelector('.today-tick');
-    if (tick) tick.setAttribute('aria-pressed', 'true');
-    Object.assign(ghost.style, { position: 'absolute', left: '0', right: '0', top: `${(before.tops.get(key) || 0) - listTop}px`, pointerEvents: 'none', margin: '0', zIndex: '1' });
-    if (getComputedStyle(list).position === 'static') list.style.position = 'relative';
-    list.appendChild(ghost);
-    lost += height;
-    playTick(ghost, true, elapsed, false);
-    const quick = lite();
-    const fade = animate(ghost, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.97)' }],
-      { duration: quick ? 160 : 260, delay: (quick ? 120 : GHOST_FADE) - elapsed, easing: EASE, fill: 'forwards' });
-    const gone = () => ghost.remove();
-    if (fade) fade.finished.then(gone, gone); else gone();
-    later(gone, 1200);
+  // A row that has gone: a copy where it was fades out (only while that is still to come: never once it has faded).
+  if (elapsed < P.out + P.outMs) {
+    const listTop = (list.getBoundingClientRect().top - base) / z;
+    for (const [key, old] of from.lis) {
+      if (here.has(key) || !m.gone.includes(key) || !old) continue;
+      const ghost = old.cloneNode(true);
+      ghost.classList.add('g-ghost-row');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.inert = true;
+      const tick = ghost.querySelector('.today-tick');
+      if (tick) tick.setAttribute('aria-pressed', 'true');
+      Object.assign(ghost.style, { position: 'absolute', left: '0', right: '0', top: `${(from.tops.get(key) || 0) - listTop}px`, pointerEvents: 'none', margin: '0', zIndex: '1' });
+      if (getComputedStyle(list).position === 'static') list.style.position = 'relative';
+      list.appendChild(ghost);
+      playTick(ghost, true, elapsed, false);
+      const fade = animate(ghost, [{ opacity: 1 }, { opacity: 0 }], { duration: P.outMs, delay: P.out - elapsed, easing: EASE, fill: 'forwards' });
+      const remove = () => ghost.remove();
+      if (fade) fade.finished.then(remove, remove); else remove();
+      later(remove, P.out + P.outMs + 200 - elapsed);
+    }
   }
-  if (!lost) return;
-  // (what comes after the list moves up with the rows, from where it was: the list is `lost` px shorter now)
+  // What is under the list moves with the rows: from where it was (the list is longer or shorter now).
+  const shift = from.listBottom - (list.getBoundingClientRect().bottom - base) / z;
+  if (Math.abs(shift) < 2 || Math.abs(shift) > 2000) return;
   const after = [];
   for (let el = list.nextElementSibling; el; el = el.nextElementSibling) after.push(el);
   for (let el = panel.nextElementSibling; el; el = el.nextElementSibling) after.push(el);
-  after.filter((el) => el.getClientRects().length).slice(0, 12).forEach((el) => {
-    animate(el, [{ transform: `translateY(${lost}px)` }, { transform: 'none' }],
-      { duration: lite() ? 200 : 460, delay: (lite() ? 150 : 370) - elapsed, easing: SLIDE, fill: 'backwards' });
+  after.filter((el) => el.getClientRects().length && !el.classList.contains('alldone-line')).slice(0, 12).forEach((el) => {
+    animate(el, [{ transform: `translateY(${Math.round(shift)}px)` }, { transform: 'none' }],
+      { duration: P.slideMs, delay: P.slide - elapsed, easing: SETTLE, fill: 'backwards' });
   });
 }
-/* ---- end of the round-2 fixes block */
+/* ---- end of the 2.0 hotfix block */
 const openLeft = (state) => [...state.map.values()].filter((done) => !done).length;
 
 /* "All done for today": under the list, with the thread, once nothing is left on today's list. */
@@ -467,21 +507,37 @@ function decoratePanel(panel, mode = {}) {
   strikeDone(panel);
   const before = rowsState;
   let first = false;
+  let fresh = [];  // (the keys changed in this draw: only they spark, when the change came from elsewhere)
+  let doneNow = false;  // (the last to-do of the day ticked in this draw: the edge light blooms once)
   if (before && before.day === state.day && !mode.opening && !mode.picked) {
     const changed = [...state.map].filter(([key, done]) => before.map.has(key) && before.map.get(key) !== done);
     // (a to-do that was the last box of its note takes the note off today's list: it was ticked, and it has gone)
     // (round-2 fix: also a row already shown ticked, whose note went a moment later: the same tick, going)
     const gone = [...before.map].filter(([key, done]) => !state.map.has(key)
-      && (!done || (pending && pending.key === key) || (moment && moment.changed.some(([k]) => k === key))));
-    if (changed.length || gone.length) {
-      const mine = !!pending && (changed.some(([key, done]) => pending.key === key && pending.to === done) || (gone.length && pending.to && before.map.has(pending.key) && !state.map.has(pending.key)));
+      && (!done || (pending && pending.key === key) || (moment && moment.changed.some(([k]) => k === key)))).map(([key]) => key);
+    const came = [...state.map.keys()].filter((key) => !before.map.has(key));  // (an Undo, another device)
+    if (changed.length || gone.length || came.length) {
+      const mine = !!pending && (changed.some(([key, done]) => pending.key === key && pending.to === done) || (pending.to && gone.includes(pending.key)));
       const ticked = changed.some(([, done]) => done) || gone.length > 0;
       const justDone = panel.classList.contains('is-today') && !openLeft(state) && openLeft(before) > 0 && ticked;
       if (mine) clearTimeout(pending.timer);
-      const t0 = mine ? pending.t0 : moment && gone.some(([key]) => moment.changed.some(([k]) => k === key)) ? moment.t0 : now();
-      // (the rows that left, kept with the moment: a draw that follows plays their leaving on from where it had got to)
-      const leaving = gone.length ? { keys: gone.map(([key]) => key), lis: before.lis, tops: before.tops, heights: before.heights } : moment && moment.day === state.day ? moment.leaving : null;
-      moment = { t0, day: state.day, changed, tops: before.tops, justDone, mine, leaving };
+      const t = mine ? pending.t0 : now();
+      // (2.0 hotfix) The moment playing goes on with this change in it when it is the same tick going on (the row ticked a
+      // moment ago, whose note has now gone) or when nothing of it has moved yet: one plan, from the rows as they were.
+      // Otherwise this change is a new moment, from the rows' natural places: never an earlier moment's leaving again.
+      const live = moment && moment.day === state.day ? moment : null;
+      const going = !!live && gone.length > 0 && gone.every((key) => live.changed.some(([k]) => k === key));
+      const joins = !!live && (going || now() - live.t0 < rowPlan().out);
+      if (joins) {
+        const merged = new Map(live.changed);
+        for (const [key, done] of changed) merged.set(key, done);
+        moment = { ...live, t0: going ? live.t0 : Math.max(live.t0, t), changed: [...merged].filter(([key]) => state.map.has(key)),
+          gone: [...new Set([...live.gone, ...gone])], justDone: live.justDone || justDone, mine: live.mine || mine };
+      } else {
+        moment = { t0: t, day: state.day, changed, gone, from: before, justDone, mine };
+      }
+      fresh = changed.map(([key]) => key);
+      doneNow = justDone && !(joins && live.justDone);
       if (mine) pending = null;
       first = true;
     }
@@ -489,18 +545,17 @@ function decoratePanel(panel, mode = {}) {
   if (moment && (moment.day !== state.day || mode.opening || mode.picked || now() - moment.t0 > 1300)) moment = null;
   if (moment) {
     const elapsed = Math.max(0, now() - moment.t0);
-    const ticks = [...panel.querySelectorAll('.today-tick')];
+    const ticks = [...panel.querySelectorAll(`${ROW_SELECTOR} .today-tick`)];
     for (const [key, done] of moment.changed) {
       const tick = ticks.find((t) => t.dataset.key === key);
       if (!tick) continue;
-      if (first && done && !moment.mine) { sparks(tick); if (motion() && full()) motion().press(tick, { scale: 0.8 }); }
+      if (first && done && !moment.mine && fresh.includes(key)) { sparks(tick); if (motion() && full()) motion().press(tick, { scale: 0.8 }); }
       playTick(tick.closest('li'), done, elapsed, false);
     }
-    slideRows(panel, moment.tops, elapsed);
-    if (moment.leaving) leaveRows(panel, moment.leaving, moment.leaving.keys, elapsed);
+    moveRows(panel, moment, elapsed);
     if (moment.justDone) finishedDay = state.day;
     allDone(panel, state, moment.justDone, elapsed);
-    if (moment.justDone) { if (first) edge('done'); glowLine(elapsed); }
+    if (moment.justDone) { if (first && doneNow) edge('done'); glowLine(elapsed); }
   } else {
     allDone(panel, state, false);
   }
@@ -610,6 +665,7 @@ function drawn(p) {
   if (animating) { p.classList.add('g-opening'); later(() => p.classList.remove('g-opening'), Math.max(0, ENTRANCE_MS - elapsed)); }
 
   weftLine(p, elapsed, animating);
+  dayLabels(p);
   placeSlider(p, false);
   testCards(p, Math.max(0, elapsed), animating);
   rollNumbers(p, opening);
@@ -732,6 +788,7 @@ function undecorate() {
   p.classList.remove('g-opening');
   p.querySelectorAll('.g-slider, .g-hweft, .g-fill, .g-strike, .g-ring, .g-thread, .alldone-line, .g-spark, .sr-only[aria-expanded]').forEach((el) => el.remove());
   p.querySelectorAll('.g-struck').forEach((el) => el.classList.remove('g-struck'));
+  p.querySelectorAll('.wd-label.g-split').forEach((el) => { el.textContent = el.textContent; el.classList.remove('g-split'); });
   p.querySelectorAll('.sweeping, .go').forEach((el) => el.classList.remove('sweeping', 'go'));
   p.querySelectorAll('.today-line').forEach((el) => { el.textContent = ''; });
   p.querySelectorAll('.g-num').forEach((el) => { const said = el.querySelector('.sr-only'); el.replaceWith(document.createTextNode(said ? said.textContent : el.textContent)); });

@@ -349,6 +349,57 @@ function startWaiting() {
 }
 V.on('tab', () => { if (on()) Promise.resolve().then(startWaiting); });
 /* ---- end of the round-2 fixes block */
+
+/* ---- the 2.0 hotfix (the owner's first look) */
+
+/* Which way the keyboard got somewhere: html.g-kbd while the keys are moving round the screen (Tab, or the arrows outside
+   a text field), gone at the next press of a finger, a pen or the mouse. A text field shows no ring of its own on a tap
+   or a click (glass.css: the caret says where the typing goes), and a clear rounded one for the keyboard. */
+const TEXT_ENTRY = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=checkbox]):not([type=radio])'
+  + ':not([type=button]):not([type=submit]):not([type=reset]):not([type=range]):not([type=color]):not([type=file]):not([type=image])';
+const MOVES = new Set(['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
+document.addEventListener('keydown', (event) => {
+  if (!on() || !MOVES.has(event.key) || event.ctrlKey || event.metaKey || event.altKey) return;
+  const t = event.target;
+  if (event.key !== 'Tab' && t && t.closest && t.closest(TEXT_ENTRY)) return;  // (the arrows in a field move its caret)
+  root.classList.add('g-kbd');
+}, true);
+const pointed = () => root.classList.remove('g-kbd');
+for (const type of ['pointerdown', 'mousedown', 'touchstart']) document.addEventListener(type, pointed, { capture: true, passive: true });
+
+/* A phone's on-screen keyboard: html.g-typing while a text field has the typing and the screen has got shorter than it was
+   (the keyboard took the room: Wefty asks for the page to be resized, interactive-widget=resizes-content, and an iPhone
+   shrinks only the visual viewport). glass.css slides the floating tab bar down out of the way, and back when the keyboard
+   goes (Android's Back puts the keyboard away and leaves the field focused: the height says so). */
+const KEYBOARD = 120;      // px the screen must lose before it counts as a keyboard (a phone's is 250 or more)
+let tallest = 0;
+let tallestFor = 0;        // the width `tallest` was measured at (a turned phone starts again)
+const touchy = () => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (error) { return false; } };
+function screenHeight() {
+  const vv = window.visualViewport;
+  return Math.round(vv ? Math.min(window.innerHeight, vv.height * (vv.scale || 1)) : window.innerHeight);
+}
+function typingNow() {
+  const el = document.activeElement;
+  return !!(el && el !== document.body && el.matches && el.matches(TEXT_ENTRY) && !el.disabled && !el.readOnly);
+}
+function checkTyping() {
+  if (!on() || !touchy()) { root.classList.remove('g-typing'); return; }
+  const height = screenHeight();
+  const width = window.innerWidth;
+  if (width !== tallestFor) { tallestFor = width; tallest = 0; }
+  if (height > tallest) tallest = height;
+  const typing = typingNow() && tallest - height >= KEYBOARD;
+  if (root.classList.contains('g-typing') !== typing) root.classList.toggle('g-typing', typing);
+}
+const checkSoon = () => requestAnimationFrame(checkTyping);
+document.addEventListener('focusin', checkSoon, true);
+document.addEventListener('focusout', () => setTimeout(checkTyping, 60), true);  // (focus moving to another field: no flicker)
+window.addEventListener('resize', checkTyping);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', checkTyping);
+V.on('look', () => { if (!on()) root.classList.remove('g-typing', 'g-kbd'); else checkTyping(); });
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkTyping, { once: true }); else checkTyping();
+/* ---- end of the 2.0 hotfix block */
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, { once: true });
 else sync();
 
