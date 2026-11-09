@@ -318,6 +318,37 @@ V.on('animations', () => { if (on() && nav) place(true); });
 V.on('theme', () => { if (on() && nav) place(true); });
 // A wide screen and a narrow one lay the bar out differently (a rail, a floating bar): the indicator follows.
 window.addEventListener('resize', () => { if (on() && nav) place(true); });
+/* ---- round-2 fixes (R2-10): a pressed primary (and the round +) gets .g-sweep for .7 s, so its sheen sweeps across once
+   even under a finger (a quick tap ends :active before the sweep is half way). glass.css draws it; nothing in lite or calm. */
+const sweeping = new WeakMap();
+document.addEventListener('pointerdown', (event) => {
+  if (!on() || root.classList.contains('lite') || root.classList.contains('calm')) return;
+  const button = event.target && event.target.closest && event.target.closest('.btn.primary, .fab');
+  if (!button || button.disabled) return;
+  clearTimeout(sweeping.get(button));
+  button.classList.remove('g-sweep');
+  const start = () => {
+    button.classList.add('g-sweep');
+    sweeping.set(button, setTimeout(() => { button.classList.remove('g-sweep'); sweeping.delete(button); }, 760));
+  };
+  // (a sweep already running starts again from the left: one frame without the class first)
+  if (sweeping.has(button)) requestAnimationFrame(() => requestAnimationFrame(start));
+  else start();
+}, true);
+/* (A screen drawn after a tab tap is a long frame: the new screen's entrance animations would wait for the frame after it
+   to begin, so a frame or two showed almost nothing between the two screens. Each one that is still waiting starts at
+   the frame the tap was handled in, so the first frame of the new screen is already partly risen in.) */
+function startWaiting() {
+  if (!on() || !document.timeline || document.timeline.currentTime == null) return;
+  const view = document.querySelector('main.view');
+  if (!view || typeof view.getAnimations !== 'function') return;
+  const t = document.timeline.currentTime;
+  for (const a of view.getAnimations({ subtree: true })) {
+    try { if (a.pending && a.playState === 'running' && a.startTime == null) a.startTime = t; } catch (error) { /* fine */ }
+  }
+}
+V.on('tab', () => { if (on()) Promise.resolve().then(startWaiting); });
+/* ---- end of the round-2 fixes block */
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, { once: true });
 else sync();
 

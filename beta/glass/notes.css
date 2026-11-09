@@ -1,16 +1,178 @@
 /* Wefty 2.0 "glass", area: Notes. This file belongs to the Notes builder; nobody else edits it.
-   Notes (js/notes.js, organise.js, drag.js): the list and its cards, folders and chips, swipe, hold to peek, a card growing open into the note, the pick bar, the empty folder.
-   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   Notes (js/notes.js, organise.js, drag.js): the list and its cards, folders and chips, swipe, a card growing open into
+   the note, the pick bar, the empty folder.
+   Rules (vault/web/glass/README.txt has the rest): every rule starts with html[data-look="glass"]; use the tokens in
    glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
-   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+   V.motion's helpers instead of writing your own; nothing here changes the classic look.
 
-/* ================================================================== the glass edge on cards and panels (round 1 fixes; the rest of Notes is round 2) */
+   How it is made: js/notes.js draws the list again at every change (a sync, a pin, a search), and the chips and the
+   folder rail with it, so nothing here relies on a CSS transition running on a part drawn a moment ago. The styles are
+   how things LOOK; the moving (the list's entrance, the chips' sliding pill, the cards that close up after a swipe, a
+   fold opening, the card that grows into the note) is glass/notes.js, which plays it with Web Animations at the moment
+   it happens. Cards, the pick bar's boxes and the fold chevrons keep their element between draws only while picking or
+   folding, and there CSS transitions do the work.
 
-/* A phone's note cards: no 1 px border and no flat fill; the glass fill, the light along the edge, the soft shadow. */
+   One gutter: the list, the chips, the cards, the folds and the search row share the list column's 16 px on a phone
+   (the same as Today's page); everything inside a card starts 16 px in. Phone = up to 899 px, wide = 900 px and more. */
+
+/* ================================================================== tokens that are Notes' own */
+
+html[data-look="glass"] {
+  --gn-gap: 10px;                                       /* between cards (the board's) */
+  --gn-chip-h: 40px;                                    /* a filter chip: 40 px tall, 44 to a finger with its ::after */
+  --gn-chip-fill: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .055));
+  --gn-chip-ring: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .08));
+  --gn-hair: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .09));
+  --gn-meta-fill: light-dark(rgba(110, 80, 200, .07), rgba(255, 255, 255, .06));
+  --gn-meta-ring: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .09));
+  --gn-tag: light-dark(#5a36c9, #c7bbf5);
+  --gn-box-line: light-dark(rgba(90, 60, 190, .5), rgba(214, 200, 255, .45));
+  --gn-box-fill: light-dark(rgba(255, 255, 255, .85), rgba(255, 255, 255, .04));
+  --gn-box-on: linear-gradient(150deg, light-dark(#9672f2, #b9a6ff), light-dark(#6a45c9, #7f5be0));
+  --gn-check: light-dark(#ffffff, #1b0f3d);
+  --gn-picked-wash: light-dark(rgba(124, 91, 224, .1), rgba(150, 108, 240, .12));
+  --gn-picked-ring: light-dark(rgba(106, 69, 201, .55), rgba(214, 196, 255, .7));
+  --gn-row-hover: light-dark(rgba(110, 80, 200, .06), rgba(255, 255, 255, .045));
+  --gn-weft: light-dark(#7c5be0, #9c82ec);
+  --gn-pin-back: linear-gradient(90deg, rgba(150, 108, 240, .7), rgba(98, 66, 200, .2));
+  --gn-trash-back: linear-gradient(270deg, rgba(232, 84, 112, .72), rgba(190, 60, 90, .18));
+}
+/* the card under a finger that swipes it: opaque, so what's behind (the colour that says what letting go does) can't show
+   through its glass; the shell a card grows into, as the note's page */
+html[data-look="glass"][data-theme="dark"] {
+  --gn-solid: linear-gradient(155deg, #272043, #18132d 55%, #1d1736);
+  --gn-shell: linear-gradient(180deg, #1a1436 0%, #110d24 55%, #0d0a1d);
+}
+html[data-look="glass"][data-theme="light"] {
+  --gn-solid: linear-gradient(155deg, #ffffff, #f6f2ff 55%, #f9f6ff);
+  --gn-shell: linear-gradient(180deg, #faf7ff 0%, #f3eeff 55%, #efe9ff);
+}
+html[data-look="glass"][data-theme="dark"][data-black] {
+  --gn-solid: linear-gradient(155deg, #1b1630, #0d0b19 55%, #121022);
+  --gn-shell: linear-gradient(180deg, #0f0c1d 0%, #060510 60%, #000);
+}
+
+/* ================================================================== the top row (a phone): the name, Search, the ⋯, your picture */
+
 @media (max-width: 899px) {
+  html[data-look="glass"] .list-column > .list-title { position: relative; min-height: 68px; padding-bottom: 24px; gap: 6px; }
+  html[data-look="glass"] .list-title h1 { font: 700 28px/34px var(--font-display); letter-spacing: -.025em; }
+  /* the thread under the row (the board's weft), drawn by its mask; glass/notes.js draws it in as Notes opens */
+  html[data-look="glass"] .list-column > .list-title::after {
+    content: ""; position: absolute; left: 0; right: 12px; bottom: 5px; height: 12px; pointer-events: none; background: var(--gn-weft); opacity: .9;
+    transform-origin: 0 50%;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 C 15 1, 30 11, 45 6 S 75 1, 90 6 S 120 11, 135 6 S 165 1, 180 6 S 210 11, 225 6 S 255 1, 270 6 S 300 11, 315 6 S 345 1, 360 6' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 C 15 1, 30 11, 45 6 S 75 1, 90 6 S 120 11, 135 6 S 165 1, 180 6 S 210 11, 225 6 S 255 1, 270 6 S 300 11, 315 6 S 345 1, 360 6' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+  }
+  /* Search is a glass pill with its word where the row has room for it (glass/notes.js puts .gn-word on it after measuring),
+     the magnifier alone where it hasn't (a long folder name, a 320 px phone, bigger text); the ⋯ a round glass button */
+  html[data-look="glass"] .list-column > .list-title .list-tools { gap: 6px; }
+  html[data-look="glass"] .list-title .list-tools .icon-btn {
+    position: relative; width: 44px; height: 44px; border-radius: 22px; color: var(--text-2); background: var(--gn-chip-fill);
+    box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring);
+  }
+  html[data-look="glass"] .list-title .list-tools .notes-search.gn-word { width: 128px; justify-content: flex-start; gap: 8px; padding: 0 14px; display: flex; align-items: center; }
+  html[data-look="glass"] .list-title .list-tools .notes-search.gn-word::after {
+    content: "Search"; position: static; inset: auto; color: var(--muted); font: 400 15px/1 var(--font); white-space: nowrap;
+  }
+  html[data-look="glass"] .list-title .list-tools .notes-search .icon { flex: none; width: 18px; height: 18px; }
+  html[data-look="glass"] .list-title .list-tools .notes-more.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent-line); }
+  html[data-look="glass"] .list-title .folder-up { border-radius: 15px; }
+  html[data-look="glass"] .list-title .crumbs { margin-bottom: 2px; }
+}
+@media (max-width: 899px) and (hover: hover) {
+  html[data-look="glass"] .list-title .list-tools .icon-btn:hover { box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong); }
+}
+
+/* ================================================================== the search row and its "Try" pills */
+
+html[data-look="glass"] .search-box {
+  border: 0; border-radius: 24px; background: var(--field);
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .85), rgba(255, 255, 255, .09)), inset 0 0 0 1px var(--line);
+  transition: none;
+}
+html[data-look="glass"] .search-box:focus-within {
+  background: light-dark(rgba(255, 255, 255, .94), rgba(255, 255, 255, .09));
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 5px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .2));
+}
+html[data-look="glass"] .search-box .search:focus-visible { outline: none; box-shadow: none; }  /* (the box itself shows where the typing goes) */
+html[data-look="glass"] .search-clear { border-radius: 50%; }
+html[data-look="glass"] .search-clear:active { transform: scale(.9); transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .search-hint { border: 0; border-radius: 7px; background: var(--gn-meta-fill); box-shadow: inset 0 0 0 1px var(--gn-meta-ring); }
+html[data-look="glass"] .search-back { border-radius: 15px; }
+html[data-look="glass"] .help-word { color: var(--muted); }
+html[data-look="glass"] .filter-pill {
+  border: 0; border-radius: 17px; background: var(--gn-chip-fill); color: var(--text-2);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring); transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .filter-pill:active { transform: scale(.94); }
+@media (hover: hover) { html[data-look="glass"] .filter-pill:hover { background: var(--gn-chip-fill); color: var(--text); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong); } }
+html[data-look="glass"] .search-help:not([hidden]) > * { animation: gn-pill-in .36s var(--g-spring) backwards; }
+html[data-look="glass"] .search-help:not([hidden]) > :nth-child(2) { animation-delay: .03s; }
+html[data-look="glass"] .search-help:not([hidden]) > :nth-child(3) { animation-delay: .06s; }
+html[data-look="glass"] .search-help:not([hidden]) > :nth-child(4) { animation-delay: .09s; }
+html[data-look="glass"] .search-help:not([hidden]) > :nth-child(n+5) { animation-delay: .12s; }
+@keyframes gn-pill-in { from { opacity: 0; transform: translateY(6px) scale(.94); } }
+html[data-look="glass"] .search-found { color: var(--muted); }
+html[data-look="glass"] mark.hit { background: light-dark(rgba(124, 91, 224, .2), rgba(150, 108, 240, .38)); color: inherit; }
+@media (max-width: 899px) {
+  html[data-look="glass"] .list-column.searching > .list-head { gap: 6px; }
+  html[data-look="glass"] .filter-pill { height: 36px; }
+}
+
+/* ================================================================== the filter chips: a row of glass pills, the picked one under a
+   sliding highlight (glass/notes.js moves .gn-slide; a chip.on without it keeps its own fill, so nothing is ever unlit) */
+
+html[data-look="glass"]:not(.dragging) .list-column > .chips { position: relative; }
+html[data-look="glass"] .list-column > .chips { gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+html[data-look="glass"] .chips .chip {
+  z-index: 1; height: var(--gn-chip-h); padding: 0 15px; border: 0; border-radius: calc(var(--gn-chip-h) / 2); gap: 7px;
+  background: var(--gn-chip-fill); color: var(--text-2); font: 500 14px/1 var(--font);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring);
+  transition: transform .14s var(--g-ease), color .22s var(--g-ease);
+}
+html[data-look="glass"] .chips .chip::after { inset: calc((44px - var(--gn-chip-h)) / -2) 0; }
+html[data-look="glass"] .chips .chip:active { transform: scale(.95); }
+html[data-look="glass"] .chips .chip .count { color: var(--muted); }
+html[data-look="glass"] .chips .chip.on {
+  color: #fff; font-weight: 600; background: var(--g-tab-fill);
+  box-shadow: inset 0 1px 0 var(--g-tab-edge), inset 0 0 0 1px light-dark(transparent, rgba(214, 196, 255, .32)), 0 6px 16px light-dark(rgba(110, 70, 220, .28), rgba(98, 66, 200, .32));
+}
+html[data-look="glass"] .chips .chip.on .count, html[data-look="glass"] .chips .chip.on .icon { color: rgba(255, 255, 255, .88); }
+/* (with the highlight there, the picked chip is see-through and its words white on the pill sliding under it) */
+html[data-look="glass"] .chips.gn-slid .chip.on { background: transparent; box-shadow: none; transition: transform .14s var(--g-ease), color .18s linear .1s; }
+html[data-look="glass"] .chips .chip.add { border: 0; box-shadow: inset 0 0 0 1px var(--line-strong); background: transparent; color: var(--text-2); }
+@media (hover: hover) and (pointer: fine) {
+  html[data-look="glass"] .chips .chip:not(.on):hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong); }
+}
+html[data-look="glass"] .gn-slide {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; transform-origin: 0 0; border-radius: inherit;
+}
+html[data-look="glass"] .gn-slide i {
+  display: block; width: 100%; height: 100%; border-radius: calc(var(--gn-chip-h) / 2); background: var(--g-tab-fill);
+  box-shadow: inset 0 1px 0 var(--g-tab-edge), inset 0 0 0 1px light-dark(transparent, rgba(214, 196, 255, .32)), 0 6px 16px light-dark(rgba(110, 70, 220, .3), rgba(98, 66, 200, .34));
+}
+html[data-look="glass"] .gn-slide[hidden] { display: none; }
+
+/* ================================================================== the list: section names, cards, folds */
+
+html[data-look="glass"] .list-section { color: var(--muted); font: 600 13px/18px var(--font); letter-spacing: .02em; margin: 20px 4px 2px; }
+html[data-look="glass"] .list > .list-section:first-child, html[data-look="glass"] .list > .list-bar + .list-section { margin-top: 6px; }
+html[data-look="glass"] .list-section .count { color: var(--muted); }
+html[data-look="glass"] .list-go { border-radius: 10px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .list-go:active { transform: scale(.95); }
+@media (hover: hover) { html[data-look="glass"] .list-go:hover { background: var(--gn-row-hover); } }
+html[data-look="glass"] .up-section.late { color: var(--danger); }
+
+/* A card (a phone, and the grid view everywhere): glass, the light along its edge, the soft shadow. No blur (list cards
+   never have it). */
+@media (max-width: 899px) {
+  html[data-look="glass"] .list { gap: var(--gn-gap); padding-top: 6px; }
   html[data-look="glass"] button.card {
-    border: 0; background: var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
-    transition: transform .16s var(--g-ease);  /* (a white under the light glass: the small due chips read on it, 4.5 to 1) */
+    gap: 6px; padding: 14px 16px; border: 0; border-radius: 22px; min-height: 64px;
+    background: var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+    transition: transform .16s var(--g-ease);
+    touch-action: pan-y;  /* (a sideways move is glass/notes.js's swipe; up and down still scroll the list) */
   }
   html[data-look="glass"] button.card::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
@@ -18,11 +180,307 @@
   }
   html[data-look="glass"] button.card:active { transform: scale(.985); }
   html[data-look="glass"] button.card.open { background: linear-gradient(var(--accent-wash), var(--accent-wash)), var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); }
+  html[data-look="glass"] .list.grid button.card { padding: 13px 14px; border-radius: 20px; }
 }
-/* A wide screen: the folders and the list are faint glass panels (the aurora shows through), the empty pane a glass card. */
+html[data-look="glass"] .card-title { font: 600 16px/22px var(--font); letter-spacing: -.005em; color: var(--text); }
+html[data-look="glass"] .card-top { gap: 10px; }
+html[data-look="glass"] .card-top .icon.pinned { color: var(--accent-ink); filter: drop-shadow(0 0 6px var(--g-glow)); }
+html[data-look="glass"] .card-snippet { color: var(--text-2); font: 400 14px/20px var(--font); }
+html[data-look="glass"] .card-snippet .snip-head { color: var(--text); }
+html[data-look="glass"] .card-snippet .snip-done { color: var(--muted); text-decoration-color: color-mix(in srgb, var(--muted) 80%, transparent); }
+html[data-look="glass"] .snip-box { border-radius: 4px; border-color: var(--gn-box-line); background: var(--gn-box-fill); }
+html[data-look="glass"] .snip-box.done { background: var(--gn-box-on); border-color: transparent; }
+html[data-look="glass"] .snip-box .icon { color: var(--gn-check); }
+html[data-look="glass"] .card-meta { gap: 6px 10px; margin-top: 4px; color: var(--muted); }
+/* the card's chips: its folder as a small glass label (the board's .fchip), its date, reminder and test as pills */
+html[data-look="glass"] button.card .card-folder {
+  height: 24px; padding: 0 8px; gap: 5px; border-radius: 8px; background: var(--gn-meta-fill); box-shadow: inset 0 0 0 1px var(--gn-meta-ring);
+  color: var(--text-2); font: 500 12.5px/1 var(--font); max-width: 100%;
+}
+html[data-look="glass"] button.card .card-folder > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-look="glass"] button.card .card-folder .emoji { font-size: 12.5px; }
+html[data-look="glass"] .note-tag { color: var(--gn-tag); font-weight: 500; }
+html[data-look="glass"] .note-tag.more { color: var(--muted); }
+html[data-look="glass"] .due { height: 24px; border-radius: 8px; font: 600 12px/1 var(--font); background: var(--gn-meta-fill); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--gn-meta-ring); }
+html[data-look="glass"] .due.soon, html[data-look="glass"] .due.later { background: var(--accent-wash); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .due.late { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35)); }
+html[data-look="glass"] .due.today { background: var(--warn-soft); color: var(--warn); box-shadow: inset 0 0 0 1px light-dark(rgba(154, 85, 5, .28), rgba(255, 201, 106, .32)); }
+html[data-look="glass"] .due.done { background: var(--ok-soft); color: var(--ok); box-shadow: inset 0 0 0 1px light-dark(rgba(15, 120, 69, .26), rgba(111, 216, 164, .3)); }
+html[data-look="glass"] .card-meta .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+html[data-look="glass"] .card-meta .tag.found-in {
+  height: 24px; padding: 0 8px; border-radius: 8px; background: var(--accent-wash); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+html[data-look="glass"] .nt-card-chip {
+  border: 0; border-radius: 8px; background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35));
+}
+html[data-look="glass"] .nt-card-dot { background: currentColor; box-shadow: 0 0 6px currentColor; animation: gn-breathe 1.6s ease-in-out infinite alternate; }
+@keyframes gn-breathe { from { opacity: .45; transform: scale(.8); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .progress .bar { height: 4px; border-radius: 2px; background: light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .12)); }
+html[data-look="glass"] .progress .bar i { border-radius: 2px; background: var(--g-grad); }
+html[data-look="glass"] button.card.done .card-title { color: var(--muted); text-decoration-color: color-mix(in srgb, var(--muted) 80%, transparent); }
+html[data-look="glass"] .card-snippet.locked .icon { color: var(--accent-ink); }
+
+/* a fold ("Past week · 13"): a glass row whose chevron turns as it opens; the cards under it rise in (glass/notes.js) */
+html[data-look="glass"] .list-fold {
+  position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; margin: 2px 0 0; padding: 0 16px;
+  border: 0; border-radius: 18px; background: var(--gn-chip-fill); color: var(--text-2); font: 600 15px/20px var(--font); text-align: left;
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring); transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .list-fold:active { transform: scale(.985); }
+html[data-look="glass"] .list-fold .count { color: var(--muted); font: 500 14px/20px var(--font); }
+html[data-look="glass"] .list-fold .count { margin-left: -4px; }
+html[data-look="glass"] .list-fold .count::before { content: "· "; }
+html[data-look="glass"] .list-fold .fold-twist { order: 9; margin-left: auto; width: 20px; height: 20px; color: var(--muted); transform: rotate(90deg); transition: transform .38s var(--g-spring); }
+html[data-look="glass"] .list-fold[aria-expanded="true"] .fold-twist { transform: rotate(-90deg); }
+html[data-look="glass"] .fold-picked { color: var(--accent-ink); }
+html[data-look="glass"] .fold-notes:not([hidden]) { display: grid; gap: var(--gn-gap); grid-template-columns: minmax(0, 1fr); }
+@media (hover: hover) { html[data-look="glass"] .list-fold:hover { color: var(--text); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong); } }
+
+/* An open folder's own folders (above its notes) and the folders it's in (above its name). */
+html[data-look="glass"] .subfolders { gap: var(--gn-gap); }
+html[data-look="glass"] .subfolder {
+  position: relative; border: 0; border-radius: 20px; background: var(--g-fill) light-dark(rgba(255, 255, 255, .5), transparent);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring), 0 8px 22px light-dark(rgba(76, 52, 160, .1), rgba(4, 2, 14, .3));
+  transition: transform .16s var(--g-ease);
+}
+html[data-look="glass"] .subfolder:active { transform: scale(.985); background: var(--g-fill) light-dark(rgba(255, 255, 255, .5), transparent); }
+html[data-look="glass"] .subfolder .fc-badge { background: var(--gn-meta-fill); box-shadow: inset 0 0 0 1px var(--gn-meta-ring); border-radius: 12px; }
+html[data-look="glass"] .subfolder .sf-go { color: var(--muted); transition: transform .22s var(--g-spring); }
+@media (hover: hover) { html[data-look="glass"] .subfolder:hover .sf-go { transform: translateX(3px); } }
+html[data-look="glass"] .crumb { border-radius: 8px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .crumb:active { transform: scale(.95); }
+@media (hover: hover) { html[data-look="glass"] .crumb:hover { background: var(--gn-row-hover); } }
+
+/* The Trash's "Empty the Trash" and other bars above a list. */
+html[data-look="glass"] .list-bar { padding: 2px 0 2px; }
+
+/* ================================================================== an empty list: the loom, one sentence, one button */
+
+html[data-look="glass"] .list .empty .mark { color: var(--accent); filter: drop-shadow(0 8px 18px var(--g-glow)); }
+html[data-look="glass"] .list .empty p { color: var(--text-2); }
+html[data-look="glass"] .empty.empty-folder { padding-top: 30px; }
+html[data-look="glass"] .empty-folder .loom { --loom-under: transparent; filter: drop-shadow(0 10px 24px var(--g-glow)); }
+html[data-look="glass"] .empty-folder .loom .gap { stroke: var(--bg); }
+html[data-look="glass"] .empty-folder h2 { font: 700 19px/25px var(--font-display); letter-spacing: -.01em; }
+html[data-look="glass"] .empty-folder p { color: var(--text-2); }
+html[data-look="glass"] .empty-folder .move-here { color: var(--accent-ink); border-radius: 12px; }
+html[data-look="glass"] .loop-line { color: var(--muted); }
+html[data-look="glass"] .loop-line .loop-go { color: var(--accent-ink); font-weight: 600; }
+
+/* ================================================================== the one gradient button: the round + on a phone, New note wide,
+   an empty folder's New note. Real glass depth: a light top edge, an inner highlight, a soft coloured shadow, a sheen on
+   a press. */
+
+html[data-look="glass"] main.view[data-tab="notes"] > .fab {
+  width: 60px; height: 60px; border-radius: 30px; right: 16px; overflow: hidden;
+  background: radial-gradient(120% 90% at 30% 0%, rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 58%), linear-gradient(150deg, #9a6cf2, #6a45c9);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, .45), inset 0 -8px 16px rgba(60, 30, 140, .35), 0 12px 28px rgba(118, 74, 220, .5), 0 0 0 1px light-dark(rgba(106, 69, 201, .25), rgba(214, 196, 255, .18));
+  transition: transform .3s var(--g-spring);
+}
+html[data-look="glass"] main.view[data-tab="notes"] > .fab:not([hidden]):not(.aside) { animation: gn-fab-in .55s var(--g-spring) .12s backwards; }
+@keyframes gn-fab-in { from { opacity: 0; transform: scale(.4); } }
+html[data-look="glass"] main.view[data-tab="notes"] > .fab:hover,
+html[data-look="glass"] main.view[data-tab="notes"] > .fab:active { background: radial-gradient(120% 90% at 30% 0%, rgba(255, 255, 255, .3), rgba(255, 255, 255, 0) 58%), linear-gradient(150deg, #9a6cf2, #6a45c9); }
+html[data-look="glass"] main.view[data-tab="notes"] > .fab:active { transform: scale(.88); transition-duration: var(--d-press); }
+html[data-look="glass"] main.view[data-tab="notes"] > .fab .icon { width: 26px; height: 26px; transition: transform .3s var(--g-spring); }
+html[data-look="glass"] main.view[data-tab="notes"] > .fab::after,
+html[data-look="glass"] .list-head .btn.primary.new-note::after,
+html[data-look="glass"] .empty-folder .btn.primary::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translateX(-130%);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .34) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] main.view[data-tab="notes"] > .fab:active::after,
+html[data-look="glass"] .list-head .btn.primary.new-note:active::after,
+html[data-look="glass"] .empty-folder .btn.primary:active::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
+@media (hover: hover) { html[data-look="glass"] main.view[data-tab="notes"] > .fab:hover .icon { transform: rotate(90deg); } }
+html[data-look="glass"] .list-head .btn.primary.new-note, html[data-look="glass"] .empty-folder .btn.primary {
+  background: radial-gradient(120% 120% at 30% 0%, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 55%), var(--g-grad);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, .42), inset 0 -6px 12px rgba(60, 30, 140, .28), 0 10px 24px var(--g-glow);
+}
+
+/* ================================================================== picking several notes */
+
+/* the box on each card: top right, a rounded square that springs in, fills with the gradient and draws its tick */
+html[data-look="glass"] .list.picking .card-top .pick {
+  order: 9; margin-left: auto; width: 24px; height: 24px; border-radius: 8px; border: 1.6px solid var(--gn-box-line); background: var(--gn-box-fill);
+  color: var(--gn-check); position: relative; transition: transform .22s var(--g-spring);
+  animation: gn-pick-in .34s var(--g-spring) backwards;
+}
+@keyframes gn-pick-in { from { opacity: 0; transform: scale(.6); } }
+html[data-look="glass"] .list.picking .card-top .icon.pinned { display: none; }
+html[data-look="glass"] .list.picking .card-top .pick .icon { width: 15px; height: 15px; }
+html[data-look="glass"] .list.picking .card-top .pick .icon svg { stroke-width: 3; }
+html[data-look="glass"] .list.picking .card-top .pick .icon svg path { stroke-dasharray: 26; stroke-dashoffset: 26; transition: stroke-dashoffset .3s var(--g-ease) .06s; }
+html[data-look="glass"] .list.picking button.card.selected .pick { background: var(--gn-box-on); border-color: transparent; box-shadow: 0 4px 12px light-dark(rgba(106, 69, 201, .4), rgba(127, 91, 224, .55)); color: var(--gn-check); }
+html[data-look="glass"] .list.picking button.card.selected .pick .icon svg path { stroke-dashoffset: 0; }
+html[data-look="glass"] .list.picking button.card:active .pick { transform: scale(.82); }
+/* a picked card: a soft wash and a lit edge (its own ::after, so the glass edge stays) */
+html[data-look="glass"] .list.picking button.card::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: var(--gn-picked-wash); box-shadow: inset 0 0 0 1.5px var(--gn-picked-ring); transition: opacity .2s var(--g-ease);
+}
+html[data-look="glass"] .list.picking button.card.selected::after { opacity: 1; }
+html[data-look="glass"] .list.picking button.card.selected { background: var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); border-color: transparent; }
+@media (min-width: 900px) { html[data-look="glass"] .list.picking:not(.grid) button.card.selected { background: transparent; } }
+html[data-look="glass"] .list.picking button.card.open:not(.selected) { background: var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); }
+
+/* the bar: floating glass (blurred: it's a bar) that springs up */
+html[data-look="glass"] .pick-bar {
+  border: 0; border-radius: 22px; background: var(--g-bar); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 16px 40px light-dark(rgba(76, 52, 160, .24), rgba(4, 2, 14, .6));
+  animation: gn-bar-in .46s var(--g-slide) backwards; padding: 4px 8px 8px;
+}
+@keyframes gn-bar-in { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+html[data-look="glass"].lite .pick-bar { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* (a phone: over the floating tab bar, in its place, while picking) */
+@media (max-width: 899px) { html[data-look="glass"] .pick-bar { left: 12px; right: 12px; bottom: calc(14px + var(--safe-bottom)); z-index: 7; } }
+html[data-look="glass"] .pick-count { font: 600 15px/20px var(--font); }
+html[data-look="glass"] .pick-all, html[data-look="glass"] .pick-export { color: var(--accent-ink); border-radius: 13px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .pick-all:active, html[data-look="glass"] .pick-export:active:not(:disabled) { transform: scale(.94); }
+html[data-look="glass"] .pick-action { border-radius: 15px; color: var(--text-2); transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .pick-action:active:not(:disabled) { transform: scale(.92); }
+@media (hover: hover) { html[data-look="glass"] .pick-action:hover:not(:disabled) { background: var(--gn-row-hover); color: var(--text); } }
+html[data-look="glass"] .pick-action.danger { color: var(--danger); }
+@media (hover: hover) { html[data-look="glass"] .pick-action.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); } }
+/* the Select button (wide): quiet glass, lit while picking */
+html[data-look="glass"] .select-btn {
+  min-height: 36px; height: 36px; border-radius: 13px; color: var(--text-2); background: var(--gn-chip-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring);
+}
+html[data-look="glass"] .select-btn[aria-pressed="true"], html[data-look="glass"] .select-btn[aria-pressed="true"]:hover {
+  color: light-dark(#3a1d92, #ffffff); background: var(--g-grad-soft); box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .5), rgba(255, 255, 255, .2)), inset 0 0 0 1px var(--accent-line);
+}
+
+/* ================================================================== Upcoming: the week by day, each note's tick and its day */
+
+html[data-look="glass"] .up-row { gap: 4px 8px; }
+html[data-look="glass"] .up-tick { width: 44px; transition: transform .2s var(--g-spring); }
+html[data-look="glass"] .up-tick::before { width: 24px; height: 24px; border-radius: 8px; border: 1.6px solid var(--gn-box-line); background: var(--gn-box-fill); transition: transform .2s var(--g-spring); }
+html[data-look="glass"] .up-tick:active::before { transform: scale(.82); }
+html[data-look="glass"] .up-row.done .up-tick { color: var(--gn-check); }
+html[data-look="glass"] .up-row.done .up-tick::before { background: var(--gn-box-on); border-color: transparent; box-shadow: 0 4px 12px light-dark(rgba(106, 69, 201, .4), rgba(127, 91, 224, .55)); }
+html[data-look="glass"] .up-tick .icon svg { stroke-width: 3; }
+@media (hover: hover) { html[data-look="glass"] .up-row:not(.done) .up-tick:hover::before { border-color: var(--accent); box-shadow: 0 0 0 4px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .18)); } }
+html[data-look="glass"][data-black] .up-row:not(.done) .up-tick::before { background: light-dark(var(--gn-box-fill), transparent); }
+html[data-look="glass"] .up-when {
+  border: 0; border-radius: 13px; background: var(--gn-chip-fill); color: var(--text-2);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring); transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .up-when:active { transform: scale(.95); }
+html[data-look="glass"] .up-when.late { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35)); }
+html[data-look="glass"] .up-row.done button.card .card-title { color: var(--muted); }
+
+/* ================================================================== a phone's swipe: right to pin, left to the Trash
+   (glass/notes.js; the card follows the finger with transform, the colour behind says what letting go does) */
+
+html[data-look="glass"] .gn-reveal {
+  position: absolute; z-index: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; border-radius: 22px;
+  pointer-events: none; color: #fff; font: 600 14px/1 var(--font); background: var(--gn-pin-back); box-shadow: inset 0 0 0 1px rgba(214, 196, 255, .3);
+}
+html[data-look="glass"] .gn-reveal[data-dir="l"] { background: var(--gn-trash-back); box-shadow: inset 0 0 0 1px rgba(255, 163, 163, .35); }
+html[data-look="glass"] .gn-reveal .gn-rv { display: inline-flex; align-items: center; gap: 8px; opacity: 0; transform: scale(.86); transition: opacity .15s ease, transform .3s var(--g-spring); }
+html[data-look="glass"] .gn-reveal[data-dir="r"] .gn-rv-pin, html[data-look="glass"] .gn-reveal[data-dir="l"] .gn-rv-del { opacity: 1; transform: none; }
+html[data-look="glass"] .gn-reveal .icon { width: 20px; height: 20px; transition: transform .3s var(--g-spring); }
+html[data-look="glass"] .gn-reveal[data-armed="1"] .icon { transform: scale(1.22); }
+html[data-look="glass"] button.card.gn-swiping { z-index: 1; background: var(--gn-solid); transition: none; }
+html[data-look="glass"] .list.gn-has-reveal { position: relative; }
+
+/* ================================================================== a card growing into the note, and back (the shell is glass/notes.js's) */
+
+html[data-look="glass"] .g-grow-shell {
+  position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 54; pointer-events: none; border-radius: 26px;
+  background: var(--gn-shell); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 24px 60px rgba(4, 2, 14, .45);
+}
+
+/* ================================================================== a phone's pull to sync (V.motion.pull moves the list; the words show
+   in the room it leaves, under the chips) */
+
+html[data-look="glass"] .list-column { position: relative; }
+html[data-look="glass"] .list-column > .g-pull-hint.gn-pull { top: var(--gn-pull-top, 120px); height: 44px; z-index: 0; color: var(--text-2); font: 500 13px/1 var(--font); }
+html[data-look="glass"] .list-column[data-phase="ready"] > .g-pull-hint.gn-pull { color: var(--accent-ink); }
+html[data-look="glass"] .list-column[data-phase="synced"] > .g-pull-hint.gn-pull { color: var(--ok); }
+
+/* ================================================================== wide: the folder rail, the list, the note beside it */
+
 @media (min-width: 900px) {
-  html[data-look="glass"] .list-column { background: light-dark(rgba(255, 255, 255, .34), rgba(255, 255, 255, .03)); border-right-color: var(--g-ring); }
-  html[data-look="glass"] .folders { background: light-dark(rgba(255, 255, 255, .2), rgba(255, 255, 255, .015)); }
+  html[data-look="glass"] .list-column { background: light-dark(rgba(255, 255, 255, .34), rgba(255, 255, 255, .03)); border-right: 0; box-shadow: inset -1px 0 0 var(--g-ring); }
+  html[data-look="glass"] .list-title h1 { font: 700 22px/28px var(--font-display); letter-spacing: -.02em; }
+  html[data-look="glass"] .list-column > .chips { padding-top: 12px; padding-bottom: 4px; }
+  html[data-look="glass"] .search-box { height: 40px; border-radius: 20px; }
+  html[data-look="glass"] .list-head .btn.primary.new-note { min-height: 40px; height: 40px; border-radius: 20px; padding: 0 16px; }
+  html[data-look="glass"] .list-title .list-tools .icon-btn { border-radius: 13px; }
+  /* the list: rows of glass that light up under the pointer; the open note's row is a glass pill */
+  html[data-look="glass"] .list { gap: 2px; padding-top: 4px; }
+  html[data-look="glass"] .list:not(.grid) button.card {
+    background: transparent; border: 0; border-radius: 16px; padding: 12px 14px; box-shadow: none;
+    transition: transform .2s var(--g-ease);
+  }
+  html[data-look="glass"] .list:not(.grid) button.card::before { left: 14px; right: 14px; background: var(--gn-hair); }
+  html[data-look="glass"] .list:not(.grid) button.card::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; z-index: -1;
+    background: var(--gn-row-hover); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); transition: opacity .2s var(--g-ease);
+  }
+  html[data-look="glass"] .list:not(.grid) button.card { isolation: isolate; }
+  html[data-look="glass"] .list:not(.grid) button.card:hover { background: transparent; }
+  html[data-look="glass"] .list:not(.grid) button.card:hover::after { opacity: 1; }
+  html[data-look="glass"] .list:not(.grid) button.card:active { transform: scale(.99); }
+  html[data-look="glass"] .list:not(.grid) button.card.open {
+    background: var(--g-grad-soft); box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .6), rgba(255, 255, 255, .16)), inset 0 0 0 1px var(--accent-line), 0 8px 22px light-dark(rgba(110, 70, 220, .14), rgba(98, 66, 200, .22));
+  }
+  html[data-look="glass"] .list:not(.grid) button.card.open::after { opacity: 0; }
+  html[data-look="glass"] .list.picking:not(.grid) button.card::after { z-index: 0; }
+  /* the grid: glass cards that lift and catch the light */
+  html[data-look="glass"] .list.grid { gap: 10px; }
+  html[data-look="glass"] .list.grid button.card {
+    border: 0; border-radius: 20px; background: var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+    transition: transform .26s var(--g-ease);
+  }
+  html[data-look="glass"] .list.grid button.card::before {
+    display: block; content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  }
+  html[data-look="glass"] .list.grid button.card:hover { background: var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); }
+  html[data-look="glass"] .list.grid button.card.open { background: linear-gradient(var(--accent-wash), var(--accent-wash)), var(--g-fill) light-dark(rgba(255, 255, 255, .55), transparent); }
+  html[data-look="glass"] .list-fold { min-height: 44px; border-radius: 14px; font-size: 14px; padding: 0 14px; margin-top: 4px; }
+  html[data-look="glass"] .subfolders { gap: 2px; }
+  html[data-look="glass"] .subfolder { background: transparent; box-shadow: none; border-radius: 14px; }
+  html[data-look="glass"] .subfolder:active { background: var(--gn-row-hover); }
+  html[data-look="glass"] .list.grid .subfolder { background: var(--g-fill) light-dark(rgba(255, 255, 255, .5), transparent); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring); }
+  html[data-look="glass"] .pick-bar { left: 10px; right: 10px; bottom: 12px; }
+  html[data-look="glass"] .list-section { margin: 18px 14px 4px; }
+  html[data-look="glass"] .list > .list-section:first-child { margin-top: 4px; }
+
+  /* the folder rail (1200 px and more): glass, its picked list a glass pill (sliding: glass/notes.js), a row under the
+     pointer lit and nudged along, the chevrons that turn */
+  html[data-look="glass"] .folders { position: relative; background: light-dark(rgba(255, 255, 255, .2), rgba(255, 255, 255, .015)); gap: 2px; }
+  html[data-look="glass"] .folders .nav-item {
+    position: relative; z-index: 1; min-height: 40px; border: 0; border-radius: 13px; color: var(--text-2);
+    transition: transform .18s var(--g-ease), color .2s var(--g-ease);
+  }
+  html[data-look="glass"] .folders .nav-item::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0;
+    background: var(--gn-row-hover); transition: opacity .18s var(--g-ease);
+  }
+  html[data-look="glass"] .folders .nav-item.on {
+    color: light-dark(#2a1670, #ffffff); font-weight: 600;
+    background: linear-gradient(150deg, light-dark(rgba(124, 91, 224, .2), rgba(150, 108, 240, .42)), light-dark(rgba(98, 66, 200, .12), rgba(98, 66, 200, .24)));
+    box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .7), rgba(255, 255, 255, .22)), inset 0 0 0 1px light-dark(rgba(124, 91, 224, .3), rgba(214, 196, 255, .3)), 0 8px 22px light-dark(rgba(110, 70, 220, .16), rgba(98, 66, 200, .32));
+  }
+  html[data-look="glass"] .folders.gn-slid .nav-item.on { background: transparent; box-shadow: none; }
+  html[data-look="glass"] .folders .nav-item.on .icon { color: light-dark(#4b2bb8, #ede6ff); }
+  html[data-look="glass"] .folders .nav-item.on .count { color: light-dark(#4b2bb8, #ded3ff); }
+  html[data-look="glass"] .folders .nav-item .emoji, html[data-look="glass"] .folders .nav-item .dot-box { border-radius: 8px; background: var(--gn-meta-fill); box-shadow: inset 0 0 0 1px var(--gn-meta-ring); }
+  html[data-look="glass"] .folders .nav-item.on .emoji, html[data-look="glass"] .folders .nav-item.on .dot-box { background: rgba(255, 255, 255, .14); }
+  html[data-look="glass"] .folders .gn-slide i {
+    border-radius: 13px;
+    background: linear-gradient(150deg, light-dark(rgba(124, 91, 224, .2), rgba(150, 108, 240, .42)), light-dark(rgba(98, 66, 200, .12), rgba(98, 66, 200, .24)));
+    box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .7), rgba(255, 255, 255, .22)), inset 0 0 0 1px light-dark(rgba(124, 91, 224, .3), rgba(214, 196, 255, .3)), 0 8px 22px light-dark(rgba(110, 70, 220, .16), rgba(98, 66, 200, .32));
+  }
+  html[data-look="glass"] .nav-heading { color: var(--muted); }
+  html[data-look="glass"] .folders .twist { border-radius: 9px; }
+  html[data-look="glass"] .folders .twist .icon { transition: transform .38s var(--g-spring); }
+  html[data-look="glass"] .folders .folder-more { border-radius: 10px; }
+  html[data-look="glass"] .pane { background: transparent; }
   html[data-look="glass"] .pane-empty {
     position: relative; height: auto; width: min(340px, 86%); margin: 18vh auto 0; padding: 34px 28px; border-radius: var(--r-xl);
     background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
@@ -31,6 +489,177 @@
     content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
   }
-  html[data-look="glass"] .pane-empty .mark { color: var(--accent); }
+  html[data-look="glass"] .pane-empty .mark { color: var(--accent); filter: drop-shadow(0 8px 18px var(--g-glow)); }
 }
-html[data-look="glass"].calm button.card:active { transform: none; }
+@media (min-width: 900px) and (hover: hover) {
+  html[data-look="glass"] .folders .nav-item:not(.on):hover { background: transparent; color: var(--text); transform: translateX(2px); }
+  html[data-look="glass"] .folders .nav-item:not(.on):hover::before { opacity: 1; }
+  html[data-look="glass"] .list.grid button.card:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow-hi); }
+  html[data-look="glass"] .subfolder:hover { background: var(--gn-row-hover); }
+  html[data-look="glass"] .list-fold:hover { background: var(--gn-chip-fill); }
+}
+html[data-look="glass"] .twist[aria-expanded="true"] .icon { transform: rotate(90deg); }
+
+/* ================================================================== dragging onto Notes' places (overlays.css has the ghost and the line) */
+
+html[data-look="glass"] .chips .chip.drop-on { color: var(--accent-ink); background: var(--accent-soft); }
+html[data-look="glass"] .folders .nav-item.drop-on { color: var(--accent-ink); background: var(--accent-soft); }
+html[data-look="glass"] .folders .nav-item[data-id="trash"].drop-on { color: var(--danger); background: var(--danger-soft); box-shadow: inset 0 0 0 1.5px var(--danger), 0 0 18px light-dark(rgba(176, 42, 64, .25), rgba(255, 120, 140, .3)); }
+html[data-look="glass"] .subfolder.drop-on { background: var(--accent-soft); }
+html[data-look="glass"] button.card.drag-held { box-shadow: inset 0 1px 0 var(--g-hi), var(--shadow-3), 0 0 0 1.5px var(--accent-line); }
+html.dragging[data-look="glass"] .list-column > .chips { background: var(--g-bar-solid); }
+
+/* ================================================================== lite and calm */
+
+html[data-look="glass"].lite .nt-card-dot { animation: none; }
+html[data-look="glass"].lite main.view[data-tab="notes"] > .fab::after, html[data-look="glass"].lite .list-head .btn.primary.new-note::after,
+html[data-look="glass"].lite .empty-folder .btn.primary::after { display: none; }
+html[data-look="glass"].lite .card-top .icon.pinned, html[data-look="glass"].lite .list .empty .mark, html[data-look="glass"].lite .empty-folder .loom { filter: none; }
+html[data-look="glass"].calm .nt-card-dot { animation: none; }
+html[data-look="glass"].calm main.view[data-tab="notes"] > .fab::after, html[data-look="glass"].calm .list-head .btn.primary.new-note::after,
+html[data-look="glass"].calm .empty-folder .btn.primary::after { display: none; }
+html[data-look="glass"].calm :is(button.card, .chips .chip, .list-fold, .subfolder, .crumb, .filter-pill, .list-go, .pick-action, .pick-all, .up-tick, .up-when, .search-clear):active,
+html[data-look="glass"].calm main.view[data-tab="notes"] > .fab:active, html[data-look="glass"].calm .up-tick:active::before,
+html[data-look="glass"].calm .list.picking button.card:active .pick { transform: none; }
+html[data-look="glass"].calm .chips .chip:hover, html[data-look="glass"].calm .folders .nav-item:hover, html[data-look="glass"].calm .list.grid button.card:hover,
+html[data-look="glass"].calm .subfolder:hover .sf-go, html[data-look="glass"].calm main.view[data-tab="notes"] > .fab:hover .icon { transform: none; }
+html[data-look="glass"].calm main.view[data-tab="notes"] > .fab:not([hidden]):not(.aside),
+html[data-look="glass"].calm .pick-bar, html[data-look="glass"].calm .list.picking .card-top .pick,
+html[data-look="glass"].calm .search-help:not([hidden]) > * { animation-name: g-fade-in; }
+html[data-look="glass"].calm .list-fold .fold-twist, html[data-look="glass"].calm .folders .twist .icon { transition: none; }
+
+/* ================================================================== a narrow pick bar (320 px with bigger text): Export keeps its icon, the count its ellipsis */
+
+html[data-look="glass"] .pick-bar { container-type: inline-size; container-name: gn-pick; }
+html[data-look="glass"] .pick-count { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container gn-pick (max-width: 300px) {
+  html[data-look="glass"] .pick-export > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html[data-look="glass"] .pick-bar .pick-top .pick-export { padding: 0; width: 44px; }
+  html[data-look="glass"] .pick-bar .pick-top .pick-all { padding: 0 10px; }
+}
+
+/* ================================================================== the folder picker (Move to..., a sheet: O.chooseFolder): the board's
+   Folders sheet rows, each folder's emoji on a small glass square, the folder it's in now a glass pill */
+
+html[data-look="glass"] .folder-choices { gap: 4px; }
+html[data-look="glass"] .folder-choice {
+  position: relative; min-height: 52px; border: 0; border-radius: 16px; transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .folder-choice::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; background: var(--gn-row-hover); transition: opacity .18s var(--g-ease);
+}
+@media (hover: hover) { html[data-look="glass"] .folder-choice:hover:not(:disabled) { background: transparent; } html[data-look="glass"] .folder-choice:hover:not(:disabled)::before { opacity: 1; } }
+html[data-look="glass"] .folder-choice:active:not(:disabled) { transform: scale(.98); }
+html[data-look="glass"] .folder-choice.on {
+  background: linear-gradient(150deg, light-dark(rgba(124, 91, 224, .2), rgba(150, 108, 240, .38)), light-dark(rgba(98, 66, 200, .1), rgba(98, 66, 200, .22)));
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .7), rgba(255, 255, 255, .2)), inset 0 0 0 1px light-dark(rgba(124, 91, 224, .3), rgba(214, 196, 255, .28));
+}
+html[data-look="glass"] .folder-choice .fc-badge { width: 36px; height: 36px; border-radius: 12px; background: var(--gn-meta-fill); box-shadow: inset 0 0 0 1px var(--gn-meta-ring); }
+html[data-look="glass"] .folder-choice.new .fc-badge { background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .folder-choice .fc-name { font-weight: 600; }
+html[data-look="glass"] .folder-choice .fc-check { color: var(--accent-ink); }
+html[data-look="glass"].calm .folder-choice:active { transform: none; }
+
+/* ================================================================== round-2 fixes (the fixer's block)
+   R2-01 Upcoming: every note's card is the list's full width, as All notes' cards are; its round tick sits inside the card on
+   the left, and its day (or Move) is a chip in the card's last row on the right. (The tick and the chip are still the row's
+   own buttons, laid over the card in the same grid cell, so js/reminders.js and what a tap does are unchanged.) */
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "card"; gap: 0; }
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row > * { grid-area: card; }
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row > button.card { padding-left: 54px; min-width: 0; }
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-tick { position: relative; z-index: 1; justify-self: start; align-self: center; margin-left: 5px; }
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-when {
+  z-index: 1; justify-self: end; align-self: end; margin: 0 12px 11px 0; height: 28px; min-width: 0; max-width: 112px; padding: 0 9px; gap: 4px; font-size: 12px;
+}
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-when::after { inset: -8px -6px; }
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row .card-meta { padding-right: 118px; min-height: 28px; align-items: center; }
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row .card-meta .when { display: none; }  /* (the day is the group, the chip says when) */
+@media (min-width: 900px) {
+  html[data-look="glass"] .list.upcoming:not(.picking) .up-row { padding-right: 0; }
+  html[data-look="glass"] .list.upcoming:not(.picking) .up-row > button.card { padding-left: 50px; }
+  html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-tick { margin-left: 7px; }  /* (the card is 4 px in: R2-12) */
+  html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-when { margin-right: 14px; margin-bottom: 9px; }
+}
+/* R2-16 and R2-17: the list's section names a step brighter (4.5 to 1 over the aurora's glow too), and closer to the card
+   above them (about 22 px, as on the board). */
+html[data-look="glass"] .list-section { color: var(--text-2); }
+html[data-look="glass"] .list-section .count { color: var(--muted); }
+@media (max-width: 899px) { html[data-look="glass"] .list > .list-section:not(:first-child) { margin-top: 8px; } }
+/* R2-12: wide, a note's row, its hover, a picked note's glass and the open note's pill all have one box, on the same edges
+   as the search box and New note above the list (4 px in from the column), and the words stay on the same line in all of
+   them; the date stays on the chip row (the folder's name gives way first). */
+@media (min-width: 900px) {
+  html[data-look="glass"] .list:not(.grid) button.card { width: auto; margin-left: 4px; margin-right: 4px; padding-left: 10px; padding-right: 10px; }
+  html[data-look="glass"] .list:not(.grid) button.card::before { left: 10px; right: 10px; }
+  html[data-look="glass"] .list:not(.grid) .card-meta { flex-wrap: nowrap; overflow: hidden; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > * { flex: none; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > .card-folder { flex: 0 1 auto; min-width: 40px; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > :is(.exam-tag, .note-tags, .found-in) { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > .note-tags { display: block; white-space: nowrap; text-overflow: ellipsis; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > .exam-tag > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > .when { margin-left: auto; padding-left: 4px; }
+  /* R2-13: the list head's buttons share one height (40) */
+  html[data-look="glass"] .list-head .select-btn, html[data-look="glass"] .list-title .select-btn { min-height: 40px; height: 40px; }
+}
+/* R2-11: the last plain links on the glass are quiet glass chips (the .btn look: rounded, the 1 px ring, a spring on the
+   press, 44 px to a finger): an empty folder's Move notes here (under its New note, the same width), the loop line's
+   Record a class, the pick bar's Pick all and Export (equal height), and the Trash's Empty the Trash (danger, on the
+   cards' right edge). */
+html[data-look="glass"] :is(.empty-folder .move-here, .loop-line .loop-go, .pick-bar .pick-all, .pick-bar .pick-export) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 0;
+  border-radius: var(--r-md); text-decoration: none; color: var(--accent-ink); font: 600 14px/1 var(--font); white-space: nowrap;
+  background: var(--gn-chip-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring);
+  transition: transform .2s var(--g-spring);
+}
+html[data-look="glass"] :is(.empty-folder .move-here, .loop-line .loop-go, .pick-bar .pick-all, .pick-bar .pick-export):active:not(:disabled) { transform: scale(.95); transition-duration: var(--d-press); }
+html[data-look="glass"] .pick-bar .pick-export:disabled { opacity: .45; }
+html[data-look="glass"] .pick-bar :is(.pick-all, .pick-export) { min-height: 40px; height: 40px; padding: 0 14px; }
+html[data-look="glass"] .empty-folder > :is(.btn.primary, .btn.tonal, .move-here) { width: min(100%, 300px); }
+html[data-look="glass"] .empty-folder > .move-here { margin-top: 10px; }
+html[data-look="glass"] .empty-folder > .loop-line { margin-top: 14px; }
+html[data-look="glass"] .loop-line { display: grid; justify-items: center; gap: 10px; text-align: center; }
+html[data-look="glass"] .list-bar { display: flex; justify-content: flex-end; }
+html[data-look="glass"] .list-bar .btn.danger-quiet {
+  min-height: 40px; height: 40px; padding: 0 14px; background: var(--danger-soft);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35));
+}
+html[data-look="glass"].calm :is(.empty-folder .move-here, .loop-line .loop-go, .pick-bar .pick-all, .pick-bar .pick-export):active { transform: none; }
+/* R2-16: words on a gradient button keep 4.5 to 1: its white glare is softer (.18) than on the round + (which has none) */
+html[data-look="glass"] .list-head .btn.primary.new-note, html[data-look="glass"] .empty-folder .btn.primary {
+  background: radial-gradient(120% 120% at 30% 0%, rgba(255, 255, 255, .18), rgba(255, 255, 255, 0) 55%), var(--g-grad);
+}
+/* R2-15: a phone's chips row fades out over the 16 px gutters, so a chip scrolled past the edge never shows as a sliver */
+@media (max-width: 899px) {
+  html[data-look="glass"] .list-column > .chips {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+  }
+}
+/* R2-18: pull to sync says so in a small glass pill: "Pull to sync", then it pops a little when letting go will sync, a
+   thread spins while it syncs, and a tick says Synced; it fades as the list goes back. */
+html[data-look="glass"] .list-column > .g-pull-hint.gn-pull {
+  left: 50%; right: auto; translate: -50% 0; top: calc(var(--gn-pull-top, 120px) + 4px); width: max-content; height: 36px; padding: 0 14px;
+  display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 18px;
+  background: var(--gn-chip-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring), 0 8px 20px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .4));
+}
+html[data-look="glass"] .list-column[data-phase] > .g-pull-hint.gn-pull::before {
+  content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box;
+}
+html[data-look="glass"] .list-column[data-phase="syncing"] > .g-pull-hint.gn-pull::before {
+  border: 2px solid var(--accent-line); border-top-color: var(--accent); animation: gn-spin .8s linear infinite;
+}
+html[data-look="glass"] .list-column[data-phase="synced"] > .g-pull-hint.gn-pull::before {
+  width: 16px; height: 16px; background: var(--ok);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+html[data-look="glass"] .list-column[data-phase="pull"] > .g-pull-hint.gn-pull::before { display: none; }
+html[data-look="glass"] .list-column[data-phase="ready"] > .g-pull-hint.gn-pull::before { display: none; }
+html[data-look="glass"] .list-column[data-phase="ready"] > .g-pull-hint.gn-pull { animation: gn-pill-pop .42s var(--g-spring); }
+html[data-look="glass"] .list-column[data-phase="synced"] > .g-pull-hint.gn-pull { animation: gn-pill-pop2 .42s var(--g-spring); }
+@keyframes gn-spin { to { transform: rotate(360deg); } }
+@keyframes gn-pill-pop { from { scale: .86; } }
+@keyframes gn-pill-pop2 { from { scale: .86; } }
+html[data-look="glass"]:is(.calm, .lite) .list-column > .g-pull-hint.gn-pull { animation: none; }
+html[data-look="glass"].calm .list-column[data-phase="syncing"] > .g-pull-hint.gn-pull::before { animation: none; }
+/* ---- end of the round-2 fixes block */

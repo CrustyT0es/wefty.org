@@ -295,7 +295,9 @@ html[data-look="glass"] .btn::after {
   background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .2) 50%, rgba(255, 255, 255, 0) 65%); transform: translateX(-130%);
 }
 @media (hover: hover) { html[data-look="glass"] .btn:hover::after { transform: translateX(130%); transition: transform .8s var(--g-ease); } }
-html[data-look="glass"] .btn:hover:not(:disabled)::before, html[data-look="glass"] .fab:hover::before { opacity: 1; }
+/* (R2-04: a hover only where there is one: a phone keeps :hover on what was tapped last, and white words on a washed
+   primary read under 4.5 to 1) */
+@media (hover: hover) { html[data-look="glass"] .btn:hover:not(:disabled)::before, html[data-look="glass"] .fab:hover::before { opacity: 1; } }
 /* A hover lifts the button a pixel on the spring, as the tiles and cards lift (a finger has no hover: nothing here for it). */
 @media (hover: hover) {
   html[data-look="glass"] .btn { transition: transform .2s var(--g-spring); }
@@ -303,7 +305,7 @@ html[data-look="glass"] .btn:hover:not(:disabled)::before, html[data-look="glass
 }
 html[data-look="glass"] .btn:active:not(:disabled) { transform: scale(.96); transition-duration: var(--d-press); }
 html[data-look="glass"] .btn.primary {
-  --g-lift: rgba(255, 255, 255, .22);
+  --g-lift: rgba(255, 255, 255, .08);
   color: var(--on-primary); background: var(--g-grad);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 24px var(--g-glow);
 }
@@ -317,6 +319,22 @@ html[data-look="glass"] .btn.quiet:hover:not(:disabled) { color: var(--text); }
 html[data-look="glass"] .btn.danger { --g-lift: rgba(255, 255, 255, .12); background: var(--danger-fill); color: var(--on-danger-fill); box-shadow: inset 0 0 0 1px light-dark(transparent, rgba(255, 163, 163, .35)); }
 html[data-look="glass"] .btn.danger-quiet { background: transparent; box-shadow: none; color: var(--danger); --g-lift: var(--danger-soft); }
 html[data-look="glass"] .btn:disabled { opacity: .45; }
+/* ---- round-2 merge (additive): the classic hover colours (.btn.primary:hover:not(:disabled) and .btn.tonal's, one
+   class more specific than the rules above) took the gradient away from a hovered button, and a phone keeps :hover on
+   what was last tapped, so a sheet's Save went flat after a tap. The hover here is the light layer (::before) only. */
+html[data-look="glass"] .btn.primary:hover:not(:disabled) { background: var(--g-grad); }
+html[data-look="glass"] .btn.tonal:hover:not(:disabled) { background: var(--g-grad-soft); }
+html[data-look="glass"] .btn.danger:hover:not(:disabled) { filter: none; }
+/* ---- end of the round-2 merge block */
+/* ---- round-2 fixes (R2-10): the primary's sheen sweeps on a press too, so a finger sees it (glass/shell.js puts .g-sweep on
+   the pressed primary for .7 s; a quick tap never cuts the sweep short). Off in lite and calm, as the hover's is. */
+html[data-look="glass"] :is(.btn.primary, .fab).g-sweep::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
+html[data-look="glass"] .fab::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .26) 50%, rgba(255, 255, 255, 0) 65%); transform: translateX(-130%);
+}
+html[data-look="glass"]:is(.lite, .calm) .fab::after { display: none; }
+/* ---- end of the round-2 fixes block */
 
 html[data-look="glass"] .icon-btn { border-radius: 15px; transition: transform var(--d-press) var(--g-ease); }
 html[data-look="glass"] .icon-btn:active { transform: scale(.9); }
@@ -332,7 +350,9 @@ html[data-look="glass"] .fab {
 }
 html[data-look="glass"] .fab:hover { background: var(--g-grad); }
 html[data-look="glass"] .fab:active { background: var(--g-grad); transform: scale(.9); }
-@media (max-width: 899px) { html[data-look="glass"] .fab { bottom: calc(var(--g-bar-space) + 12px); } }
+/* (R2-06: the + is placed against the screen, as the floating tab bar is, so it sits 12 px above the bar whatever the
+   screen's height or the text size: placed against the screen's scrolling box it could end under the bar, or off screen) */
+@media (max-width: 899px) { html[data-look="glass"] .fab { position: fixed; bottom: calc(14px + 70px + 12px + var(--safe-bottom)); } }
 
 /* Fields (a box can't carry a light layer of its own, so the focus ring and hover edge simply change). */
 html[data-look="glass"] .field {
@@ -488,7 +508,7 @@ html[data-look="glass"] .today-greet h1 { font-weight: 700; letter-spacing: -.02
 html[data-look="glass"] .app-head > .icon-btn, html[data-look="glass"] .app-head .head-home { border-radius: 15px; }
 html[data-look="glass"] .app-head .head-mark { filter: drop-shadow(0 6px 14px var(--g-glow)); }
 html[data-look="glass"] .av {
-  background: linear-gradient(150deg, #9a6cf2, #5b3bb8); color: #fff;
+  background: linear-gradient(150deg, #9466ee, #5636b2); color: #fff;  /* (round 2: a step deeper, so the white letter reads 4.5 to 1 wherever it sits) */
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 2px light-dark(rgba(124, 91, 224, .35), rgba(214, 196, 255, .35));
 }
 html[data-look="glass"] .me { transition: transform .16s var(--g-spring); }
@@ -496,6 +516,32 @@ html[data-look="glass"] .me:active { transform: scale(.9); }
 html[data-look="glass"] .me.on { background: var(--accent-soft); }
 @media (hover: hover) { html[data-look="glass"] .me:hover .av { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 2px var(--accent), 0 6px 16px var(--g-glow); } }
 html[data-look="glass"] .av .dot { box-shadow: 0 0 0 2.5px var(--bg); }
+
+/* ---- round-2 fixes (R2-03): one top row on every tab of a phone. Today, Notes (and a folder in it) and Share put the row at
+   the same top, 44 px tall, and your picture in exactly the same place (its round on the 16 px gutter: the heads all end
+   12 px past it, where the classic look puts the picture by the screen's edge); Today's search and ⋯ are the same glass
+   circles as Notes'. (The picture is taken out of the row's flow, so a long title or Notes' Search pill never moves it.) */
+@media (max-width: 899px) {
+  html[data-look="glass"] main.view :is(header.app-head.page-head, .list-column > .list-title):has(> .head-me) {
+    position: relative; align-items: flex-start; min-height: calc(60px + var(--safe-top));
+    padding-top: calc(8px + var(--safe-top)); padding-right: 57px;
+  }
+  html[data-look="glass"] main.view :is(header.app-head.page-head, .list-column > .list-title) > .head-me {
+    position: absolute; top: calc(8px + var(--safe-top)); right: 7px; margin: 0;
+  }
+  html[data-look="glass"] main.view header.app-head.page-head:has(> .head-me) > :is(.icon-btn, .head-home, .btn),
+  html[data-look="glass"] main.view .list-column > .list-title:has(> .head-me) > :is(.list-tools, .title-back) { align-self: flex-start; }
+  html[data-look="glass"] main.view header.app-head.page-head:has(> .head-me) .head-title { padding-top: 5px; }
+  html[data-look="glass"] main.view .list-column > .list-title:has(> .head-me) .title-stack { min-height: 44px; align-content: center; }
+  html[data-look="glass"] main.view .list-column > .list-title:has(> .head-me) .crumbs:not([hidden]) ~ .title-line { margin-bottom: 0; }
+  html[data-look="glass"] main.view header.app-head.page-head > :is(.today-search, .today-more) {
+    width: 44px; height: 44px; border-radius: 22px; color: var(--text-2);
+    background: var(--gn-chip-fill, light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .055)));
+    box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring, light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .08)));
+  }
+  html[data-look="glass"] main.view header.app-head.page-head > .today-search { margin-right: 6px; }
+}
+/* ---- end of the round-2 fixes block */
 
 /* ================================================================== motion primitives (V.motion, glass/motion.js) */
 

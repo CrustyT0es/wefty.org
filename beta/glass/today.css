@@ -431,3 +431,22 @@ html[data-look="glass"].calm .page.today.g-opening .tile-count { animation: none
 
 /* ================================================================== touch targets (round 1 fix) */
 html[data-look="glass"] .page.today button.test-text { min-height: 44px; }
+
+/* ================================================================== round-2 fixes (the fixer's block)
+   Quick actions' names on one line each on a small phone or with bigger text: never broken at the hyphen ("Note-/taker")
+   and never a word a line ("New/note"): the name may use a little of the gap beside its tile, and its type is a step
+   smaller where the row is narrow (the row is a container: bigger text narrows it too). */
+@media (max-width: 899px) {
+  html[data-look="glass"] .page.today .today-tile { overflow: visible; }
+  html[data-look="glass"] .page.today .today-tile .tile-text { margin: 0 -6px; min-width: 0; }
+  html[data-look="glass"] .page.today .today-tile .tile-label, html[data-look="glass"] .page.today .today-tile.big .tile-label {
+    display: block; white-space: nowrap; overflow: visible; -webkit-line-clamp: none; line-clamp: none; text-align: center; hyphens: manual;
+  }
+}
+@container (max-width: 350px) {
+  html[data-look="glass"] .page.today .today-tile .tile-label, html[data-look="glass"] .page.today .today-tile.big .tile-label { font-size: 11.5px; }
+}
+@container (max-width: 300px) {
+  html[data-look="glass"] .page.today .today-tile .tile-label, html[data-look="glass"] .page.today .today-tile.big .tile-label { font-size: 11px; letter-spacing: -.01em; }
+}
+/* ---- end of the round-2 fixes block */

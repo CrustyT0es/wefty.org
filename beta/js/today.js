@@ -658,6 +658,14 @@
     // (the sheet puts the keyboard on its first box a frame after it opens: then on the part asked for)
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const box = el.isConnected ? el.querySelector(spot) : null;
+      // (the 2.0 glass look on a touch screen: the sheet itself takes the keyboard, so a phone shows no keyboard or picked
+      // day number as it opens; a keyboard's Chromebook and the classic look are as they were)
+      if (V.look && V.look.isGlass && V.look.isGlass() && matchMedia('(pointer: coarse)').matches && el.isConnected) {
+        const sheet = el.querySelector('.sheet') || el;
+        if (!sheet.hasAttribute('tabindex')) sheet.setAttribute('tabindex', '-1');
+        sheet.focus({ preventScroll: true });
+        return;
+      }
       if (box && !box.disabled) box.focus();
     }));
     whenGone(el, () => refocus(key));

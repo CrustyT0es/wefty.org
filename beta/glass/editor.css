@@ -1,5 +1,533 @@
 /* Wefty 2.0 "glass", area: Editor. This file belongs to the Editor builder; nobody else edits it.
    The note's page (js/editor.js, format.js, ink.js...): the writing page, its title and tools strip, + More, the Read view, locked notes, the picture viewer.
-   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   Rules (vault/web/glass/README.txt has the rest): every rule starts with html[data-look="glass"]; use the tokens in
    glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
-   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+   V.motion's helpers instead of writing your own; nothing here changes the classic look.
+
+   THE ONE RULE OF THIS FILE: a box the note is written in (.blocks .block-field and everything in it: the textarea and
+   the copies stacked exactly over it, .block-preview, .block-letters, .block-measure, .blank-shade) keeps the classic
+   font, size, line height, letter spacing, padding, border and box sizing. Its letters and the copies' letters must sit
+   on the very same pixels, or the caret and the words part company. Only what's round the boxes changes here (the page,
+   the card the words sit on, the focus wash drawn BEHIND a box, colours of the highlight), and
+   tests/test_wefty_20_editor.py proves the caret and the letters still line up, phone and wide.
+
+   What's here, in order: the editor's own tokens; the page (a phone's full-screen note, opaque, and the wide pane); the
+   bar on top; the title, the chips under it and the thread; the card the words sit on (Write) that melts away (Read);
+   the boxes' focus wash, checklists (the board's box, drawn check and sparks), link chips; pictures, files and voice
+   memos; the tools (a floating glass pill on a phone, a glass toolbar when wide) with the marks' pressed pills, + More
+   and its tiles, the word count and the calm sync dot; the Read view; the date question; dictation's pill; the sheets
+   the note opens (due date and reminder, repeat days, word count, history, export, Snap a page, the picture viewer, the
+   PIN pad and a locked note's face); the drawing screen's bars; lite and calm. glass/editor.js plays the moments. */
+
+/* ================================================================== tokens */
+
+html[data-look="glass"] {
+  /* the ==highlight== behind words, in the editor and its Read view: the board's soft lavender, not the classic's yellow
+     (every word colour reads on it at 4.5 to 1 or more, dark and light) */
+  --g-ed-hl: light-dark(rgba(124, 91, 224, .2), rgba(178, 164, 238, .3));
+  /* a checklist's box (Today's own tokens, the same look; the fallbacks are the same values) */
+  --g-ed-box-line: var(--g-box-line, light-dark(rgba(90, 60, 190, .5), rgba(214, 200, 255, .45)));
+  --g-ed-box-fill: var(--g-box-fill, light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .04)));
+  --g-ed-box-on: linear-gradient(150deg, var(--g-box-on-a, light-dark(#9672f2, #b9a6ff)), var(--g-box-on-b, light-dark(#6a45c9, #7f5be0)));
+  --g-ed-check: light-dark(#ffffff, #1b0f3d);
+  /* the pressed look of a tool (Bold on where the caret is): the board's .tbtn pill */
+  --g-ed-on-fill: light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .3));
+  --g-ed-on-ring: light-dark(rgba(124, 91, 224, .4), rgba(214, 196, 255, .38));
+  --g-ed-on-ink: light-dark(#3a1d92, #ffffff);
+  /* the glass of a quiet chip (the folder button, + More, link chips): the board's .fbtn */
+  --g-ed-chip: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .06));
+  --g-ed-chip-edge: inset 0 1px 0 light-dark(#ffffff, rgba(255, 255, 255, .1)), inset 0 0 0 1px light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .08));
+  /* the floating tools pill and the bar on top */
+  --g-ed-pill: light-dark(rgba(255, 255, 255, .72), rgba(30, 22, 58, .78));
+  --g-ed-pill-solid: light-dark(rgb(251, 249, 255), rgb(28, 21, 54));
+  --g-ed-bar: light-dark(rgba(255, 255, 255, .42), rgba(24, 18, 46, .5));
+  --g-ed-gutter: 16px;   /* the page's sides, as Today's */
+  --g-ed-inset: 18px;    /* the card's own padding round the words (the board's .page) */
+}
+/* The page under a phone's full-screen note: opaque (the list under it must never show through), the board's grow-open end
+   state (GlassNotes .nv-shell: a deep violet falling to night, a soft glow at the top). Light: the same in lavender. Pure
+   black: black. */
+html[data-look="glass"][data-theme="dark"] {
+  --g-ed-sky: radial-gradient(80% 32% at 82% 0%, rgba(150, 108, 240, .22), rgba(150, 108, 240, 0) 72%),
+    radial-gradient(70% 28% at 6% 2%, rgba(120, 80, 220, .16), rgba(120, 80, 220, 0) 70%),
+    linear-gradient(180deg, #1a1436 0%, #110d24 55%, #0d0a1d);
+}
+html[data-look="glass"][data-theme="light"] {
+  --g-ed-sky: radial-gradient(80% 32% at 82% 0%, rgba(150, 105, 255, .24), rgba(150, 105, 255, 0) 72%),
+    radial-gradient(70% 28% at 6% 2%, rgba(255, 150, 220, .18), rgba(255, 150, 220, 0) 70%),
+    linear-gradient(180deg, #f4efff 0%, #efe9ff 55%, #ebe4ff);
+}
+html[data-look="glass"][data-black] { --g-ed-sky: #000000; --g-ed-pill: light-dark(rgba(255, 255, 255, .72), rgba(14, 11, 26, .9)); --g-ed-pill-solid: light-dark(rgb(251, 249, 255), rgb(12, 10, 22)); --g-ed-bar: light-dark(rgba(255, 255, 255, .42), rgba(0, 0, 0, .6)); }
+@media (max-width: 360px) { html[data-look="glass"] { --g-ed-inset: 14px; } }
+
+/* ================================================================== the page */
+
+/* A phone's note over everything: the layer stands still (no slide of its own: glass/editor.js plays its entrance, or the
+   Notes side grows it out of its card through V.glass.editorOpening, and neither may be fought by a transition here). */
+html[data-look="glass"] .editor-layer { background: var(--g-ed-sky); transform: none; opacity: 1; transition: none; }
+html[data-look="glass"] .editor-layer.g-growing { border-radius: 24px; overflow: hidden; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
+html[data-look="glass"] .editor-layer.g-leaving { pointer-events: none; }
+html[data-look="glass"] .editor { background: transparent; }
+html[data-look="glass"] .editor.dropping { background: var(--accent-wash); box-shadow: inset 0 0 0 2px var(--accent-line); }
+
+/* the bar on top: back, the folder, pin, lock, ⋯ (the board's .topbar: 44 px buttons, a glass chip for the folder) */
+html[data-look="glass"] .editor-bar {
+  gap: 4px; min-height: calc(60px + var(--safe-top)); padding: calc(8px + var(--safe-top)) 8px 8px; border-bottom: 0;
+  background: var(--g-ed-bar); box-shadow: inset 0 -1px 0 var(--line-soft);
+}
+html[data-look="glass"] .editor-bar .icon-btn { width: auto; flex: 0 1 44px; min-width: 36px; height: 44px; border-radius: 15px; color: var(--text-2); }
+/* (a 320 px phone with bigger text: the buttons give a little room before anything leaves the screen) */
+html[data-look="glass"] .editor-bar { min-width: 0; }
+html[data-look="glass"] .editor-bar .icon-btn::after { inset: 0; }
+html[data-look="glass"] .editor-bar .icon-btn.on { background: transparent; color: var(--accent-ink); }
+html[data-look="glass"] .editor-bar .icon-btn.on .icon svg { fill: light-dark(rgba(124, 91, 224, .22), rgba(215, 204, 255, .38)); }
+html[data-look="glass"] .editor-bar .back { margin-right: 0; }
+html[data-look="glass"] .editor-bar .folder-pick {
+  flex: 0 1 auto; min-width: 0; height: 44px; max-width: min(52vw, 260px); padding: 0 34px 0 12px; border-radius: 15px; color: var(--text-2);
+  background-color: var(--g-ed-chip); box-shadow: var(--g-ed-chip-edge); font: 500 14.5px/1 var(--font); transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .editor-bar .folder-pick:hover { background-color: light-dark(rgba(255, 255, 255, .85), rgba(255, 255, 255, .1)); }
+html[data-look="glass"] .editor-bar .folder-pick:active { transform: scale(.96); }
+
+/* ================================================================== the title, the chips under it, the thread */
+
+/* (the title is an input of its own: no copy is stacked over it, so its type can be the board's) */
+html[data-look="glass"] .editor-scroll { padding: 14px var(--g-ed-gutter) 40px; }
+html[data-look="glass"] .note-title {
+  padding: 6px 2px 8px; color: var(--text); font: 700 28px/34px var(--font-display, var(--font)); letter-spacing: -.025em;
+}
+html[data-look="glass"] .note-title::placeholder { color: var(--placeholder); }
+html[data-look="glass"] .note-meta { gap: 8px; margin: 2px 0 0; }
+html[data-look="glass"] .note-meta .chip {
+  height: 32px; padding: 0 11px 0 9px; gap: 6px; border: 0; border-radius: 11px; font: 600 13px/1 var(--font);
+  color: var(--text-2); background: var(--g-ed-chip); box-shadow: var(--g-ed-chip-edge);
+}
+html[data-look="glass"] .note-meta .chip .icon { width: 15px; height: 15px; }
+html[data-look="glass"] .note-meta .chip:active { transform: scale(.95); }
+/* the due date (the board's .duechip): lavender; today amber, late red */
+html[data-look="glass"] .note-meta :is(.due-chip.soon, .due-chip.later, .due-chip:not(.late):not(.today), .remind-chip, .exam-chip, .nt-chip, .cap-chip, .focus-chip.on-now) {
+  color: light-dark(#4b2bb8, #dcd2ff); background: light-dark(rgba(124, 91, 224, .1), rgba(150, 108, 240, .16));
+  box-shadow: inset 0 0 0 1px light-dark(rgba(124, 91, 224, .32), rgba(214, 196, 255, .3));
+}
+html[data-look="glass"] .note-meta .due-chip.today { color: var(--warn); background: var(--warn-soft); box-shadow: inset 0 0 0 1px light-dark(rgba(154, 85, 5, .3), rgba(255, 201, 106, .3)); }
+html[data-look="glass"] .note-meta :is(.due-chip.late, .remind-chip.late) { color: var(--danger); background: var(--danger-soft); box-shadow: inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35)); }
+html[data-look="glass"] .note-meta .done-chip.on { color: var(--ok); background: var(--ok-soft); box-shadow: inset 0 0 0 1px light-dark(rgba(15, 120, 69, .3), rgba(111, 216, 164, .32)); }
+html[data-look="glass"] .note-meta .cap-waiting { color: var(--muted); }
+
+/* the thread under the title's row (glass/editor.js puts it in: the board's weft, drawn as the note opens) */
+html[data-look="glass"] .g-ed-weft { order: 2; display: block; width: 100%; height: 12px; margin: 14px 0 14px; overflow: visible; pointer-events: none; }
+html[data-look="glass"] .g-ed-weft path { fill: none; stroke: var(--g-weft-line, light-dark(#7c5be0, #9c82ec)); stroke-width: 1.8; stroke-linecap: round; }
+html[data-look="glass"] .editor.reading .g-ed-weft path { opacity: .7; }
+
+/* ================================================================== the card the words sit on */
+
+/* Write: the words on a glass card (the board's .page). Read: the card melts away and only the words stay (its opacity).
+   The card is a layer of its own (::before), so its fading never touches the words; the padding is the same either way, so
+   nothing moves. */
+html[data-look="glass"] .editor-body { position: relative; isolation: isolate; padding: var(--g-ed-inset) var(--g-ed-inset) 20px; }
+html[data-look="glass"] .editor-body::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 24px; pointer-events: none;
+  background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow); transition: opacity .35s var(--g-ease);
+}
+html[data-look="glass"] .editor-body::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 24px; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  transition: opacity .35s var(--g-ease);
+}
+html[data-look="glass"] .editor.reading .editor-body::before, html[data-look="glass"] .editor.reading .editor-body::after { opacity: 0; }
+/* a locked note's face sits on the card too, centred */
+html[data-look="glass"] .editor-body:has(> .locked-face) { padding-top: 8px; padding-bottom: 8px; }
+
+/* The box being written in: a soft wash and a hairline BEHIND it (the board's .blk.focus), drawn by the row round the box
+   (never the box: its padding and size are the classic's, see the one rule). The browser's own focus ring isn't drawn on
+   a box: the caret is where the keyboard is, and the wash says which box. */
+html[data-look="glass"] .editor .blocks > .block { position: relative; }
+html[data-look="glass"] .editor .blocks > .block::before {
+  content: ""; position: absolute; inset: -2px -10px; z-index: -1; border-radius: 12px; pointer-events: none; opacity: 0;
+  background: light-dark(rgba(124, 91, 224, .05), rgba(255, 255, 255, .04)); box-shadow: inset 0 0 0 1px light-dark(rgba(124, 91, 224, .2), rgba(214, 196, 255, .22));
+  transition: opacity .2s var(--g-ease);
+}
+html[data-look="glass"] .editor .blocks > .block:has(> .block-field > .block-input:focus)::before,
+html[data-look="glass"] .editor .blocks > .check-row:has(.block-input:focus)::before { opacity: 1; }
+html[data-look="glass"] .editor .blocks > .check-row::before { inset: 0 -2px; }
+html[data-look="glass"] .editor .block-input:focus-visible { outline: none; box-shadow: none; }
+html[data-look="glass"] .editor .check-row:focus-within { background: transparent; }
+/* The boxes and their copies never fade anything (glass.css's lite and calm give every element a short transition of "all":
+   on a box that would leave its own letters showing for a moment under the copy that draws them, and the copies a frame
+   behind the box). As in classic: a box's look changes at once. */
+html[data-look="glass"] .blocks .block-field, html[data-look="glass"] .blocks .block-field *,
+html[data-look="glass"] .read-view * { transition-property: none; }
+/* Words picked in a note: the app's own picking colours (1.19.1: --pick, and --pick-see in a box, seen through to the
+   bold and the highlight under it), never glass.css's general lavender, which was too faint to see on the light card; the
+   system's own colours with Windows' high contrast. */
+html[data-look="glass"] .editor ::selection { background: var(--pick); color: var(--text); }
+html[data-look="glass"] .editor .block-input::selection { background: var(--pick-see); }
+@media (forced-colors: active) {
+  html[data-look="glass"] .editor ::selection { background: Highlight; color: HighlightText; }
+  html[data-look="glass"] .editor .block-input::selection { background: Highlight; }
+}
+/* a reading tint (Settings > Appearance > Reading) is the note's page, as in classic */
+html[data-look="glass"][data-reading-tint] .editor { background: var(--tint); }
+/* the highlight behind ==words== (the copy under a box and the Read view): colour only, never a size */
+html[data-look="glass"] .editor { --highlight: var(--g-ed-hl); }
+html[data-look="glass"] .editor .blocks .block-input { caret-color: light-dark(#6b47d6, #c9b8ff); }
+
+/* ================================================================== checklists: the board's box, its drawn check and sparks */
+
+/* The box is the button (24 px, the 44 px target round it as before); its gradient is a layer that fades in, the check is
+   drawn in by its stroke, a press springs (the same as Today's rows). glass/editor.js adds the sparks. */
+html[data-look="glass"] .editor :is(.check-row, .read-check) > .tick {
+  width: 24px; height: 24px; margin-top: 5px; border: 1.6px solid var(--g-ed-box-line); border-radius: 8px; background: var(--g-ed-box-fill);
+  color: var(--g-ed-check); transition: transform .2s var(--g-spring), border-color .2s var(--g-ease);
+}
+html[data-look="glass"] .editor :is(.check-row, .read-check) > .tick::before {
+  content: ""; position: absolute; inset: -1.6px; border-radius: 8px; pointer-events: none; opacity: 0;
+  background: var(--g-ed-box-on); box-shadow: 0 4px 12px light-dark(rgba(106, 69, 201, .4), rgba(127, 91, 224, .55));
+  transition: opacity .25s var(--g-ease);
+}
+html[data-look="glass"] .editor :is(.check-row, .read-check) > .tick .icon { position: relative; width: 15px; height: 15px; transform: none; }
+html[data-look="glass"] .editor :is(.check-row, .read-check) > .tick .icon svg { stroke-width: 3; }
+html[data-look="glass"] .editor :is(.check-row, .read-check) > .tick .icon svg path { stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset .3s var(--g-ease) .06s; }
+html[data-look="glass"] .editor :is(.check-row.done, .read-check.done) > .tick { background: var(--g-ed-box-fill); border-color: transparent; color: var(--g-ed-check); }
+html[data-look="glass"] .editor :is(.check-row.done, .read-check.done) > .tick::before { opacity: 1; }
+html[data-look="glass"] .editor :is(.check-row.done, .read-check.done) > .tick .icon svg path { stroke-dashoffset: 0; }
+html[data-look="glass"] .editor :is(.check-row, .read-check) > .tick:active { transform: scale(.82); }
+@media (hover: hover) {
+  html[data-look="glass"] .editor :is(.check-row:not(.done), .read-check:not(.done)) > .tick:hover {
+    border-color: light-dark(rgba(90, 60, 190, .85), rgba(214, 200, 255, .9)); box-shadow: 0 0 0 4px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .18));
+  }
+}
+html[data-look="glass"] .editor .check-row > .link-chips { padding-left: 36px; }
+html[data-look="glass"] .editor .remove-item { border-radius: 10px; }
+html[data-look="glass"] .editor .remove-item:hover { background: var(--g-lift-soft, rgba(255, 255, 255, .08)); }
+
+/* links in the words, as chips under their line */
+html[data-look="glass"] .editor .link-chip {
+  height: 32px; border: 0; border-radius: 11px; background: var(--g-ed-chip); box-shadow: var(--g-ed-chip-edge); color: var(--text-2);
+  transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .editor .link-chip:hover { background: light-dark(rgba(255, 255, 255, .86), rgba(255, 255, 255, .1)); }
+html[data-look="glass"] .editor .link-chip:active { transform: scale(.95); }
+html[data-look="glass"] .editor .link-chip .icon { color: var(--accent-ink); }
+
+/* ================================================================== pictures, files, voice memos */
+
+html[data-look="glass"] .editor .pictures { gap: 10px; }
+html[data-look="glass"] .editor .thumb {
+  position: relative; border: 0; border-radius: 16px; background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--g-ring), 0 8px 20px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .4));
+  transition: transform .2s var(--g-spring);
+}
+html[data-look="glass"] .editor .thumb::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 1px light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .12));
+}
+html[data-look="glass"] .editor .thumb:active { transform: scale(.95); }
+@media (hover: hover) { html[data-look="glass"] .editor .thumb:hover { transform: translateY(-2px); } }
+html[data-look="glass"] .editor .ink-badge { border: 0; border-radius: 9px; background: var(--g-float, var(--raised)); box-shadow: 0 0 0 1px var(--g-ring), 0 4px 10px rgba(4, 2, 14, .25); }
+
+html[data-look="glass"] .editor .file-chip {
+  position: relative; border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .editor .file-open { border-radius: 12px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .editor .file-open:active { transform: scale(.97); }
+html[data-look="glass"] .editor .file-badge {
+  border-radius: 13px; background: var(--g-grad-soft); color: var(--accent-ink); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line);
+}
+html[data-look="glass"] .editor .file-chip.loading .file-badge { background: var(--surface-2); box-shadow: none; }
+html[data-look="glass"] .editor .file-text .bar { border-radius: 2px; background: var(--line); }
+html[data-look="glass"] .editor .play-btn {
+  background: var(--g-grad); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 16px var(--g-glow);
+  transition: transform .2s var(--g-spring);
+}
+html[data-look="glass"] .editor .play-btn:hover { background: var(--g-grad); }
+html[data-look="glass"] .editor .play-btn:active { background: var(--g-grad); transform: scale(.9); }
+
+/* ================================================================== the tools */
+
+/* A phone: a floating glass pill above the bottom edge (the board's .tools), in the flow (the words never scroll under it,
+   so the caret is never hidden behind it). */
+@media (max-width: 899px) {
+  html[data-look="glass"] .editor-layer .editor-tools {
+    margin: 0 12px calc(12px + var(--safe-bottom)); padding: 6px; gap: 4px; min-height: 56px; border-top: 0; border-radius: 24px;
+    background: var(--g-ed-pill); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+    box-shadow: inset 0 1px 0 light-dark(#ffffff, rgba(255, 255, 255, .16)), inset 0 0 0 1px var(--g-ring), 0 16px 40px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .6));
+  }
+  html[data-look="glass"].lite .editor-layer .editor-tools { background: var(--g-ed-pill-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html[data-look="glass"] .editor-layer .editor-ask { padding: 0 12px 8px; background: transparent; border-top: 0; }
+  html[data-look="glass"] .editor-layer .goal-line { left: 22px; right: 22px; top: auto; bottom: 2px; height: 3px; border-radius: 2px; }
+}
+/* Wide (the side pane): the bar, then the tools as a glass toolbar in line with the page's column. */
+@media (min-width: 900px) {
+  /* (the bar, the toolbar, the title and the card share one left and one right edge: the words' column's) */
+  html[data-look="glass"] .pane .editor { --g-ed-side: max(28px, calc((100% - 760px) / 2)); }
+  html[data-look="glass"] .pane .editor-bar { min-height: 60px; padding: 8px calc(var(--g-ed-side) - 10px) 8px var(--g-ed-side); background: transparent; box-shadow: none; }
+  html[data-look="glass"] .pane .editor-tools {
+    margin: 0 var(--g-ed-side) 4px; padding: 4px 6px 4px 8px; min-height: 52px; border-bottom: 0; border-radius: 20px;
+    background: var(--g-ed-pill); box-shadow: inset 0 1px 0 light-dark(#ffffff, rgba(255, 255, 255, .14)), inset 0 0 0 1px var(--g-ring), 0 10px 26px light-dark(rgba(76, 52, 160, .12), rgba(4, 2, 14, .35));
+  }
+  html[data-look="glass"] .pane .goal-line { left: 20px; right: 20px; bottom: 1px; height: 3px; border-radius: 2px; }
+  /* the words' column: 720 px of words as before, the card round them */
+  html[data-look="glass"] .pane .editor-scroll { padding: 26px var(--g-ed-side) 56px; }
+  html[data-look="glass"] .pane .editor-body { padding: 24px 20px 24px; }
+  html[data-look="glass"] .pane .note-title { padding: 6px 2px 8px; }
+}
+html[data-look="glass"] .goal-line { background: var(--line-soft); overflow: hidden; }
+html[data-look="glass"] .goal-line i { background: var(--g-grad); border-radius: 2px; }
+html[data-look="glass"] .goal-line.met i { background: linear-gradient(90deg, var(--ok), light-dark(#2aa66a, #9df0c6)); }
+
+/* a tool: 44 px, its pressed look a pill that springs in behind it (the board's .tbtn::before); glass/editor.js gives every
+   press the spring (V.motion.press.follow), so no :active size here */
+html[data-look="glass"] .tool-btn { width: 44px; height: 44px; border: 0; border-radius: 14px; color: var(--text-2); background: transparent; isolation: isolate; }
+html[data-look="glass"] .tool-btn::after { inset: 0; }
+html[data-look="glass"] .tool-btn::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: var(--g-ed-on-fill); box-shadow: inset 0 0 0 1px var(--g-ed-on-ring); opacity: 0; transform: scale(.8);
+  transition: opacity .2s var(--g-ease), transform .3s var(--g-spring);
+}
+html[data-look="glass"] .tool-btn:hover, html[data-look="glass"] .tool-btn:active { background: transparent; color: var(--text); }
+html[data-look="glass"] .tool-btn.on, html[data-look="glass"] .tool-btn[aria-pressed="true"] { background: transparent; color: var(--g-ed-on-ink); }
+html[data-look="glass"] .tool-btn.on::before, html[data-look="glass"] .tool-btn[aria-pressed="true"]::before { opacity: 1; transform: none; }
+html[data-look="glass"] .tool-btn[aria-disabled="true"] { color: var(--faint); }
+@media (hover: hover) {
+  html[data-look="glass"] .tool-btn:not(.on):not([aria-pressed="true"]):not([aria-disabled="true"]):hover::before {
+    opacity: .55; transform: none; background: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .07)); box-shadow: none;
+  }
+}
+html[data-look="glass"] .tool-sep { width: 1px; height: 22px; margin: 0 4px; background: var(--line); }
+/* + More: a glass chip that stays in sight; lit while its menu is open; a dot while one of its tools is on */
+html[data-look="glass"] .tool-btn.tool-more {
+  width: auto; height: 44px; padding: 0 12px 0 9px; gap: 4px; border-radius: 15px; color: var(--text-2);
+  background: var(--g-ed-chip); box-shadow: var(--g-ed-chip-edge);
+}
+html[data-look="glass"] .tool-btn.tool-more::before { display: none; }
+html[data-look="glass"] .tool-more[aria-expanded="true"] { background: var(--g-ed-on-fill); color: var(--g-ed-on-ink); box-shadow: inset 0 0 0 1px var(--g-ed-on-ring); }
+html[data-look="glass"] .tool-more.on { background: var(--g-ed-on-fill); color: var(--g-ed-on-ink); box-shadow: inset 0 0 0 1px var(--g-ed-on-ring); }
+html[data-look="glass"] .tool-more.on::before {
+  display: block; inset: auto; top: 7px; right: 6px; width: 7px; height: 7px; border-radius: 50%; opacity: 1; transform: none;
+  background: var(--g-grad); box-shadow: 0 0 6px var(--g-glow); z-index: 1;
+}
+html[data-look="glass"] .tool-more .icon { width: 18px; height: 18px; }
+/* the Read toggle: pressed while reading */
+html[data-look="glass"] .tool-btn.read-toggle { color: var(--text-2); }
+
+/* the word count, and how saving goes: a small calm dot (green once it's in the cloud, amber while it goes up or waits on
+   this device; glass/editor.js says which, data-g-sync) */
+html[data-look="glass"] .word-count { border-radius: 10px; color: var(--text-2); }
+html[data-look="glass"] .word-count:hover { background: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .07)); }
+html[data-look="glass"] .save-state { position: relative; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+html[data-look="glass"] .save-state::before, html[data-look="glass"] .save-state::after {
+  content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; transition: opacity .3s var(--g-ease), transform .3s var(--g-spring);
+}
+html[data-look="glass"] .save-state::before { background: var(--ok); box-shadow: 0 0 6px light-dark(rgba(15, 120, 69, .45), rgba(111, 216, 164, .6)); }
+html[data-look="glass"] .save-state::after {
+  position: absolute; left: 0; top: 50%; margin-top: -3.5px; background: light-dark(#c47a10, #f5c76a);
+  box-shadow: 0 0 6px light-dark(rgba(196, 122, 16, .45), rgba(245, 199, 106, .7)); opacity: 0;
+}
+html[data-look="glass"] .tools-info .save-state::after { left: 4px; }
+html[data-look="glass"] .save-state:is([data-g-sync="syncing"], [data-g-sync="offline"], [data-g-sync="held"])::after { opacity: 1; }
+html[data-look="glass"] .save-state[data-g-sync="syncing"]::after { animation: g-ed-breathe 1.6s ease-in-out infinite; }
+html[data-look="glass"] .save-state.g-landed::before { animation: g-ed-dot-pop .5s var(--g-spring); }
+@keyframes g-ed-breathe { 0%, 100% { opacity: 1; transform: none; } 50% { opacity: .45; transform: scale(.82); } }
+@keyframes g-ed-dot-pop { 0% { transform: scale(.4); } 60% { transform: scale(1.35); } 100% { transform: none; } }
+
+/* ================================================================== + More: its tiles */
+
+/* The menu pops out of its button (glass/overlays.js's recipe, V.menu); the tiles rise in one after the other
+   (glass/editor.js, V.motion.enter) and spring under a finger (V.motion.press.follow). */
+html[data-look="glass"] .menu.tools-more-menu { width: min(352px, calc(100% - 16px)); padding: 8px; border-radius: 24px; }
+html[data-look="glass"] .more-tools { gap: 6px; }
+html[data-look="glass"] .more-tool {
+  min-height: 80px; padding: 10px 4px 9px; gap: 7px; border-radius: 18px; isolation: isolate; color: var(--text);
+  font: 500 13px/16px var(--font);
+}
+html[data-look="glass"] .more-tool::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: var(--g-lift-soft, light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .085))); opacity: 0; transition: opacity .16s var(--g-ease);
+}
+html[data-look="glass"] .more-tool:hover, html[data-look="glass"] .more-tool:focus { background: transparent; }
+html[data-look="glass"] .more-tool:hover::before, html[data-look="glass"] .more-tool:focus::before { opacity: 1; }
+html[data-look="glass"] .more-tool:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+html[data-look="glass"] .more-tool .icon {
+  box-sizing: content-box; width: 20px; height: 20px; padding: 8px; border-radius: 13px; color: var(--accent-ink);
+  background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line);
+}
+html[data-look="glass"] .more-tool-on { top: 6px; right: 6px; background: var(--g-grad); color: #fff; box-shadow: 0 4px 10px var(--g-glow); }
+
+/* ================================================================== the Read view */
+
+html[data-look="glass"] .editor .read-link { color: var(--accent-ink); text-decoration-color: var(--accent-line); }
+html[data-look="glass"] .editor .read-tag { color: var(--accent-ink); }
+html[data-look="glass"] .editor .read-code-span { border: 0; border-radius: 6px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-soft); }
+html[data-look="glass"] .editor .read-pre { border: 0; border-radius: 14px; background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line-soft); }
+html[data-look="glass"] .editor .read-quote { border-left: 3px solid var(--accent-line); color: var(--text-2); }
+html[data-look="glass"] .editor .read-rule { border-top-color: var(--thread); }
+html[data-look="glass"] .editor .read-list li::marker { color: var(--accent); }
+html[data-look="glass"] .editor .read-hint { color: var(--muted); }
+
+/* ================================================================== the date question, dictation, recording */
+
+html[data-look="glass"] .editor-ask { background: transparent; border-top: 0; }
+html[data-look="glass"] .editor .ask-btn { border: 0; border-radius: 13px; background: var(--g-ed-chip); box-shadow: var(--g-ed-chip-edge); transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .editor .ask-btn:active { transform: scale(.95); }
+html[data-look="glass"] .editor .ask-btn.primary { color: #fff; background: var(--g-grad); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 16px var(--g-glow); }
+html[data-look="glass"] .editor .ask-btn.quiet { background: transparent; box-shadow: none; }
+
+/* the words not final yet while dictating: a floating glass pill over the tools, its dot breathing (transform and opacity) */
+html[data-look="glass"] .dictate-pill {
+  min-height: 40px; padding: 4px 4px 4px 14px; border: 0; border-radius: 20px; background: var(--g-float, var(--raised)); color: var(--muted);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-3); animation: g-ed-pill-in .42s var(--g-spring) backwards;
+}
+html[data-look="glass"] .dictate-pill.heard { color: var(--text); }
+html[data-look="glass"] .dictate-dot { background: var(--g-grad); box-shadow: 0 0 8px var(--g-glow); animation: g-ed-breathe 1.8s ease-in-out infinite; }
+html[data-look="glass"] .dictate-pill[data-state=wait] .dictate-dot { background: var(--faint); box-shadow: none; animation: none; }
+html[data-look="glass"] .dictate-stop { width: 32px; height: 32px; border-radius: 16px; }
+html[data-look="glass"] .dictate-stop:hover { background: var(--g-lift-soft, rgba(255, 255, 255, .08)); }
+@keyframes g-ed-pill-in { from { opacity: 0; transform: translateY(8px) scale(.94); } }
+
+html[data-look="glass"] .rec-dot { background: var(--danger); box-shadow: 0 0 10px light-dark(rgba(176, 42, 64, .5), rgba(255, 120, 140, .6)); }
+html[data-look="glass"] .recorder { padding-left: 8px; }
+
+/* ================================================================== the sheets the note opens */
+
+/* due date: Today, Tomorrow... are glass buttons already (glass.css); the four in one even grid */
+html[data-look="glass"] .quick-dates { gap: 8px; }
+/* the due date and reminder: the "Remind me" row as a glass card, the week's days as glass chips that spring, the picked
+   ones lit with the gradient */
+html[data-look="glass"] .remind-row {
+  border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .repeat-days { gap: 6px; }
+html[data-look="glass"] .repeat-day {
+  height: 44px; border: 0; border-radius: 22px; color: var(--text-2); background: var(--g-ed-chip); box-shadow: var(--g-ed-chip-edge);
+  isolation: isolate; transition: color .2s var(--g-ease);
+}
+html[data-look="glass"] .repeat-day::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0; transform: scale(.7);
+  background: var(--g-pill-fill); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 1px var(--g-pill-ring), var(--g-pill-glow);
+  transition: opacity .2s var(--g-ease), transform .34s var(--g-spring);
+}
+html[data-look="glass"] .repeat-day::after { inset: 0; }
+html[data-look="glass"] .repeat-day:hover { border-color: transparent; }
+html[data-look="glass"] .repeat-day[aria-pressed="true"] { color: #fff; background: var(--g-ed-chip); }
+html[data-look="glass"] .repeat-day[aria-pressed="true"]::before { opacity: 1; transform: none; }
+html[data-look="glass"] .repeat-says { color: var(--accent-ink); }
+/* the word count's three numbers as glass tiles */
+html[data-look="glass"] .count-item { border-radius: 16px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
+/* history: each kept version a glass card */
+html[data-look="glass"] .history-item { border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
+html[data-look="glass"] .history-item.open { box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1.5px var(--accent-line); }
+/* export: a locked note's warning as a soft amber card */
+html[data-look="glass"] .export-warn { border: 0; border-radius: 16px; background: var(--warn-soft); box-shadow: inset 0 0 0 1px light-dark(rgba(154, 85, 5, .25), rgba(255, 201, 106, .28)); }
+/* Snap a page: the pages as rounded glass tiles */
+html[data-look="glass"] .cap-page { border: 0; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--g-ring), 0 6px 14px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .35)); }
+html[data-look="glass"] .cap-add { border-radius: 14px; border-color: var(--accent-line); }
+html[data-look="glass"] .cap-page .cap-page-out { background: var(--g-float, var(--raised)); }
+/* the picture, big: on a sunken glass with soft corners */
+html[data-look="glass"] .viewer { border-radius: 20px; background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line-soft); overflow: hidden; }
+html[data-look="glass"] .viewer img { border-radius: 16px; }
+
+/* the PIN pad: round glass keys that spring under a finger (glass/editor.js), the OK key the screen's one gradient button,
+   the dots filling with the gradient and popping in */
+html[data-look="glass"] .pin-title { font: 700 17px/24px var(--font-display, var(--font)); letter-spacing: -.01em; }
+html[data-look="glass"] .pin-dots { gap: 14px; }
+html[data-look="glass"] .pin-dots .dot { width: 13px; height: 13px; border: 1.6px solid var(--g-ed-box-line); }
+html[data-look="glass"] .pin-dots .dot.full { border-color: transparent; background: var(--g-ed-box-on); box-shadow: 0 0 10px var(--g-glow); }
+html[data-look="glass"] .pin-pad { gap: 12px; max-width: 312px; }
+html[data-look="glass"] .pin-key {
+  height: 60px; border: 0; border-radius: 22px; color: var(--text); font: 500 24px/1 var(--font); isolation: isolate;
+  background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 6px 16px light-dark(rgba(76, 52, 160, .1), rgba(4, 2, 14, .3));
+}
+html[data-look="glass"] .pin-key::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: light-dark(rgba(110, 80, 200, .1), rgba(255, 255, 255, .1)); transition: opacity .16s var(--g-ease);
+}
+html[data-look="glass"] .pin-key { position: relative; }
+html[data-look="glass"] .pin-key:hover { border-color: transparent; }
+html[data-look="glass"] .pin-key:hover::before, html[data-look="glass"] .pin-key:active::before { opacity: 1; }
+html[data-look="glass"] .pin-key:active { background: var(--g-fill); transform: none; }
+html[data-look="glass"] .pin-key.go, html[data-look="glass"] .pin-key.go:hover, html[data-look="glass"] .pin-key.go:active {
+  color: #fff; background: var(--g-grad); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 24px var(--g-glow);
+}
+html[data-look="glass"] .pin-key.go::before { background: rgba(255, 255, 255, .16); }
+/* a locked note's face: the lock in a glowing glass chip */
+html[data-look="glass"] .locked-face { gap: 16px; padding: 48px 8px; }
+html[data-look="glass"] .locked-face .icon.big {
+  width: 60px; height: 60px; padding: 15px; border-radius: 20px; color: var(--accent-ink); background: var(--g-grad-soft);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line), 0 12px 30px var(--g-glow);
+}
+html[data-look="glass"] .locked-face p { color: var(--text-2); font-weight: 500; }
+
+/* ================================================================== the drawing screen's bars (js/ink.js) */
+
+html[data-look="glass"] .layer.ink-layer { background: var(--g-ed-sky); }
+html[data-look="glass"] .ink-bar { border-bottom: 0; background: var(--g-ed-bar); box-shadow: inset 0 -1px 0 var(--line-soft); }
+html[data-look="glass"] .ink-bar .icon-btn { width: 44px; height: 44px; border-radius: 15px; }
+html[data-look="glass"] .ink-stage { background: var(--sunken); }
+html[data-look="glass"] .ink-tools { border-top: 0; background: var(--g-ed-bar); box-shadow: inset 0 1px 0 var(--line-soft); }
+html[data-look="glass"] .ink-swatch span { box-shadow: inset 0 0 0 1px light-dark(rgba(13, 14, 17, .18), rgba(255, 255, 255, .4)), 0 2px 6px rgba(4, 2, 14, .25); transition: transform .24s var(--g-spring); }
+html[data-look="glass"] .ink-swatch.on span { outline: 2px solid var(--accent); outline-offset: 3px; transform: scale(1.06); }
+html[data-look="glass"] .ink-hint { border: 0; border-radius: 18px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 0 0 1px var(--toast-edge), 0 10px 26px rgba(0, 0, 0, .45); }
+@media (min-width: 700px) { html[data-look="glass"] .ink-tools { box-shadow: inset 0 -1px 0 var(--line-soft); } }
+
+/* ================================================================== only transform and opacity move
+
+   The classic look fades colours and backgrounds on these (a row's background, a tool's colour, a key's background); here
+   a colour simply is, and only what moves (transform) and what fades in (opacity, the pills and lights are layers) moves. */
+html[data-look="glass"] :is(.editor, .tools-more-menu, .sheet, .ink-layer) :is(.check-row, .tool-btn, .icon-btn, .remove-item, .pin-key, .ask-close, .dictate-stop, .ink-swatch) {
+  transition-property: transform, opacity;
+}
+html[data-look="glass"] .editor :is(.check-row, .read-check) > .tick { transition-property: transform; }
+html[data-look="glass"] .repeat-day { transition: transform var(--d-press) var(--g-ease); }
+
+/* ================================================================== lite and calm */
+
+html[data-look="glass"].lite .editor-body::before { box-shadow: inset 0 1px 0 var(--g-hi); }
+html[data-look="glass"].lite .editor .thumb { box-shadow: inset 0 0 0 1px var(--g-ring); }
+html[data-look="glass"].lite .save-state[data-g-sync="syncing"]::after, html[data-look="glass"].lite .dictate-dot { animation: none; }
+html[data-look="glass"].lite .dictate-pill { animation-duration: .16s; }
+/* calm: nothing moves (presses change no size, pills don't spring, dots don't breathe); short fades only */
+html[data-look="glass"].calm .editor :is(.check-row, .read-check) > .tick:active, html[data-look="glass"].calm .editor .thumb:active,
+html[data-look="glass"].calm .editor .link-chip:active, html[data-look="glass"].calm .editor .file-open:active, html[data-look="glass"].calm .editor .play-btn:active,
+html[data-look="glass"].calm .editor .ask-btn:active, html[data-look="glass"].calm .note-meta .chip:active, html[data-look="glass"].calm .editor-bar .folder-pick:active { transform: none; }
+html[data-look="glass"].calm .tool-btn::before, html[data-look="glass"].calm .repeat-day::before { transform: none; }
+html[data-look="glass"].calm .editor .thumb:hover, html[data-look="glass"].calm .ink-swatch.on span { transform: none; }
+html[data-look="glass"].calm .save-state::after, html[data-look="glass"].calm .save-state::before, html[data-look="glass"].calm .dictate-dot { animation: none; }
+html[data-look="glass"].calm .dictate-pill { animation-name: g-fade-in; animation-duration: .12s !important; }
+html[data-look="glass"].calm .editor :is(.check-row, .read-check) > .tick .icon svg path { transition-duration: .12s; transition-delay: 0s; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-look="glass"] .save-state::after, html[data-look="glass"] .dictate-dot { animation: none; }
+}
+
+/* ================================================================== round-2 fixes (the fixer's block)
+   R2-05: the drawing tools fit a small phone. Under 400 px of room (320, 360 with bigger text, 412 at 130 %) the first row's tools
+   are 40 px wide (44 tall, as the classic look's), its separators go, and the row may wrap rather than run off the screen,
+   so Clear the page is always in reach. */
+html[data-look="glass"] .ink-layer { container: g-ink / inline-size; }  /* (a container, not the screen: bigger text shrinks the room too) */
+@container g-ink (max-width: 399px) {
+  html[data-look="glass"] .ink-tools { padding-left: 6px; padding-right: 6px; }
+  html[data-look="glass"] .ink-tools .ink-group { flex-wrap: wrap; justify-content: center; max-width: 100%; }
+  html[data-look="glass"] .ink-tools .ink-group:not(.ink-colours) > .tool-sep { display: none; }
+  html[data-look="glass"] .ink-tools .ink-group:not(.ink-colours) > .tool-btn { width: 40px; }
+}
+/* R2-09: the reminder sheet on one set of edges: Ends is the whole width (it shares the row in two equal halves only while
+   its "Until" day shows), the calendar sentence starts on the left like every other line, and the seven days are seven
+   equal columns across the row, 44 px tall. */
+html[data-look="glass"] .sheet .repeat-end { grid-template-columns: minmax(0, 1fr); }
+html[data-look="glass"] .sheet .repeat-end:has(> .repeat-until:not([hidden]):not([style*="none"])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+html[data-look="glass"] .sheet .repeat-end > .label, html[data-look="glass"] .sheet .repeat-ends { width: 100%; }
+html[data-look="glass"] .sheet .remind-hint { text-align: left; }
+html[data-look="glass"] .sheet .repeat-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+html[data-look="glass"] .sheet .repeat-day { width: auto; min-width: 0; height: 44px; }
+/* R2-08: the picture viewer's buttons (Delete, Save a copy, Mark up, Done) are an even grid on the sheet's inner edges:
+   two equal columns, one gap, every button the same height; Done (the one gradient button) last, on the right. */
+html[data-look="glass"] .sheet.wide .sheet-actions:has(> .btn:nth-child(3)) {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; justify-content: stretch;
+}
+html[data-look="glass"] .sheet.wide .sheet-actions:has(> .btn:nth-child(3)) > .btn { width: 100%; min-width: 0; margin: 0; min-height: 48px; height: 48px; }
+html[data-look="glass"] .sheet.wide .sheet-actions:has(> .btn:nth-child(3)) > .btn.danger-quiet {
+  background: var(--danger-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35));
+}
+/* R2-14: a small phone's note bar keeps its buttons 44 px wide; the folder pill gives way (its name ellipsed) instead */
+html[data-look="glass"] .editor-bar .folder-pick { min-width: 0; flex: 0 1000 auto; }
+/* ---- end of the round-2 fixes block */

@@ -3861,7 +3861,12 @@ V.editor = (() => {
     readMap = null;
   }
 
+  /* How long a phone's closing note stays for its way out: 200 ms, or what the glass look plays (glass/editor.js: it
+     shrinks back into its card). 0 from the glass look in classic, so nothing changes there. */
+  const leaveAfter = (gone, id) => (V.glass && V.glass.editorLeaving && V.glass.editorLeaving(gone, id)) || 0;
+
   function close() {
+    const was = openId;
     saveSoon.flush();
     save();
     if (revealed) quietClipboard(false);
@@ -3875,7 +3880,7 @@ V.editor = (() => {
       const leavingLayer = layer;
       layer = null;
       leavingLayer.classList.remove('shown');
-      setTimeout(() => leavingLayer.remove(), 200);
+      setTimeout(() => leavingLayer.remove(), leaveAfter(leavingLayer, was) || 200);
       if (history.state && history.state.vault === 'note') history.back();
     } else if (host) {
       placeholder(host);
@@ -3945,7 +3950,9 @@ V.editor = (() => {
   window.addEventListener('popstate', () => {
     // (Back from something shown over the note, a drawing, comes back to the note's own step: it stays open.)
     if (!layer || (history.state && history.state.vault === 'note')) return;
-    layer.remove();
+    const gone = layer;
+    const wait = leaveAfter(gone, openId);
+    if (wait) { gone.classList.remove('shown'); setTimeout(() => gone.remove(), wait); } else gone.remove();
     layer = null;
     saveSoon.flush();
     save();

@@ -1539,10 +1539,20 @@ V.notes = (() => {
   const showing = () => !!root && root.isConnected && root.dataset.tab === 'notes' && !!parts && root.contains(parts.list);
   // Behind the phone's full-screen note there's nothing to redraw (it's redrawn as the note closes); while a card or a
   // folder is being dragged, not until it's dropped (a sync landing then would take it from under the pointer).
+  // (the glass look holds it too while a finger swipes a card or pulls the list down: glass/notes.js, holdDraws; the
+  // classic look never does)
+  let heldAt = 0;
+  let heldBack = false;
   const redraw = V.debounce(() => {
     if (V.drag.busy() && Date.now() - V.drag.since() < 20000) return redraw();
+    if (heldAt && Date.now() - heldAt < 8000) { heldBack = true; return undefined; }
     if (showing() && !V.editor.covering()) draw();
+    return undefined;
   }, 60);
+  function holdDraws(on) {
+    heldAt = on ? Date.now() : 0;
+    if (!on && heldBack) { heldBack = false; redraw(); }
+  }
   V.on('data', (table) => { if (table === 'notes' || table === 'folders') redraw(); });
   V.on('attach-index', redraw);  // the attachment search index arrived (js/attachsearch.js): matches may change
   V.on('notetaker', redraw);  // the note-taker started or stopped listening into a note: its "Listening" chip
@@ -1579,5 +1589,5 @@ V.notes = (() => {
 
   return { render, again, create, chooseTemplate, ensureStarterFolders, blankNote, open, search, folders, inbox, setFilter, plain,
     showList, showTag: (name) => showList('tag:' + tagKeyOf(name)),
-    folderBadge, noteItems, emptyTrash, picking: () => picking, showing: () => showing() };
+    folderBadge, noteItems, emptyTrash, picking: () => picking, showing: () => showing(), holdDraws };
 })();

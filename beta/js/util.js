@@ -506,7 +506,12 @@ V.sheet = function sheet({ title, content, actions = [], wide = false, onClose, 
   requestAnimationFrame(() => {
     wrap.classList.add('shown');
     const first = panel.querySelector('input:not([type=checkbox]), textarea, select');
-    if (first) first.focus();
+    // (the 2.0 glass look on a touch screen: a sheet whose first box is a day or a time takes the keyboard itself, so a phone shows no
+    // picked day number as it opens; the classic look is as it was)
+    if (first && /^(date|time)$/.test(first.type || '') && V.look && V.look.isGlass && V.look.isGlass() && matchMedia('(pointer: coarse)').matches) {
+      if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1');
+      panel.focus({ preventScroll: true });
+    } else if (first) first.focus();
   });
   return { close, el: panel };
 };

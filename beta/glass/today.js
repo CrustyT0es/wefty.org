@@ -374,15 +374,65 @@ function slideRows(panel, from, elapsed = 0) {
 function readRows(panel) {
   const map = new Map();
   const tops = new Map();
+  const lis = new Map();  // (round-2 fix: the rows themselves and their heights, so a row gone after a draw can still leave smoothly)
+  const heights = new Map();
   const base = panel.getBoundingClientRect().top;
   panel.querySelectorAll('.dp-list > li.today-row').forEach((li) => {
     const tick = li.querySelector('.today-tick');
     if (!tick) return;
     map.set(tick.dataset.key, tick.getAttribute('aria-pressed') === 'true');
     tops.set(tick.dataset.key, li.getBoundingClientRect().top - base);
+    lis.set(tick.dataset.key, li);
+    heights.set(tick.dataset.key, li.getBoundingClientRect().height);
   });
-  return { day: panel.dataset.day || '', map, tops };
+  return { day: panel.dataset.day || '', map, tops, lis, heights };
 }
+
+/* ---- round-2 fixes (the fixer's block): the last box of a note ticked on Today. The note is done, so the draw that follows
+   has no row for it: the row the finger ticked comes back as a ghost where it was (aria-hidden, not tappable), its tick
+   and strike play on to the end, then it fades away while the rows under it, and everything below the list (Upcoming,
+   the sections after), slide up into its place together: nothing goes blank and nothing overlaps. */
+const GHOST_FADE = 300;   // ms after the tap the ghost starts to fade (the tick has been seen)
+function leaveRows(panel, before, keys, elapsed) {
+  if (!HAS_WAAPI || calm() || !keys.length) return;
+  const list = panel.querySelector('.dp-list') || panel.querySelector('.dp-none');
+  if (!list) return;
+  const base = panel.getBoundingClientRect().top;
+  const listTop = list.getBoundingClientRect().top - base;
+  let lost = 0;
+  for (const key of keys) {
+    const old = before.lis && before.lis.get(key);
+    if (!old) continue;
+    const height = (before.heights && before.heights.get(key)) || 0;
+    const ghost = old.cloneNode(true);
+    ghost.classList.add('g-ghost-row');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.inert = true;
+    const tick = ghost.querySelector('.today-tick');
+    if (tick) tick.setAttribute('aria-pressed', 'true');
+    Object.assign(ghost.style, { position: 'absolute', left: '0', right: '0', top: `${(before.tops.get(key) || 0) - listTop}px`, pointerEvents: 'none', margin: '0', zIndex: '1' });
+    if (getComputedStyle(list).position === 'static') list.style.position = 'relative';
+    list.appendChild(ghost);
+    lost += height;
+    playTick(ghost, true, elapsed, false);
+    const quick = lite();
+    const fade = animate(ghost, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.97)' }],
+      { duration: quick ? 160 : 260, delay: (quick ? 120 : GHOST_FADE) - elapsed, easing: EASE, fill: 'forwards' });
+    const gone = () => ghost.remove();
+    if (fade) fade.finished.then(gone, gone); else gone();
+    later(gone, 1200);
+  }
+  if (!lost) return;
+  // (what comes after the list moves up with the rows, from where it was: the list is `lost` px shorter now)
+  const after = [];
+  for (let el = list.nextElementSibling; el; el = el.nextElementSibling) after.push(el);
+  for (let el = panel.nextElementSibling; el; el = el.nextElementSibling) after.push(el);
+  after.filter((el) => el.getClientRects().length).slice(0, 12).forEach((el) => {
+    animate(el, [{ transform: `translateY(${lost}px)` }, { transform: 'none' }],
+      { duration: lite() ? 200 : 460, delay: (lite() ? 150 : 370) - elapsed, easing: SLIDE, fill: 'backwards' });
+  });
+}
+/* ---- end of the round-2 fixes block */
 const openLeft = (state) => [...state.map.values()].filter((done) => !done).length;
 
 /* "All done for today": under the list, with the thread, once nothing is left on today's list. */
@@ -420,13 +470,18 @@ function decoratePanel(panel, mode = {}) {
   if (before && before.day === state.day && !mode.opening && !mode.picked) {
     const changed = [...state.map].filter(([key, done]) => before.map.has(key) && before.map.get(key) !== done);
     // (a to-do that was the last box of its note takes the note off today's list: it was ticked, and it has gone)
-    const gone = [...before.map].filter(([key, done]) => !done && !state.map.has(key));
+    // (round-2 fix: also a row already shown ticked, whose note went a moment later: the same tick, going)
+    const gone = [...before.map].filter(([key, done]) => !state.map.has(key)
+      && (!done || (pending && pending.key === key) || (moment && moment.changed.some(([k]) => k === key))));
     if (changed.length || gone.length) {
       const mine = !!pending && (changed.some(([key, done]) => pending.key === key && pending.to === done) || (gone.length && pending.to && before.map.has(pending.key) && !state.map.has(pending.key)));
       const ticked = changed.some(([, done]) => done) || gone.length > 0;
       const justDone = panel.classList.contains('is-today') && !openLeft(state) && openLeft(before) > 0 && ticked;
       if (mine) clearTimeout(pending.timer);
-      moment = { t0: mine ? pending.t0 : now(), day: state.day, changed, tops: before.tops, justDone, mine };
+      const t0 = mine ? pending.t0 : moment && gone.some(([key]) => moment.changed.some(([k]) => k === key)) ? moment.t0 : now();
+      // (the rows that left, kept with the moment: a draw that follows plays their leaving on from where it had got to)
+      const leaving = gone.length ? { keys: gone.map(([key]) => key), lis: before.lis, tops: before.tops, heights: before.heights } : moment && moment.day === state.day ? moment.leaving : null;
+      moment = { t0, day: state.day, changed, tops: before.tops, justDone, mine, leaving };
       if (mine) pending = null;
       first = true;
     }
@@ -442,6 +497,7 @@ function decoratePanel(panel, mode = {}) {
       playTick(tick.closest('li'), done, elapsed, false);
     }
     slideRows(panel, moment.tops, elapsed);
+    if (moment.leaving) leaveRows(panel, moment.leaving, moment.leaving.keys, elapsed);
     if (moment.justDone) finishedDay = state.day;
     allDone(panel, state, moment.justDone, elapsed);
     if (moment.justDone) { if (first) edge('done'); glowLine(elapsed); }

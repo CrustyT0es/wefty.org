@@ -130,6 +130,15 @@ V.toast = function toast(text, options = {}) {
       return undefined;
     } catch (error) { console.error(error); }
   }
+  // ---- round-2 fixes (the fixer's block): the same words again (two to-dos ticked quickly: "Nice, done." twice) take the
+  // place of the toast already showing them, so there is one toast, and its Undo is the latest one's
+  if (on() && typeof text === 'string') {
+    const box = document.getElementById('toasts');
+    const same = box ? [...box.querySelectorAll(':scope > .toast:not(.leaving):not(.msg-card)')]
+      .filter((t) => { const words = t.querySelector(':scope > span'); return words && words.textContent === text; }) : [];
+    same.forEach((t) => t.remove());
+  }
+  // ---- end of the round-2 fixes block
   return plainToast.call(this, text, options);
 };
 
