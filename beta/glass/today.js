@@ -624,9 +624,16 @@ function pullToSync(p) {
   if (pullHandle) { pullHandle.destroy(); pullHandle = null; }
   const m = motion();
   if (!m || !view || (V.wide && V.wide())) return;  // (a pull is for a finger: a wide screen has none)
+  // (the same glass pill and the same sync as every screen's pull: glass/shell.js)
+  if (!view.querySelector(':scope > .g-pull-hint')) {
+    const pill = document.createElement('div');
+    pill.className = 'g-pull-hint g-pull-pill';
+    pill.setAttribute('aria-hidden', 'true');
+    view.insertBefore(pill, view.firstChild);
+  }
   pullHandle = m.pull(view, {
     wrap: p,
-    onRelease: () => {
+    onRelease: (over) => {
       // (Today isn't drawn again while the pull is open: its thread is where the finger left it)
       if (!hold) {
         hold = document.createElement('span');
@@ -637,11 +644,9 @@ function pullToSync(p) {
       const done = () => {
         later(() => { if (hold) { hold.remove(); hold = null; } }, 1400);
       };
-      let result = null;
-      try { result = V.cloud && V.cloud.sync ? V.cloud.sync() : null; } catch (error) { result = null; }
-      const finish = Promise.resolve(result).catch(() => {});
-      finish.then(done);
-      return finish;
+      const sync = V.glass && V.glass.syncNow ? V.glass.syncNow()
+        : Promise.resolve(V.cloud && V.cloud.sync ? V.cloud.sync() : null).then(() => 'synced', () => 'error');
+      sync.then((how) => { done(); over(how); });
     },
   });
 }

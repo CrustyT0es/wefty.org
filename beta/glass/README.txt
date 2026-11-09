@@ -127,3 +127,26 @@ Added after the owner's first look at the preview (the 2.0 hotfix)
   - A menu closes when Back is pressed, the tab changes, or the thing it was opened from goes (glass/overlays.js).
   - Today's rows move by one plan (glass/today.js moveRows): a row that changes place fades out, the others slide, it fades
     in where it now is; no two rows ever cross, and a row's copy is made only for its own moment.
+  Part 2 (tests/test_wefty_20_hotfix2.py):
+  - Words sent fly (glass/send.js): Chat's box and Share's Send box. In the tap, before the app draws anything, a copy of
+    the words is lifted where they are and the bubble or row they go to is held invisible by one style rule (#g-fly-rules),
+    so the two are never seen apart; the copy flies into the place and the bubble forms round it; words that go back to the
+    box (nothing to send them with) land back there. Calm: the bubble fades in.
+  - Share (glass/share.js): the switch's pill slides between parts, the part tapped comes in from its side (a copy of the
+    one left goes the other way), the tray's pictures spring in and shrink away, new rows rise.
+  - Notes' search (glass/notes.js, "a phone's search"): the top row is always "Notes", a glass search circle, the ⋯ and the
+    picture (a size container makes room at 320 px with bigger text). The search row is exactly as tall as the title row and
+    the "Try" pills as the chips, so the list never moves; while it opens the two rows are on the screen together (.gn-morphing)
+    and a capsule of glass (.gn-morph: two round ends and a stretched middle, transform only) grows from the circle into the
+    field, from the frame of the tap (startNow), and shrinks back into it. Calm: a crossfade.
+  - Pull to sync everywhere (glass/shell.js syncNow and pullSync on V.motion.pull): Today and Notes on their scrollers,
+    the shell on Share's parts, the Chat list and Settings; one sync at a time (a pull during one shows its spinner), a
+    screen drawn again keeps its pill (handle.refresh). Never in a conversation, under a sheet, or in classic.
+  - Fluid pull-outs: a sheet follows the finger one to one, is held by a band above where it is open (V.motion.rubber), and
+    is let go by distance or speed (a finger held still has none); caught while it opens or springs back it is taken from
+    where it is (V.motion.current), and it springs back from there with the finger's speed (V.motion.spring: a sampled spring,
+    stiffness 520, damping 36). Sheets are opaque glass (--g-sheet: no backdrop blur to work out while they move) and open
+    with a little overshoot (--g-sheet-spring); a menu's copy fades and shrinks away quicker than it came (.g-menu-going).
+  - The phone's status bar (theme-color) is the aurora's top colour in glass (by time of day, light or dark, black in Pure
+    black, a note's own top while one is open on a phone), and js/theme.js's own again when the look is off. Only the real
+    phone shows the bars.

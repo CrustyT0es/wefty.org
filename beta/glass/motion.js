@@ -349,7 +349,7 @@ function swipe(el, { left = null, right = null, onCommit, threshold = 80, max = 
   };
   const down = (event) => {
     if (event.button > 0 || g || flying) return;
-    g = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: 'wait', dx: 0, armed: false, dir: '' };
+    g = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: 'wait', dx: 0, armed: false, dir: '', last: [] };
   };
   const move = (event) => {
     if (!g || event.pointerId !== g.id) return;
@@ -371,6 +371,8 @@ function swipe(el, { left = null, right = null, onCommit, threshold = 80, max = 
     const reach = enabled ? Math.abs(dx) : Math.min(Math.abs(dx), 14) * 0.3;
     const x = (reach <= max ? reach : max + (reach - max) * 0.3) * (dx >= 0 ? 1 : -1);
     g.dx = x;
+    g.last.push([performance.now(), x]);
+    if (g.last.length > 5) g.last.shift();
     const c = moving();
     if (c) c.style.transform = `translateX(${x.toFixed(1)}px)`;
     if (g.dir !== wanted) { g.dir = wanted; el.setAttribute('data-dir', wanted === 'right' ? 'r' : 'l'); }
@@ -383,6 +385,10 @@ function swipe(el, { left = null, right = null, onCommit, threshold = 80, max = 
     const was = g;
     g = null;
     if (was.mode !== 'swipe') return;
+    // (2.0 hotfix: a quick flick counts as well as a long swipe: past a third of the way at more than .65 px a millisecond)
+    const a = was.last[0], b = was.last[was.last.length - 1];
+    const fast = b && performance.now() - b[0] <= 90 && a && b[0] > a[0] ? (b[1] - a[1]) / (b[0] - a[0]) : 0;  // (held still: none)
+    if (!was.armed && !cancelled && sides[was.dir] && Math.abs(was.dx) >= threshold / 3 && Math.abs(fast) > 0.65 && Math.sign(fast) === Math.sign(was.dx)) was.armed = true;
     // The click that ends a swipe is not a tap. It is swallowed until it has come (a touch's synthesized click arrives a
     // little after the finger lifts) or 350 ms have gone, whichever is first.
     const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); drop(); };
@@ -445,12 +451,21 @@ function swipe(el, { left = null, right = null, onCommit, threshold = 80, max = 
    armed; letting go then calls onRelease(), holds at 44 px until what it returns settles (or its done() is called),
    then springs back. Less than that springs back at once. Touch uses touch events (a page scroll must stay possible) and
    a mouse uses pointer events. Returns { destroy() }. */
-function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } = {}) {
+/* (the 2.0 hotfix: a pull only from the screen itself: never from a text field, never under something open over it, never
+   after a long press (the finger held still: its menu wins), and a quick flick counts as well as a long pull; a pull made
+   again while the last one is going back starts from where it is; calm moves nothing, the pill only fades; `allow(target)`
+   can refuse one, and `over('offline')` or any key of `labels` says how the sync went.) */
+const PULL_TEXT = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=checkbox]):not([type=radio])'
+  + ':not([type=button]):not([type=submit]):not([type=reset]):not([type=range]):not([type=color]):not([type=file]):not([type=image])';
+const PULL_LONG = 420;  // ms a finger held still before it pulls is a long press, not a pull
+const coveredNow = () => !!document.querySelector('#layers > :not(.nt-strip):not(.coach), .editor-layer.shown');
+function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {}, allow = null } = {}) {
   if (!scroller) return { destroy() {} };
-  const words = { pull: 'Pull to sync', ready: 'Let go to sync', syncing: 'Syncing...', synced: 'Synced', ...labels };
+  const words = { pull: 'Pull to sync', ready: 'Let go to sync', syncing: 'Syncing...', synced: 'Synced', offline: 'You\'re offline', error: 'Couldn\'t sync', ...labels };
   // (the content that follows the finger is the first child that is not the hint or the screen-reader line)
   let hint = scroller.querySelector(':scope > .g-pull-hint');
-  const body = () => wrap || [...scroller.children].find((child) => child !== hint && !child.classList.contains('sr-only')) || null;
+  // (`wrap` may be a function: a screen drawn afresh while a sync runs has new content, which is held where the old was)
+  const body = () => (typeof wrap === 'function' ? wrap() : wrap) || [...scroller.children].find((child) => child !== hint && !child.classList.contains('sr-only')) || null;
   const madeHint = !hint;
   if (!hint) {
     hint = document.createElement('div');
@@ -465,42 +480,71 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } 
   let drag = null;
   let busy = false;
   let phase = '';
-  const say = (key) => { hint.textContent = words[key] || ''; };
+  let shownAt = 0;  // where the content is held now (the pill's room while it syncs)
+  // (a screen drawn afresh takes its children away, the pill and the status line with them: they are put back)
+  const ensure = () => {
+    if (!hint.isConnected) scroller.insertBefore(hint, scroller.firstChild);
+    if (!status.isConnected) scroller.appendChild(status);
+  };
+  const say = (key) => { ensure(); hint.textContent = words[key] || ''; };
   const set = (y, instant) => {
+    shownAt = y;
+    ensure();
     const target = body();
     if (!target) return;
+    // (calm: nothing travels; the pill only fades in and out)
     target.style.transition = instant ? 'none' : `transform ${quick() ? '.2s ease' : `.5s ${SLIDE}`}`;
-    target.style.transform = y ? `translate3d(0,${y.toFixed(1)}px,0)` : '';
+    target.style.transform = y && !calm() ? `translate3d(0,${y.toFixed(1)}px,0)` : '';
+    target.style.willChange = instant && y ? 'transform' : '';
     hint.style.transition = instant ? 'none' : 'opacity .2s ease';
     hint.style.opacity = String(Math.min(1, y / 36));
   };
+  // (where the content is now, a pull going back included: a new pull goes on from there, never from the top)
+  const nowAt = () => {
+    const target = body();
+    if (!target || !target.style.transform) return 0;
+    try { return Math.max(0, new DOMMatrixReadOnly(getComputedStyle(target).transform).m42); } catch (error) { return 0; }
+  };
+  const band = (d) => 120 * (1 - Math.exp(-Math.max(0, d - 6) / 190));
+  const unband = (p) => (p <= 0 ? 0 : 6 - 190 * Math.log(1 - Math.min(p, 119) / 120));
+  let settling = 0;
   const settleBack = () => {
     set(0, false);
     const target = body();
-    setTimeout(() => {
+    clearTimeout(settling);
+    settling = setTimeout(() => {
       if (target) { target.style.transition = ''; target.style.transform = ''; }
       hint.style.opacity = ''; hint.style.transition = '';
       busy = false; phase = ''; status.textContent = '';
       scroller.removeAttribute('data-phase');
     }, quick() ? 220 : 520);
   };
-  const begin = (x, y, pointerId) => {
-    if (busy || scroller.scrollTop > 0) return false;
-    drag = { x, y, on: false, p: 0, pointerId };
+  const begin = (x, y, pointerId, target) => {
+    if (busy || scroller.scrollTop > 0 || coveredNow()) return false;
+    if (target && target.closest && target.closest(PULL_TEXT)) return false;
+    if (allow && !allow(target)) return false;
+    drag = { x, y, on: false, p: 0, pointerId, t: performance.now(), from: unband(nowAt()), last: [] };
     return true;
   };
   const track = (x, y) => {
     if (!drag) return false;
-    const dy = y - drag.y, dx = x - drag.x;
+    const dy = y - drag.y + drag.from, dx = x - drag.x;
     if (!drag.on) {
-      if (dy < -4 || Math.abs(dx) > Math.max(8, dy)) { drag = null; return false; }
-      if (dy < 6 || scroller.scrollTop > 0) return false;
+      if (y - drag.y < -4 || Math.abs(dx) > Math.max(8, y - drag.y)) { drag = null; return false; }
+      if ((y - drag.y < 6 && !drag.from) || scroller.scrollTop > 0) return false;
+      // (held still first: a long press, whose menu wins)
+      if (!drag.from && performance.now() - drag.t > PULL_LONG) { drag = null; return false; }
       drag.on = true;
+      clearTimeout(settling);
+      const target = body();
+      if (target) { target.style.transition = 'none'; }
       // (the mouse is captured only once it is really pulling: a plain click on a button inside must still reach the button)
       if (drag.pointerId !== undefined) { try { scroller.setPointerCapture(drag.pointerId); } catch (error) { /* fine without */ } }
     }
-    const p = 120 * (1 - Math.exp(-Math.max(0, dy - 6) / 190));
+    const p = band(dy);
     drag.p = p;
+    drag.last.push([performance.now(), p]);
+    if (drag.last.length > 5) drag.last.shift();
     set(p, true);
     const next = p >= threshold ? 'ready' : 'pull';
     if (next !== phase) { phase = next; say(next); scroller.setAttribute('data-phase', next); if (next === 'ready') buzz(8); }
@@ -510,7 +554,12 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } 
     const d = drag;
     drag = null;
     if (!d || !d.on) return;
-    if (d.p >= threshold && onRelease && !busy) {
+    // (a quick flick down counts too: past half the mark at more than half a pixel a millisecond)
+    const a = d.last[0], b = d.last[d.last.length - 1];
+    const still = !b || performance.now() - b[0] > 90;  // (held still before letting go: no flick)
+    const speed = !still && a && b[0] > a[0] ? (b[1] - a[1]) / (b[0] - a[0]) : 0;
+    const armed = d.p >= threshold || (speed > 0.5 && d.p >= threshold * 0.5);
+    if (armed && onRelease && !busy) {
       busy = true;
       say('syncing'); status.textContent = words.syncing; scroller.setAttribute('data-phase', 'syncing');
       set(44, false);
@@ -518,9 +567,10 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } 
       const over = (ok) => {
         if (ended) return;
         ended = true;
-        say(ok === false ? 'pull' : 'synced'); status.textContent = ok === false ? '' : words.synced;
-        scroller.setAttribute('data-phase', ok === false ? '' : 'synced');
-        setTimeout(settleBack, quick() ? 250 : 650);
+        const key = ok === false ? 'pull' : typeof ok === 'string' && words[ok] ? ok : 'synced';
+        say(key); status.textContent = key === 'pull' ? '' : words[key];
+        scroller.setAttribute('data-phase', key === 'pull' ? '' : key);
+        setTimeout(settleBack, quick() ? 250 : key === 'synced' || key === 'pull' ? 650 : 1400);
       };
       let result;
       try { result = onRelease(over); } catch (error) { over(false); return; }
@@ -532,7 +582,7 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } 
   // (the mouse is captured once it pulls, so letting go outside the scroller still ends the pull)
   const pdown = (event) => {
     if (event.pointerType === 'touch' || event.button !== 0) return;
-    begin(event.clientX, event.clientY, event.pointerId);
+    begin(event.clientX, event.clientY, event.pointerId, event.target);
   };
   const pmove = (event) => { if (event.pointerType !== 'touch') track(event.clientX, event.clientY); };
   const pup = (event) => {
@@ -541,7 +591,10 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } 
     release();
   };
   // ... and a finger (touch events, which can stop the page scrolling while the pull is on)
-  const tstart = (event) => { if (event.touches.length === 1) begin(event.touches[0].clientX, event.touches[0].clientY); };
+  const tstart = (event) => {
+    if (event.touches.length === 1) begin(event.touches[0].clientX, event.touches[0].clientY, undefined, event.target);
+    else drag = null;  // (a second finger: a pinch, never a pull)
+  };
   const tmove = (event) => {
     if (!event.touches.length) return;
     if (track(event.touches[0].clientX, event.touches[0].clientY) && event.cancelable) event.preventDefault();
@@ -557,6 +610,11 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } 
   scroller.addEventListener('touchend', tend);
   scroller.addEventListener('touchcancel', tend);
   return {
+    /* The screen was drawn again: the pill is put back, and while it syncs the new content is held where the old was. */
+    refresh() {
+      ensure();
+      if (busy && !drag && shownAt) { const target = body(); if (target) { target.style.transition = 'none'; target.style.transform = calm() ? '' : `translate3d(0,${shownAt.toFixed(1)}px,0)`; } }
+    },
     destroy() {
       for (const [type, fn] of [['pointerdown', pdown], ['pointermove', pmove], ['pointerup', pup], ['pointercancel', pup], ['lostpointercapture', pup], ['touchstart', tstart], ['touchmove', tmove], ['touchend', tend], ['touchcancel', tend]]) {
         scroller.removeEventListener(type, fn);
@@ -569,6 +627,73 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {} } 
     },
   };
 }
+
+/* ---------------------------------------------------------------- spring (the 2.0 hotfix: motion that feels physical)
+
+   spring(el, { from, to, velocity, axis, stiffness, damping, onDone }): `el` moves along `axis` ('y' or 'x', px) from `from` to
+   `to` as a real spring would (mass 1), starting at `velocity` px per ms (a finger's speed as it let go), sampled at 60 frames a
+   second into Web Animations keyframes: only transform moves, on the compositor. A spring started on an element that is still
+   moving takes over from where it is and how fast it goes (never from the start): current(el) and speed(el) say both.
+   Returns { cancel(), finished }. Calm: no travel, it is simply there. */
+const springs = new WeakMap();  // el -> { values, t0, axis, anim }
+function springFrames({ from, to, velocity = 0, stiffness = 520, damping = 36 }) {
+  const values = [from];
+  let x = from - to;
+  let v = velocity * 1000;  // px a second
+  const dt = 1 / 240;
+  let t = 0;
+  let still = 0;
+  while (t < 2.5) {
+    for (let i = 0; i < 4; i++) { const a = -stiffness * x - damping * v; v += a * dt; x += v * dt; t += dt; }
+    values.push(to + x);
+    still = Math.abs(x) < 0.4 && Math.abs(v) < 8 ? still + 1 : 0;
+    if (still >= 3) break;
+  }
+  values[values.length - 1] = to;
+  return values;
+}
+const axisOf = (axis, value) => (axis === 'x' ? `translate3d(${value.toFixed(2)}px,0,0)` : `translate3d(0,${value.toFixed(2)}px,0)`);
+function current(el, axis = 'y') {
+  if (!el) return 0;
+  try { const m = new DOMMatrixReadOnly(getComputedStyle(el).transform); return axis === 'x' ? m.m41 : m.m42; } catch (error) { return 0; }
+}
+/* How fast `el` is moving now (px per ms), when a spring of this file moves it. */
+function speed(el) {
+  const s = springs.get(el);
+  if (!s || !s.anim || s.anim.playState !== 'running') return 0;
+  const i = Math.max(1, Math.min(s.values.length - 1, Math.round((performance.now() - s.t0) / (1000 / 60))));
+  return (s.values[i] - s.values[i - 1]) / (1000 / 60);
+}
+function spring(el, { from, to = 0, velocity, axis = 'y', stiffness = 520, damping = 36, onDone = null } = {}) {
+  if (!el) return NOTHING();
+  const was = springs.get(el);
+  const start = from === undefined ? current(el, axis) : from;
+  const v = velocity === undefined ? speed(el) : velocity;
+  if (was && was.anim) { try { was.anim.cancel(); } catch (error) { /* gone */ } }
+  springs.delete(el);
+  if (calm() || !HAS_WAAPI) {
+    el.style.transform = to ? axisOf(axis, to) : '';
+    if (onDone) onDone();
+    return NOTHING();
+  }
+  const values = springFrames({ from: start, to, velocity: v, stiffness: lite() ? stiffness * 1.6 : stiffness, damping: lite() ? damping * 1.3 : damping });
+  el.style.transform = to ? axisOf(axis, to) : '';  // (where it ends: the animation plays over it, and leaves it there)
+  let anim = null;
+  try {
+    anim = el.animate(values.map((value) => ({ transform: axisOf(axis, value) })), { duration: (values.length - 1) * (1000 / 60), easing: 'linear' });
+  } catch (error) { anim = null; }
+  if (!anim) { if (onDone) onDone(); return NOTHING(); }
+  const state = { values, t0: performance.now(), axis, anim };
+  springs.set(el, state);
+  el.style.willChange = 'transform';
+  const end = () => {
+    if (springs.get(el) === state) { springs.delete(el); el.style.willChange = ''; if (onDone) onDone(); }
+  };
+  anim.finished.then(end, () => { if (springs.get(el) === state) { springs.delete(el); el.style.willChange = ''; } });
+  return { cancel() { try { anim.cancel(); } catch (error) { /* gone */ } }, finished: anim.finished.catch(() => {}) };
+}
+/* A rubber band past an edge: `over` px pulled give `band(over)` px of movement, less and less. */
+const rubber = (over, room = 90) => (over <= 0 ? 0 : room * (1 - 1 / (over * 0.55 / room + 1)));
 
 /* ---------------------------------------------------------------- peek */
 
@@ -731,5 +856,5 @@ function watch(seconds = 5) {
   requestAnimationFrame(tick);
 }
 
-V.motion = { enter, press, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, EASE, SLIDE, SPRING };
+V.motion = { enter, press, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, spring, current, speed, rubber, springFrames, EASE, SLIDE, SPRING };
 })();

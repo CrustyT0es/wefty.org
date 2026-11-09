@@ -150,9 +150,56 @@ V.menu = function menu(anchor, items, options) {
   if (on() && handle && handle.el && handle.el.isConnected) {
     try { pop(handle.el, anchor, options || {}); } catch (error) { console.error(error); }
     openMenus.add({ handle, anchor });
+    goesSoftly(handle.el);
   }
   return handle;
 };
+
+/* ---- the 2.0 hotfix: a menu that closes goes quickly and softly from where it is (it shrinks a little towards where it came
+   from and fades, 130 ms, quicker than it came) instead of vanishing; another menu opened meanwhile pops at once beside it.
+   What goes is a copy in the menu's own look (its colours, corners and rows read from it as it closes), never the menu: the
+   real one is gone at once, so nothing can be pressed on it, and nothing looks for it. */
+const MENU_LOOK = ['backgroundColor', 'backgroundImage', 'borderRadius', 'boxShadow', 'padding', 'color', 'font', 'transformOrigin'];
+const ITEM_LOOK = ['display', 'alignItems', 'justifyContent', 'gap', 'padding', 'minHeight', 'height', 'width', 'boxSizing', 'font',
+  'color', 'borderRadius', 'backgroundColor', 'textAlign', 'whiteSpace', 'margin', 'opacity'];
+function copyLook(from, to, props) {
+  const style = getComputedStyle(from);
+  for (const prop of props) to.style[prop] = style[prop];
+}
+function goesSoftly(list) {
+  const wrap = list && list.parentElement;
+  if (!wrap || wrap.dataset.gSoft) return;
+  wrap.dataset.gSoft = '1';
+  const remove = wrap.remove.bind(wrap);
+  wrap.remove = () => {
+    try { if (on() && !calm() && HAS_WAAPI && list.isConnected && list.getClientRects().length) leaving(list); } catch (error) { /* it simply goes */ }
+    remove();
+  };
+}
+function leaving(list) {
+  const z = list.offsetWidth ? list.getBoundingClientRect().width / list.offsetWidth || 1 : 1;
+  const r = list.getBoundingClientRect();
+  const copy = document.createElement('div');
+  copy.className = 'g-menu-going';
+  copy.setAttribute('aria-hidden', 'true');
+  copy.inert = true;
+  copyLook(list, copy, MENU_LOOK);
+  Object.assign(copy.style, { position: 'fixed', left: `${r.left / z}px`, top: `${r.top / z}px`, width: `${r.width / z}px`,
+    height: `${r.height / z}px`, margin: '0', zIndex: '61', pointerEvents: 'none', overflow: 'hidden', boxSizing: 'border-box' });
+  for (const child of list.children) {
+    const row = document.createElement('div');
+    copyLook(child, row, ITEM_LOOK);
+    for (const part of child.childNodes) row.appendChild(part.cloneNode(true));
+    row.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+    copy.appendChild(row);
+  }
+  document.body.appendChild(copy);
+  const gone = () => copy.remove();
+  const a = play(copy, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }],
+    { duration: lite() ? 90 : 130, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }, 'leave');
+  if (a) a.finished.then(gone, gone); else gone();
+  setTimeout(gone, 400);
+}
 
 /* ---- the 2.0 hotfix (the owner's first look: a note's ⋯ menu left open over the Chat list). A menu never outlives the
    screen it was opened on: Back (a phone's Back closes a full-screen note under its ⋯ menu) and a tab switch close every
@@ -242,7 +289,7 @@ function pullDown(layer, sheet, grab) {
   };
   const down = (event) => {
     if (g || !on() || !phone() || (event.pointerType === 'mouse' && event.button > 0)) return;
-    g = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: 'wait', dy: 0, last: [] };
+    g = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: 'wait', base: 0, at: 0, from: 0, last: [] };
   };
   const move = (event) => {
     if (!g || event.pointerId !== g.id) return;
@@ -252,15 +299,23 @@ function pullDown(layer, sheet, grab) {
       if (Math.abs(dx) > Math.abs(dy)) { g.mode = 'none'; return; }
       g.mode = 'drag';
       try { event.currentTarget.setPointerCapture(event.pointerId); } catch (error) { /* fine without */ }
+      // (2.0 hotfix) Taken from wherever it is now: still rising, or springing back from the last pull. Never from its open
+      // place, so it never jumps under the finger.
+      const at = V.motion && V.motion.current ? V.motion.current(sheet) : 0;
+      for (const a of sheet.getAnimations()) { try { a.cancel(); } catch (error) { /* gone */ } }
       sheet.classList.add('g-dragging');
       sheet.style.transition = 'none';
+      sheet.style.transform = `translateY(${at.toFixed(1)}px)`;
+      g.base = Math.abs(at) < 1 ? 0 : at - dy;  // (at rest: one to one from where the finger went down)
+      g.from = Math.max(0, at);
     }
     if (g.mode !== 'drag') return;
-    g.dy = dy;
-    // up: a little give, as if the sheet is held by a band; down: with the finger
-    const y = dy >= 0 ? dy : -Math.min(14, Math.sqrt(-dy) * 2.2);
+    // down: with the finger, one to one; up past where it is open: held by a band, less and less
+    const raw = g.base + dy;
+    const y = raw >= 0 ? raw : -(V.motion && V.motion.rubber ? V.motion.rubber(-raw, 70) : Math.min(14, Math.sqrt(-raw) * 2.2));
+    g.at = y;
     sheet.style.transform = `translateY(${y.toFixed(1)}px)`;
-    g.last.push([performance.now(), dy]);
+    g.last.push([performance.now(), raw]);
     if (g.last.length > 6) g.last.shift();
   };
   const end = (event, cancelled) => {
@@ -275,18 +330,31 @@ function pullDown(layer, sheet, grab) {
     window.addEventListener('click', swallow, true);
     setTimeout(() => { if (swallow) drop(); }, 350);
     const first = was.last[0], last = was.last[was.last.length - 1];
-    const speed = first && last && last[0] > first[0] ? (last[1] - first[1]) / (last[0] - first[0]) : 0;  // px per ms
+    // (px per ms; a finger held still before it lifts has none left)
+    const still = !last || performance.now() - last[0] > 90;
+    const speed = !still && first && last[0] > first[0] ? (last[1] - first[1]) / (last[0] - first[0]) : 0;
     const far = Math.min(150, sheet.offsetHeight * 0.3);
-    if (!cancelled && (was.dy > far || (speed > 0.55 && was.dy > 28))) {
-      sheet.style.transition = `transform ${quick() ? '.12s' : '.22s'} ${EXIT}`;
-      sheet.style.transform = `translateY(${layer.clientHeight}px)`;
+    const pulled = was.at - was.from;  // (caught on its way up and let go: it carries on up unless it was pulled down)
+    // A flick down (however short), or a pull past a third: it goes, at least as fast as the finger was going. Else it
+    // springs back from where it is, with the finger's speed.
+    if (!cancelled && ((was.at > far && pulled > 24) || (speed > 0.45 && was.at > 20 && pulled > 0))) {
+      const to = layer.clientHeight;
+      const ms = Math.max(110, Math.min(170, (to - was.at) / Math.max(speed, 1.2)));
+      if (!quick()) {
+        try { sheet.animate([{ transform: `translateY(${was.at.toFixed(1)}px)` }, { transform: `translateY(${to}px)` }], { duration: ms, easing: 'cubic-bezier(.25,.6,.45,1)', fill: 'forwards' }); } catch (error) { /* plain */ }
+      }
+      sheet.style.transform = `translateY(${to}px)`;
       layer.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));  // (V.sheet closes on a press on its scrim)
       setTimeout(() => {
-        if (layer.isConnected && !layer.classList.contains('leaving')) back();
+        if (layer.isConnected && !layer.classList.contains('leaving')) back(0);
       }, 80);
-    } else back();
+    } else back(cancelled ? 0 : speed);
   };
-  function back() {
+  function back(speed) {
+    if (V.motion && V.motion.spring && !quick()) {
+      V.motion.spring(sheet, { from: V.motion.current(sheet), to: 0, velocity: speed, onDone: settle });
+      return;
+    }
     sheet.style.transition = quick() ? 'transform .14s ease-out' : `transform .46s ${SLIDE}`;
     sheet.style.transform = 'translateY(0px)';
     setTimeout(settle, quick() ? 160 : 500);
@@ -408,6 +476,12 @@ function start() {
     for (const record of records) {
       for (const node of record.addedNodes) {
         if (node.nodeType !== 1) continue;
+        // (2.0 hotfix: the note-taker's bar comes down from the top as it appears, a soft spring; calm: it fades in)
+        if (record.target === layers && node.classList.contains('nt-strip')) {
+          play(node, calm() ? [{ opacity: 0 }, { opacity: 1 }] : [{ transform: 'translateY(-100%)', opacity: 0.4 }, { transform: 'none', opacity: 1 }],
+            { duration: calm() ? 120 : lite() ? 180 : 420, easing: calm() ? 'linear' : SLIDE }, 'strip');
+          continue;
+        }
         if (record.target === layers) decorate(node);
         else {
           if (node.classList.contains('segmented')) segmented(node);

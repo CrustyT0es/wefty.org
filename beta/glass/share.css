@@ -261,6 +261,20 @@ html[data-look="glass"] .files-list { border-radius: 20px; background: var(--g-f
 html[data-look="glass"] .files-row { border-bottom-color: var(--g-hair, var(--line-soft)); }
 html[data-look="glass"] .files-roots .chip, html[data-look="glass"] .files-crumb { border-radius: 12px; }
 
+/* ================================================================== the 2.0 hotfix: the switch's pill slides (glass/share.js)
+
+   The part shown is lit by one pill behind the buttons (the same look the picked button had), so it can slide from the part
+   left to the part tapped; the picked button itself carries no fill while the pill is there. */
+html[data-look="glass"] .segmented.share-switch.g-pilled { position: relative; }
+html[data-look="glass"] .share-switch.g-pilled > button { position: relative; z-index: 1; }
+html[data-look="glass"] .share-switch.g-pilled > button[aria-selected="true"] { background: transparent; box-shadow: none; }
+html[data-look="glass"] .g-share-pill {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; border-radius: 13px; background: var(--selected);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 4px 12px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .4));
+}
+/* (a copy of the part left, going: under the app, never touched) */
+html[data-look="glass"] .g-share-ghost { padding-bottom: 0; }
+
 /* ================================================================== lite and calm */
 
 /* Lite: no sheen and no lift layers. Calm: nothing moves, so a press and a hover change no size. */

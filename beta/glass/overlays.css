@@ -32,6 +32,25 @@ html[data-look="glass"] .sheet {
   box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 -18px 50px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .55));
 }
 html[data-look="glass"][data-black] .sheet { background: light-dark(rgba(250, 247, 255, .9), rgba(14, 11, 26, .9)); }
+/* ---- the 2.0 hotfix (the owner: "for pullouts and stuff they don't feel insanely fluid"). A sheet is opaque glass: nothing of the
+   page shows through it (the scrim dims what is behind), and with no backdrop blur there is nothing to work out again in each
+   frame while it rises, is dragged or goes. It rises on a real spring (stiffness 520, damping 36: a touch past, then still),
+   goes quicker than it came, and a pull on it is taken over from wherever it is (glass/overlays.js, V.motion.spring). On a
+   phone a filler of its own colour under it covers the touch past the top. */
+html[data-look="glass"] {
+  --g-sheet: light-dark(rgb(250, 247, 255), rgb(30, 22, 58));
+  --g-sheet-spring: linear(0, 0.0766, 0.2216, 0.3858, 0.5413, 0.6746, 0.7812, 0.8617, 0.9195, 0.9588, 0.984, 0.999, 1.0069, 1.0102, 1.0108, 1.0099, 1.0083, 1.0065, 1.0048, 1.0034, 1.0023, 1.0014, 1.0008, 1.0004, 1.0002, 1, 1);
+}
+html[data-look="glass"][data-black] { --g-sheet: light-dark(rgb(250, 247, 255), rgb(14, 11, 26)); }
+html[data-look="glass"] .sheet { background: var(--g-sheet); -webkit-backdrop-filter: none; backdrop-filter: none; transition: transform .433s var(--g-sheet-spring); }
+html[data-look="glass"][data-black] .sheet { background: var(--g-sheet); }
+html[data-look="glass"] .layer.leaving .sheet { transition: transform .17s cubic-bezier(.4, 0, .9, .45); }
+@media (max-width: 699px) {
+  html[data-look="glass"] .sheet:not(.help-sheet) {
+    box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 -18px 50px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .55)), 0 48px 0 0 var(--g-sheet);
+  }
+}
+html[data-look="glass"].lite .sheet { background: var(--g-sheet); transition-duration: .2s; transition-timing-function: var(--g-ease); }
 html[data-look="glass"] .sheet::before { width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; }
 html[data-look="glass"] .sheet.g-dragging::before { background: light-dark(rgba(110, 80, 200, .55), rgba(255, 255, 255, .5)); }
 html[data-look="glass"] .sheet-head h2 { font: 700 21px/28px var(--font-display, var(--font)); letter-spacing: -.02em; }

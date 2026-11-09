@@ -58,24 +58,28 @@ html[data-look="glass"][data-theme="dark"][data-black] {
   html[data-look="glass"] .list-column > .list-title { position: relative; min-height: 68px; padding-bottom: 24px; gap: 6px; }
   html[data-look="glass"] .list-title h1 { font: 700 28px/34px var(--font-display); letter-spacing: -.025em; }
   /* the thread under the row (the board's weft), drawn by its mask; glass/notes.js draws it in as Notes opens */
-  html[data-look="glass"] .list-column > .list-title::after {
+  html[data-look="glass"] .list-column > :is(.list-title, .list-head)::after {
     content: ""; position: absolute; left: 0; right: 12px; bottom: 5px; height: 12px; pointer-events: none; background: var(--gn-weft); opacity: .9;
     transform-origin: 0 50%;
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 C 15 1, 30 11, 45 6 S 75 1, 90 6 S 120 11, 135 6 S 165 1, 180 6 S 210 11, 225 6 S 255 1, 270 6 S 300 11, 315 6 S 345 1, 360 6' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 C 15 1, 30 11, 45 6 S 75 1, 90 6 S 120 11, 135 6 S 165 1, 180 6 S 210 11, 225 6 S 255 1, 270 6 S 300 11, 315 6 S 345 1, 360 6' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
   }
-  /* Search is a glass pill with its word where the row has room for it (glass/notes.js puts .gn-word on it after measuring),
-     the magnifier alone where it hasn't (a long folder name, a 320 px phone, bigger text); the ⋯ a round glass button */
+  /* Search and the ⋯ are round glass buttons, as on Today: one way the row looks, whatever the width (the owner's phone
+     showed "No..." beside a "Search" pill, then "Notes" and the circle once a search had closed). Where the row is short of
+     room (a 320 px phone with bigger text) the circles are 40 px and closer together, then the name gets a little smaller:
+     "Notes" is always whole. (The row is a size container for that: glass/notes.js measures nothing.) */
+  html[data-look="glass"] .list-column > .list-title { container: gn-title / inline-size; }
   html[data-look="glass"] .list-column > .list-title .list-tools { gap: 6px; }
   html[data-look="glass"] .list-title .list-tools .icon-btn {
     position: relative; width: 44px; height: 44px; border-radius: 22px; color: var(--text-2); background: var(--gn-chip-fill);
     box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--gn-chip-ring);
   }
-  html[data-look="glass"] .list-title .list-tools .notes-search.gn-word { width: 128px; justify-content: flex-start; gap: 8px; padding: 0 14px; display: flex; align-items: center; }
-  html[data-look="glass"] .list-title .list-tools .notes-search.gn-word::after {
-    content: "Search"; position: static; inset: auto; color: var(--muted); font: 400 15px/1 var(--font); white-space: nowrap;
+  html[data-look="glass"] .list-title .list-tools .notes-search .icon { flex: none; width: 20px; height: 20px; }
+  @container gn-title (max-width: 200px) {
+    html[data-look="glass"] .list-column > .list-title .list-tools { gap: 4px; }
+    html[data-look="glass"] .list-title .list-tools .icon-btn { width: 40px; height: 40px; margin-top: 2px; }  /* (44 to a finger: .icon-btn::after) */
+    html[data-look="glass"] .list-column > .list-title .title-line h1 { font-size: clamp(20px, calc((100cqi - 90px) / 2.65), 28px); }
   }
-  html[data-look="glass"] .list-title .list-tools .notes-search .icon { flex: none; width: 18px; height: 18px; }
   html[data-look="glass"] .list-title .list-tools .notes-more.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent-line); }
   html[data-look="glass"] .list-title .folder-up { border-radius: 15px; }
   html[data-look="glass"] .list-title .crumbs { margin-bottom: 2px; }
@@ -107,17 +111,45 @@ html[data-look="glass"] .filter-pill {
 }
 html[data-look="glass"] .filter-pill:active { transform: scale(.94); }
 @media (hover: hover) { html[data-look="glass"] .filter-pill:hover { background: var(--gn-chip-fill); color: var(--text); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong); } }
-html[data-look="glass"] .search-help:not([hidden]) > * { animation: gn-pill-in .36s var(--g-spring) backwards; }
-html[data-look="glass"] .search-help:not([hidden]) > :nth-child(2) { animation-delay: .03s; }
-html[data-look="glass"] .search-help:not([hidden]) > :nth-child(3) { animation-delay: .06s; }
-html[data-look="glass"] .search-help:not([hidden]) > :nth-child(4) { animation-delay: .09s; }
-html[data-look="glass"] .search-help:not([hidden]) > :nth-child(n+5) { animation-delay: .12s; }
+/* The "Try" pills come in as the row shows (wide: the box focused; a phone: glass/notes.js slides them down in with the field),
+   and only then: .gn-help-in is on for that moment, so they don't come in again at every letter typed (each draws them anew). */
+html[data-look="glass"] .search-help.gn-help-in:not([hidden]) > * { animation: gn-pill-in .36s var(--g-spring) backwards; }
+html[data-look="glass"] .search-help.gn-help-in:not([hidden]) > :nth-child(2) { animation-delay: .03s; }
+html[data-look="glass"] .search-help.gn-help-in:not([hidden]) > :nth-child(3) { animation-delay: .06s; }
+html[data-look="glass"] .search-help.gn-help-in:not([hidden]) > :nth-child(4) { animation-delay: .09s; }
+html[data-look="glass"] .search-help.gn-help-in:not([hidden]) > :nth-child(n+5) { animation-delay: .12s; }
 @keyframes gn-pill-in { from { opacity: 0; transform: translateY(6px) scale(.94); } }
 html[data-look="glass"] .search-found { color: var(--muted); }
 html[data-look="glass"] mark.hit { background: light-dark(rgba(124, 91, 224, .2), rgba(150, 108, 240, .38)); color: inherit; }
 @media (max-width: 899px) {
-  html[data-look="glass"] .list-column.searching > .list-head { gap: 6px; }
-  html[data-look="glass"] .filter-pill { height: 36px; }
+  /* A phone's search row takes the title row's place exactly: as tall (76 px and the notch), the same thread under it, the
+     field where the circle was; and the "Try" pills the chips' height. So the list never moves as search opens and closes
+     (glass/notes.js sets the two heights to the title row's and the chips' own as it opens: a folder's name with the
+     folders it's in above it is taller). The field grows out of the circle (glass/notes.js .gn-morph). */
+  html[data-look="glass"] .list-column > .list-head {
+    position: relative; align-items: flex-start; gap: 6px; padding: calc(8px + var(--safe-top)) 0 20px; min-height: calc(76px + var(--safe-top));
+  }
+  html[data-look="glass"] .list-column > .list-head > .search-back { margin-top: 2px; }
+  html[data-look="glass"] .list-column > .search-help { gap: 8px; padding: 8px 16px; min-height: calc(var(--gn-chip-h) + 16px); }
+  html[data-look="glass"] .filter-pill { height: var(--gn-chip-h); border-radius: calc(var(--gn-chip-h) / 2); padding: 0 15px; }
+  html[data-look="glass"] .filter-pill::after { inset: calc((44px - var(--gn-chip-h)) / -2) 0; }
+  /* While it grows (and shrinks back): the title row and the chips stay where they are, fading, with the search row over them */
+  html[data-look="glass"] .list-column.gn-morphing > :is(.list-title, .chips) { display: flex; }
+  html[data-look="glass"] .list-column.gn-morphing > .list-head { display: flex; position: absolute; z-index: 3; margin: 0; }
+  html[data-look="glass"] .list-column.gn-morphing > :is(.search-help, .gn-help-ghost) { position: absolute; z-index: 3; margin: 0; }
+  html[data-look="glass"] .list-column.gn-morphing > .gn-help-ghost { display: flex; pointer-events: none; }
+  html[data-look="glass"] .list-column.gn-morphing .notes-search { opacity: 0; }  /* (the capsule is it meanwhile; it keeps the keyboard's focus) */
+  html[data-look="glass"] .list-column.gn-morphing .search-box { position: relative; z-index: 1; }
+  html[data-look="glass"] .list-column .search-box.gn-bare { background: transparent; box-shadow: none; }
+  /* the glass that grows: two round ends and the middle between them (only moved and stretched, so it stays round) */
+  html[data-look="glass"] .gn-morph { position: absolute; z-index: 0; pointer-events: none; transform-origin: 0 0; }
+  html[data-look="glass"] .gn-morph > i {
+    position: absolute; top: 0; bottom: 0; box-sizing: border-box; background: var(--gn-chip-fill);
+    border: 1px solid var(--gn-chip-ring); border-top-color: light-dark(rgba(255, 255, 255, .9), rgba(255, 255, 255, .12));
+  }
+  html[data-look="glass"] .gn-morph > .gn-l { left: 0; border-right: 0; }
+  html[data-look="glass"] .gn-morph > .gn-m { border-left: 0; border-right: 0; transform-origin: 0 50%; }
+  html[data-look="glass"] .gn-morph > .gn-r { border-left: 0; }
 }
 
 /* ================================================================== the filter chips: a row of glass pills, the picked one under a

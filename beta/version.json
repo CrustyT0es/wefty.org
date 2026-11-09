@@ -26,11 +26,11 @@
   "Right-click, two-finger tap or a long press opens more options on almost everything: notes, folders, flash cards, chats, pictures and files.",
   "Snap a page: take a photo of your notes or a handout (from Today, a new note or Chat) and AI turns it into a tidy note you check before it's saved. Share links, screenshots and PDFs into Wefty from other apps; on an iPhone, copy them and tap Paste into Wefty."
  ],
- "build": "1.22.1-8d59fa8a29ca",
+ "build": "1.22.1-7c6daa7d2cc4",
  "files": {
   "chat/index.html": {
-   "sha256": "8409664b9823ad846c5def1f70eca88e01587851930596b19e03d92c32f4a6c9",
-   "size": 29864
+   "sha256": "802dc34f866842d852cce9553a19e737518690481030d5366160af4e01df5073",
+   "size": 29904
   },
   "fonts/Inter-Bold.woff2": {
    "sha256": "2fc67537708842a1cecebf596ce5b3aa0a790a2c92d31ac67d4915ff494c90de",
@@ -89,8 +89,8 @@
    "size": 103336
   },
   "glass/README.txt": {
-   "sha256": "bc8e25f11fab66fbf944c6f4cf243a759f2d9c3124fba8c1b71953e3b769eb89",
-   "size": 10488
+   "sha256": "cf1cbb115d12cee2510f735de39284f8caefec0a91fb3b78174ea8fabb4f9bd6",
+   "size": 13040
   },
   "glass/chat.css": {
    "sha256": "0465b8ca0806bb40be767261c13ebd66e5ec35d9a09c40d013f2a2d097138922",
@@ -109,8 +109,8 @@
    "size": 22233
   },
   "glass/glass.css": {
-   "sha256": "f5d6cbd6ea08d4bc5bc9523b60771681fe9bd5ca671a119baee16240d2206e45",
-   "size": 55858
+   "sha256": "26f9aa46c52b2467a5c6a120a98d8a8767b1396e06cad43091205f44acf6e8ea",
+   "size": 59220
   },
   "glass/loading.css": {
    "sha256": "650138a24c2cc8f93c1f807c1a908259ac963c0bbc36089fe02c5c59a4130436",
@@ -121,16 +121,16 @@
    "size": 34809
   },
   "glass/motion.js": {
-   "sha256": "fc1ca94d6c9fd2b7e6dfae527b95883ae9aa8d633831142d7787fcbcedc05392",
-   "size": 37986
+   "sha256": "beabaa0db8dac655e1877e7c62972609e7cc0433885cd4421540634e8067c75d",
+   "size": 46228
   },
   "glass/notes.css": {
-   "sha256": "f27ef038c881fd446baf6eb05033fbf88b3972661e803cc785f0e9e5f89f1707",
-   "size": 58183
+   "sha256": "cf31e73c4d07c0d2eb596bda4da9ceec0c854498684476600920b5ae9f5e7764",
+   "size": 61542
   },
   "glass/notes.js": {
-   "sha256": "4a6422e827fa01af7f9a656fcad4113ac808d7afb4d0367789822c68031c935d",
-   "size": 37263
+   "sha256": "9de213a0826adad2cb5e018eddff960a0e37d1a9bdb89de8e7bf93c2e4be9023",
+   "size": 52447
   },
   "glass/notetaker.css": {
    "sha256": "b4961bd752ea72867e49e04a0f0bdff47d8c0a8df7c2171319c28c1ec240bba7",
@@ -149,12 +149,16 @@
    "size": 749
   },
   "glass/overlays.css": {
-   "sha256": "6a272dc72dc287ad17ff7700f4d30ba4b2867662e880b87f511a53769ae837c7",
-   "size": 29468
+   "sha256": "34ae96a4606c6b34091c7c5133675e783fc253d201c75cb80264ac5a523b66f4",
+   "size": 31218
   },
   "glass/overlays.js": {
-   "sha256": "29367f186754dade1429f25a31f6eea7f38a909427f91188df4012227a08c754",
-   "size": 23755
+   "sha256": "9dcb757a6dfa99aeeb9e21e5a68fc563fc69e04d6216ee86a6b0682cea49ed74",
+   "size": 28489
+  },
+  "glass/send.js": {
+   "sha256": "48b753fef75119d9921b387004bd859ca4d6d1a88425bf608da7259096d5cda6",
+   "size": 16506
   },
   "glass/settings.css": {
    "sha256": "ee79cb3be2c393a7c8fb485cd44022a936e95eb0f7bf5cba006162fe011811d5",
@@ -165,16 +169,16 @@
    "size": 697
   },
   "glass/share.css": {
-   "sha256": "098feff9815e2b072c957ec15b93ca1c727f79be8d3ef20fea367913b51b6774",
-   "size": 20799
+   "sha256": "202033e5b331000bfe15440ecf5b2ca6fa4d489acba2e3053f93f7b724480347",
+   "size": 21853
   },
   "glass/share.js": {
-   "sha256": "21a6c1ee1f11a9b4f87ccb420ac6ae8d3f2a2a11bba48103a495f65599887831",
-   "size": 3632
+   "sha256": "c50f8a62038e0b2d6833dc67bdf11753ac7d2c78e2e32b7a4044d6ed745edbf8",
+   "size": 22308
   },
   "glass/shell.js": {
-   "sha256": "e5f341d4495648235571d9cdc944e05d8ac1e8a5240c87bb55d3096390eecb27",
-   "size": 19694
+   "sha256": "07ac5e644757072aaac224dd555e161f09ab6e117065479935c97356266ad79d",
+   "size": 28131
   },
   "glass/study.css": {
    "sha256": "bb42f194d385a09db39bda920a91c4f09618d45798976df004bc711f0dbdc464",
@@ -189,12 +193,12 @@
    "size": 39582
   },
   "glass/today.js": {
-   "sha256": "7c2a2a4e1627f6702fa1f7bb65fa77d5e37a62856588c4a0fa223dd5286caa41",
-   "size": 42960
+   "sha256": "af26cec6414be03f27285183a9d9efa0af158cfcc257c8c107c27b1de1539d12",
+   "size": 43284
   },
   "help/index.html": {
-   "sha256": "8409664b9823ad846c5def1f70eca88e01587851930596b19e03d92c32f4a6c9",
-   "size": 29864
+   "sha256": "802dc34f866842d852cce9553a19e737518690481030d5366160af4e01df5073",
+   "size": 29904
   },
   "icons/favicon-32.png": {
    "sha256": "bbfe72c9ff74dd623a7341c8d8384f89779090d991c17bc0e9240d05fb40d3e4",
@@ -253,8 +257,8 @@
    "size": 7943
   },
   "index.html": {
-   "sha256": "85e785045227f9578b98c2c8b6667abcaf95db781b7c2404dbaee56ffa33677b",
-   "size": 29844
+   "sha256": "895c388666bcd5bbf268da74f890c63bad12e2c65ffade950075cc3b917e1a8f",
+   "size": 29884
   },
   "js/access.js": {
    "sha256": "ce53f6e78dc75a9c1c8b1ad6881aba4a439369aff8bb1c542639d93d64c1de24",
@@ -493,67 +497,67 @@
    "size": 1890
   },
   "notes/index.html": {
-   "sha256": "8409664b9823ad846c5def1f70eca88e01587851930596b19e03d92c32f4a6c9",
-   "size": 29864
+   "sha256": "802dc34f866842d852cce9553a19e737518690481030d5366160af4e01df5073",
+   "size": 29904
   },
   "privacy.html": {
    "sha256": "ffcb4675e06ee39656eeb3a41e91e8342233c1674bb94e95cd95d5336240f8a5",
    "size": 7275
   },
   "settings/about/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "settings/account/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "settings/ai/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "settings/appearance/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "settings/devices/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "settings/friends/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "settings/index.html": {
-   "sha256": "8409664b9823ad846c5def1f70eca88e01587851930596b19e03d92c32f4a6c9",
-   "size": 29864
+   "sha256": "802dc34f866842d852cce9553a19e737518690481030d5366160af4e01df5073",
+   "size": 29904
   },
   "settings/notes/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "settings/notifications/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "share/clipboard/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "share/files/index.html": {
-   "sha256": "3e2438876342415b52312916461016d187c21746b0aba3d36d3130b3daaf2b57",
-   "size": 29867
+   "sha256": "ec7c8a67ebe165d06d9fe994c87acd936838edede6444f0f194b46e6b8b22b6f",
+   "size": 29907
   },
   "share/index.html": {
-   "sha256": "8409664b9823ad846c5def1f70eca88e01587851930596b19e03d92c32f4a6c9",
-   "size": 29864
+   "sha256": "802dc34f866842d852cce9553a19e737518690481030d5366160af4e01df5073",
+   "size": 29904
   },
   "styles.css": {
    "sha256": "9118eb29e7f715b177cc6bc155b100543af05afff0614fcc78244cba8716d419",
    "size": 354330
   },
   "sw.js": {
-   "sha256": "78c4f218f754cba46ef118473ac17dd46d52283821ab1874a9a724cfcdfec5ae",
+   "sha256": "1ce0a46a6b86683375908cce9276cc2f4fba944a8d3ad5909c275ae1644f53e1",
    "size": 13539
   },
   "terms.html": {
@@ -561,8 +565,8 @@
    "size": 7167
   },
   "today/index.html": {
-   "sha256": "8409664b9823ad846c5def1f70eca88e01587851930596b19e03d92c32f4a6c9",
-   "size": 29864
+   "sha256": "802dc34f866842d852cce9553a19e737518690481030d5366160af4e01df5073",
+   "size": 29904
   },
   "vendor/LICENSE-supabase-js.txt": {
    "sha256": "334dd6820e2eaeab2064e7c59001b810566728a28a41a7c1dbf69bbee17d0936",

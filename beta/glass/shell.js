@@ -399,12 +399,157 @@ window.addEventListener('resize', checkTyping);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', checkTyping);
 V.on('look', () => { if (!on()) root.classList.remove('g-typing', 'g-kbd'); else checkTyping(); });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkTyping, { once: true }); else checkTyping();
+
+/* Pull to sync, on every main screen (the owner: "I can sync from any screen"). One behaviour: V.motion.pull on the screen's
+   own scroller, its glass pill, and syncNow(): one sync at a time (a pull while one runs shows its spinner until it is done),
+   then "Synced" with a tick and the edge light, or the app's own state in words ("You're offline", "Couldn't sync"). Today and
+   Notes bind it on their own scrollers (glass/today.js, glass/notes.js); the shell binds it everywhere else: Share's three
+   parts, the Chat list (never inside a conversation, where pulling is for reading what came before), Settings' home and its
+   pages. A phone's (a finger's) only, as Today's and Notes' are; never in classic. */
+let syncing = null;
+function outcome(failed) {
+  const status = V.cloud && V.cloud.status;
+  if (status === 'offline' || (typeof navigator !== 'undefined' && navigator.onLine === false)) return 'offline';
+  if (failed || /^(error|asleep|signed-out)$/.test(String(status || ''))) return 'error';
+  return 'synced';
+}
+function syncNow() {
+  if (syncing) return syncing;
+  let result = null;
+  try { result = V.cloud && V.cloud.sync ? V.cloud.sync() : null; } catch (error) { result = Promise.reject(error); }
+  syncing = Promise.resolve(result).then(() => outcome(false), () => outcome(true)).then((how) => {
+    syncing = null;
+    try { V.emit('edge', how === 'synced' ? 'synced' : 'error'); } catch (error) { /* nobody is listening */ }
+    return how;
+  });
+  return syncing;
+}
+/* `scroller` gets the pull (its pill made here unless it has one), `wrap` is what moves with the finger. */
+function pullSync(scroller, { wrap = null, allow = null, pill = true } = {}) {
+  if (!scroller || !V.motion || !V.motion.pull) return { destroy() {} };
+  let made = null;
+  if (pill && !scroller.querySelector(':scope > .g-pull-hint')) {
+    made = document.createElement('div');
+    made.className = 'g-pull-hint g-pull-pill';
+    made.setAttribute('aria-hidden', 'true');
+    scroller.insertBefore(made, scroller.firstChild);
+  }
+  const handle = V.motion.pull(scroller, { wrap, allow, onRelease: (over) => { syncNow().then((how) => over(how)); } });
+  return { destroy() { handle.destroy(); if (made) made.remove(); }, refresh() { if (handle.refresh) handle.refresh(); } };
+}
+
+const PULLED = /^(send|files|clips|claude|settings)$/;
+let pulling = null;   // { scroller, handle }
+let pullWatch = null;
+const finger = () => { try { return matchMedia('(pointer: coarse)').matches && !(V.wide && V.wide()); } catch (error) { return false; } };
+/* The scroller of the screen showing, or null where the shell gives no pull. */
+function pullScroller() {
+  const main = document.querySelector('#app > main.view');
+  if (!main || !PULLED.test(main.dataset.tab || '')) return null;
+  if (main.dataset.tab !== 'claude') return main;
+  const app = main.querySelector('.chat-app');
+  if (!app || app.classList.contains('showing-chat')) return null;  // (a conversation: never)
+  const side = app.querySelector('.chat-side');
+  return side && /(auto|scroll)/.test(getComputedStyle(side).overflowY) ? side : app.querySelector('.chat-list');
+}
+function unpull() {
+  if (pulling) { pulling.handle.destroy(); pulling = null; }
+}
+function repull() {
+  if (!on() || !finger()) { unpull(); return; }
+  const scroller = pullScroller();
+  // (the same screen drawn again, a sync's redraw of Settings say: the pull stays, its pill and state put back)
+  if (pulling && pulling.scroller === scroller && scroller) { pulling.handle.refresh(); return; }
+  unpull();
+  if (!scroller) return;
+  const main = scroller.matches('main.view');
+  const wrap = main ? () => [...scroller.children].find((el) => !el.classList.contains('g-pull-hint') && !el.classList.contains('fab') && el.tagName !== 'SPAN') || null : null;
+  const handle = pullSync(scroller, { wrap });
+  pulling = { scroller, handle, hint: scroller.querySelector(':scope > .g-pull-hint') };
+}
+const repullSoon = (() => { let queued = false; return () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; repull(); }); }; })();
+let chatWatch = null;
+function watchPull() {
+  if (typeof MutationObserver !== 'function') return;
+  const main = document.querySelector('#app > main.view');
+  if (!main) return;
+  // (a screen drawn again: the pull follows; a chat opened or closed on a phone, too)
+  if (!pullWatch) {
+    pullWatch = new MutationObserver(repullSoon);
+    pullWatch.observe(main, { childList: true });
+  }
+  if (!chatWatch) chatWatch = new MutationObserver(repullSoon);
+  chatWatch.disconnect();
+  const app = main.dataset.tab === 'claude' ? main.querySelector('.chat-app') : null;
+  if (app) chatWatch.observe(app, { attributes: true, attributeFilter: ['class'] });
+}
+/* The phone's system bars (the owner: "keep the purple flow behind the notifications and the Samsung buttons"). A web page
+   can't draw behind Android's status bar, but it can colour it: in glass the theme-color is the colour of the canvas's top
+   edge (the aurora's tint of the time of day, worked out from its gradients for a phone's screen: a deep violet in dark, its
+   light top in light, black in Pure black), or a full-screen note's own top while one is open on a phone. An installed app's
+   navigation bar takes it too. Followed live: the tint, the theme, the look, a note opening or closing. Classic's own
+   colours (js/theme.js) are put back when the look is switched off. (Only the real phone can show the bars themselves.) */
+const BAR_TOPS = {
+  dark: { morning: '#25152d', day: '#1e1537', night: '#140e2b', note: '#21193f' },
+  light: { morning: '#f1def8', day: '#e4d8ff', night: '#e1d9ff', note: '#f3ebfe' },
+};
+let barsOwned = false;
+function barColour() {
+  if (root.hasAttribute('data-black')) return '#000000';
+  const theme = root.dataset.theme === 'light' ? 'light' : 'dark';
+  const phone = !(V.wide && V.wide());
+  if (phone && document.querySelector('#layers > .editor-layer.shown, #layers > .layer.ink-layer')) return BAR_TOPS[theme].note;
+  return BAR_TOPS[theme][root.dataset.tod || hourOf()] || BAR_TOPS[theme].day;
+}
+function paintBars() {
+  if (!on()) {
+    if (barsOwned) {
+      barsOwned = false;
+      try { if (V.theme && V.theme.set) V.theme.set(V.theme.choice()); } catch (error) { /* (they stay until the next change) */ }
+    }
+    return;
+  }
+  const colour = barColour();
+  barsOwned = true;
+  for (const meta of document.querySelectorAll('meta[name=theme-color]')) if (meta.content !== colour) meta.content = colour;
+}
+const paintBarsSoon = (() => { let queued = false; return () => { if (queued) return; queued = true; Promise.resolve().then(() => { queued = false; paintBars(); }); }; })();
+if (typeof MutationObserver === 'function') {
+  // (js/theme.js writes its own colour at each change of theme: glass's is put back over it; and the tint of the day, or a
+  // note opening over everything, changes it)
+  new MutationObserver(() => { if (on() || barsOwned) paintBarsSoon(); })
+    .observe(root, { attributes: true, attributeFilter: ['data-tod', 'data-theme', 'data-black', 'data-look'] });
+  const watchBars = () => {
+    const head = document.head;
+    if (head) new MutationObserver(() => { if (on()) paintBarsSoon(); }).observe(head, { subtree: true, attributes: true, attributeFilter: ['content'] });
+    const layers = document.getElementById('layers');
+    // (a layer coming or going, or shown: the note's .shown comes a frame after it is put in)
+    if (layers) {
+      new MutationObserver((records) => {
+        if (on() && records.some((r) => r.type === 'childList' || r.target.parentNode === layers)) paintBarsSoon();
+      }).observe(layers, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+    paintBars();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchBars, { once: true }); else watchBars();
+}
+V.on('theme', paintBarsSoon);
+V.on('look', paintBarsSoon);
+if (V.onWide) V.onWide(paintBarsSoon);
+
+V.on('tab', () => { if (on()) { requestAnimationFrame(watchPull); repullSoon(); } else unpull(); });
+V.on('look', () => { if (on()) { watchPull(); repullSoon(); } else unpull(); });
+window.addEventListener('resize', repullSoon);
 /* ---- end of the 2.0 hotfix block */
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, { once: true });
 else sync();
 
 V.glass = {
   enabled: on,
+  /* Pull to sync (the 2.0 hotfix): syncNow() syncs, one at a time ('synced' | 'offline' | 'error'); pullSync(scroller, { wrap })
+     gives a scroller the pull with its pill. */
+  syncNow,
+  pullSync,
   tod,
   setTod: tod,
   /* How long the aurora drifts with nothing touched, in ms (8 s; the tests shorten it). */

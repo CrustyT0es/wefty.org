@@ -226,18 +226,257 @@ function playFlip(plan, container, { newcomers = true } = {}) {
   }
 }
 
-/* -- a phone's Search: a glass pill with its word where the row has room, else the magnifier alone (the name and
-   the folders above it always come first) */
-function fitSearch() {
-  if (!column || !on()) return;
-  const title = column.querySelector(':scope > .list-title');
-  const button = title && title.querySelector('.notes-search');
+/* -- a phone's search: the glass circle grows into the field, and shrinks back into it (the owner's screen recording:
+   nothing moved for a moment, then the row swapped at once, the list jumped, and on the way back the row came back in two
+   steps). js/notes.js swaps the title row for the search row with one class (.searching) and focuses the box in the same
+   tap, so the keyboard starts at once; this watches that class and, before the frame is painted, keeps both rows on the
+   screen for the move: the title row and the chips stay where they are (fading, the name sliding away), the search row is
+   put over them (absolutely, exactly where it goes once alone: the two are as tall as each other, so the list never moves),
+   and a capsule of glass (.gn-morph: two round ends and a stretched middle, so only transform moves it and it stays round)
+   goes from the circle's box to the field's while the field's words fade in and the "Try" pills slide down in. Back, Esc,
+   or the box left empty: the same, the other way, from wherever the last move had got to. Calm: the two rows crossfade. */
+const MORPH_MS = 460;
+const UNMORPH_MS = 400;
+const MORPH_LITE = 220;
+const GROW = 'cubic-bezier(.22,1.12,.36,1)';  // (a little past the field and back: a spring)
+const SHRINK = 'cubic-bezier(.3,.85,.3,1)';
+let morph = null;          // { anims, capsule, ghost, head, help, timer }
+let searchWatch = null;
+let wasSearching = false;
+let drawnAt = 0;           // when this column had been on the screen a frame (a search opened as Notes is drawn doesn't morph)
+let press = null;          // the circle pressed: { button, anim }
+
+const rectOf = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
+function capsuleRect(capsule) {  // the capsule's visible box (its two ends), on the screen
+  const l = capsule.querySelector(':scope > .gn-l').getBoundingClientRect();
+  const r = capsule.querySelector(':scope > .gn-r').getBoundingClientRect();
+  return { left: l.left, top: l.top, width: r.right - l.left, height: l.height };
+}
+const opacityOf = (el) => { const v = parseFloat(getComputedStyle(el).opacity); return Number.isFinite(v) ? v : 1; };
+
+function endMorph() {
+  if (!morph) return;
+  const m = morph;
+  morph = null;
+  clearTimeout(m.timer);
+  for (const a of m.anims) { try { a.cancel(); } catch (error) { /* gone */ } }
+  if (m.capsule) m.capsule.remove();
+  if (m.ghost) m.ghost.remove();
+  for (const el of [m.head, m.help]) if (el) { el.style.top = el.style.left = el.style.width = ''; }
+  if (column) column.classList.remove('gn-morphing');
+  if (column && !column.classList.contains('searching')) for (const el of [m.head, m.help]) if (el) el.style.minHeight = '';
+}
+
+function morphSearch(open, removed) {
+  const head = column && column.querySelector(':scope > .list-head');
+  const title = column && column.querySelector(':scope > .list-title');
+  const help = column && column.querySelector(':scope > .search-help');
+  const row = column && column.querySelector(':scope > .chips');
+  const box = head && head.querySelector(':scope > .search-box');
+  if (!head || !title || !box || wide()) { endMorph(); return; }
+  // (a move still going, such as Back tapped while the field grows: the new one starts where that one had got to)
+  const from = morph && morph.capsule ? capsuleRect(morph.capsule) : null;
+  const seen = morph ? { title: opacityOf(title), row: row ? opacityOf(row) : 1, box: opacityOf(box.querySelector('.search') || box) } : null;
+  endMorph();
+  const pressed = press;
+  press = null;
+  const letPressGo = () => { if (pressed) { try { pressed.anim.cancel(); } catch (error) { /* gone */ } } };
+  if (!HAS_WAAPI || !drawnAt || !column.getClientRects().length) {
+    letPressGo();
+    if (!open) { head.style.minHeight = ''; if (help) help.style.minHeight = ''; }
+    return;
+  }
+  const m = { anims: [], capsule: null, ghost: null, head, help, timer: 0 };
+  morph = m;
+  column.classList.add('gn-morphing');
+  // (the circle as it is now, pressed in a little under the finger: the capsule starts from exactly that)
+  const circleButton = title.querySelector('.notes-search');
+  const circleAt = circleButton && circleButton.getClientRects().length ? rectOf(circleButton) : null;
+  letPressGo();
+  // the search row over the title row, the pills over the chips: the same places and heights as they take alone
+  head.style.minHeight = `${title.offsetHeight}px`;
+  // (the column's own width: the title row reaches 12 px past it, under the picture, and the search row doesn't)
+  const pad = getComputedStyle(column);
+  const inner = column.clientWidth - (parseFloat(pad.paddingLeft) || 0) - (parseFloat(pad.paddingRight) || 0);
+  head.style.top = `${title.offsetTop}px`; head.style.left = `${parseFloat(pad.paddingLeft) || 0}px`; head.style.width = `${inner}px`;
+  let pills = help;
+  if (!open && removed && removed.length && row) {
+    // (the "Try" pills are already gone from their row: the ones just taken out fade where they were)
+    pills = m.ghost = document.createElement('div');
+    pills.className = 'search-help gn-help-ghost';
+    pills.setAttribute('aria-hidden', 'true');
+    pills.inert = true;
+    for (const node of removed) pills.append(node);
+    column.insertBefore(pills, row);
+  }
+  for (const el of [help, m.ghost]) {
+    if (!el || !row) continue;
+    el.style.minHeight = `${row.offsetHeight}px`;
+    el.style.top = `${row.offsetTop}px`; el.style.left = `${row.offsetLeft}px`; el.style.width = `${row.offsetWidth}px`;
+  }
+  // (each starts on the frame the tap is painted in, not one later: the field is moving the moment the finger lifts)
+  const go = (el, keyframes, options) => { const a = animate(el, keyframes, options); if (a) { startNow(a); m.anims.push(a); } return a; };
+  const soft = calm();
+  const ms = lite() ? MORPH_LITE : open ? MORPH_MS : UNMORPH_MS;
+  const ease = lite() ? EASE : open ? GROW : SHRINK;
+  const words = [...box.children].filter((el) => !el.matches('.icon'));
+  const icon = box.querySelector(':scope > .icon');
+  const back = head.querySelector(':scope > .search-back');
+  const line = title.querySelector('.title-stack') || title.querySelector('h1');
+  const pillsIn = pills ? [...pills.children] : [];
+  let total = ms;
+  if (soft) {
+    // Calm: the rows crossfade where they are
+    const d = 200;
+    go(title, [{ opacity: seen ? seen.title : open ? 1 : 0 }, { opacity: open ? 0 : 1 }], { duration: d, easing: 'linear', fill: open ? 'forwards' : 'backwards' });
+    if (row) go(row, [{ opacity: seen ? seen.row : open ? 1 : 0 }, { opacity: open ? 0 : 1 }], { duration: d, easing: 'linear', fill: open ? 'forwards' : 'backwards' });
+    for (const el of [box, back, pills]) if (el) go(el, [{ opacity: open ? 0 : 1 }, { opacity: open ? 1 : 0 }], { duration: d, easing: 'linear', fill: open ? 'backwards' : 'forwards' });
+    total = d;
+  } else {
+    const z = (head.getBoundingClientRect().width / head.offsetWidth) || 1;
+    const base = rectOf(box);
+    const circle = circleAt;
+    if (circle && circle.width > 0) {
+      const W = box.offsetWidth;
+      const h = box.offsetHeight;
+      const capsule = m.capsule = document.createElement('div');
+      capsule.className = 'gn-morph';
+      capsule.setAttribute('aria-hidden', 'true');
+      Object.assign(capsule.style, { left: `${box.offsetLeft}px`, top: `${box.offsetTop}px`, width: `${W}px`, height: `${h}px` });
+      const piece = (cls, left, width, radius) => {
+        const el = document.createElement('i');
+        el.className = cls;
+        Object.assign(el.style, { left: `${left}px`, width: `${width}px`, borderRadius: radius });
+        capsule.append(el);
+        return el;
+      };
+      piece('gn-l', 0, h / 2, `${h / 2}px 0 0 ${h / 2}px`);
+      const mid = piece('gn-m', h / 2, Math.max(1, W - h), '0');
+      const end = piece('gn-r', W - h / 2, h / 2, `0 ${h / 2}px ${h / 2}px 0`);
+      head.insertBefore(capsule, head.firstChild);
+      // a box on the screen -> how the capsule is moved and stretched to be it (from the field's own box)
+      const shape = (v) => {
+        const s = v.height / base.height;
+        const inner = Math.max(h, (h * v.width) / v.height);
+        return {
+          whole: `translate(${(v.left - base.left) / z}px, ${(v.top - base.top) / z}px) scale(${s})`,
+          mid: `scaleX(${Math.max(0, (inner - h) / Math.max(1, W - h))})`,
+          end: `translateX(${inner - W}px)`,
+        };
+      };
+      const a = shape(from || (open ? circle : base));
+      const b = shape(open ? base : circle);
+      const timing = { duration: ms, easing: ease, fill: 'both' };
+      go(capsule, [{ transform: a.whole }, { transform: b.whole }], timing);
+      go(mid, [{ transform: a.mid }, { transform: b.mid }], timing);
+      go(end, [{ transform: a.end }, { transform: b.end }], timing);
+      // the circle's glass becomes the field's (its ring lights up as it gets there), and back
+      const look = getComputedStyle(box);
+      const own = { backgroundColor: look.backgroundColor, boxShadow: look.boxShadow };
+      const bare = { backgroundColor: 'rgba(0, 0, 0, 0)', boxShadow: 'none' };
+      if (open) {
+        go(capsule, [{ opacity: 1 }, { opacity: 1, offset: 0.6 }, { opacity: 0 }], { duration: ms, easing: 'linear', fill: 'both' });
+        go(box, [{ ...bare }, { ...bare, offset: 0.6 }, { ...own }], { duration: ms, easing: 'linear', fill: 'backwards' });
+      } else {
+        go(capsule, [{ opacity: from ? 1 : 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1 }], { duration: ms, easing: 'linear', fill: 'both' });
+        go(box, [{ ...own }, { ...bare, offset: 0.3 }, { ...bare }], { duration: ms, easing: 'linear', fill: 'forwards' });
+      }
+      // the magnifier goes with it, from the circle's middle to its place in the field
+      if (icon) {
+        const there = circleButton && circleButton.querySelector('.icon');
+        const c = there && there.getClientRects().length ? rectOf(there) : null;
+        const i = rectOf(icon);
+        if (c) {
+          const moved = `translate(${(c.left + c.width / 2 - i.left - i.width / 2) / z}px, ${(c.top + c.height / 2 - i.top - i.height / 2) / z}px)`;
+          go(icon, open ? [{ transform: moved }, { transform: 'none' }] : [{ transform: 'none' }, { transform: moved }], { duration: ms, easing: ease, fill: open ? 'backwards' : 'forwards' });
+        }
+      }
+    } else {
+      go(box, [{ opacity: open ? 0 : 1 }, { opacity: open ? 1 : 0 }], { duration: 200, easing: EASE, fill: open ? 'backwards' : 'forwards' });
+    }
+    if (open) {
+      for (const el of words) go(el, [{ opacity: seen ? seen.box : 0 }, { opacity: 1 }], { duration: 220, delay: 120, easing: EASE, fill: 'backwards' });
+      if (back) go(back, [{ opacity: 0, transform: 'translateX(12px)' }, { opacity: 1, transform: 'none' }], { duration: 320, delay: 50, easing: SLIDE, fill: 'backwards' });
+      go(title, [{ opacity: seen ? seen.title : 1 }, { opacity: 0 }], { duration: 180, easing: EASE, fill: 'forwards' });
+      if (line) go(line, [{ transform: 'none' }, { transform: 'translateX(-18px)' }], { duration: 300, easing: EASE, fill: 'forwards' });
+      if (row) go(row, [{ opacity: seen ? seen.row : 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px)' }], { duration: 180, easing: EASE, fill: 'forwards' });
+      pillsIn.forEach((el, i) => go(el, [{ opacity: 0, transform: 'translateY(-12px)' }, { opacity: 1, transform: 'none' }],
+        { duration: 380, delay: 80 + Math.min(i, 5) * 28, easing: SLIDE, fill: 'backwards' }));
+      total = Math.max(ms, 80 + 5 * 28 + 380);
+    } else {
+      for (const el of words) go(el, [{ opacity: seen ? seen.box : 1 }, { opacity: 0 }], { duration: 110, easing: EASE, fill: 'forwards' });
+      if (back) go(back, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(12px)' }], { duration: 150, easing: EASE, fill: 'forwards' });
+      go(title, [{ opacity: seen ? seen.title : 0 }, { opacity: 1 }], { duration: 260, delay: 90, easing: EASE, fill: 'backwards' });
+      if (line) go(line, [{ transform: 'translateX(-18px)' }, { transform: 'none' }], { duration: 360, delay: 60, easing: SLIDE, fill: 'backwards' });
+      if (row) go(row, [{ opacity: seen ? seen.row : 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 320, delay: 100, easing: SLIDE, fill: 'backwards' });
+      pillsIn.forEach((el) => go(el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-8px)' }], { duration: 140, easing: EASE, fill: 'forwards' }));
+      total = Math.max(ms, 100 + 320);
+    }
+  }
+  m.timer = later(() => { if (morph === m) endMorph(); }, total + 30);
+}
+
+function searchMoved(records) {
+  if (!on() || !column) return;
+  const help = column.querySelector(':scope > .search-help');
+  // (wide: the pills come in as the box is focused, once: glass/notes.css's .gn-help-in)
+  if (help && !help.hidden && records.some((r) => r.type === 'attributes' && r.target === help && r.attributeName === 'hidden')) {
+    help.classList.add('gn-help-in');
+    later(() => help.classList.remove('gn-help-in'), 700);
+  }
+  const searching = column.classList.contains('searching');
+  if (searching === wasSearching) return;
+  wasSearching = searching;
+  if (wide()) return;
+  const removed = [];
+  for (const r of records) if (r.type === 'childList' && r.target === help) for (const node of r.removedNodes) if (node.nodeType === 1) removed.push(node);
+  morphSearch(searching, removed);
+}
+/* The circle pressed: it gives under the finger at once (Chrome only shows :active once it's sure the finger isn't
+   scrolling), and the field grows from it as the tap lands. */
+function searchPress(event) {
+  if (!on() || wide() || calm() || (event.button || 0) > 0) return;
+  const button = event.target && event.target.closest ? event.target.closest('.list-title .notes-search') : null;
   if (!button) return;
-  if (wide()) { button.classList.remove('gn-word'); return; }
-  button.classList.add('gn-word');
-  const cut = (el) => !!el && el.getClientRects().length && el.scrollWidth > el.clientWidth + 1;
-  const crumbs = title.querySelector('.crumbs:not([hidden])');
-  if (cut(title.querySelector('h1')) || (crumbs && [...crumbs.querySelectorAll('.crumb span:last-child')].some(cut))) button.classList.remove('gn-word');
+  if (press) { try { press.anim.cancel(); } catch (error) { /* gone */ } }
+  const anim = animate(button, [{ transform: 'none' }, { transform: 'scale(.9)' }], { duration: 110, easing: EASE, fill: 'forwards' });
+  if (!anim) return;
+  startNow(anim);
+  press = { button, anim };
+  const mine = press;
+  const letGo = () => {
+    for (const type of ['pointerup', 'pointercancel']) window.removeEventListener(type, letGo, true);
+    // (a frame later: a tap's click opens the search, which takes the circle from here)
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (press !== mine) return;
+      press = null;
+      if (!button.isConnected) return;
+      const back = animate(button, [{ transform: 'scale(.9)' }, { transform: 'none' }], { duration: 260, easing: SLIDE });
+      try { anim.cancel(); } catch (error) { /* gone */ }
+      if (!back) return;
+    }));
+  };
+  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, letGo, true);
+}
+function watchSearch() {
+  if (searchWatch) searchWatch.disconnect();
+  searchWatch = null;
+  drawnAt = 0;
+  if (!column) return;
+  wasSearching = column.classList.contains('searching');
+  searchWatch = new MutationObserver(searchMoved);
+  searchWatch.observe(column, { attributes: true, attributeFilter: ['class'] });
+  const help = column.querySelector(':scope > .search-help');
+  if (help) searchWatch.observe(help, { childList: true, attributes: true, attributeFilter: ['hidden'] });
+  const mine = column;
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (column === mine) drawnAt = now(); }));
+}
+function unwatchSearch() {
+  if (searchWatch) { searchWatch.disconnect(); searchWatch = null; }
+  endMorph();
+  if (press) { try { press.anim.cancel(); } catch (error) { /* gone */ } press = null; }
+  if (column) for (const el of column.querySelectorAll(':scope > .list-head, :scope > .search-help')) el.style.minHeight = '';
+  drawnAt = 0;
 }
 
 /* -- a list drawn again */
@@ -260,7 +499,6 @@ function listDrawn() {
     playFlip(plan, list);
   }
   if (pullHint) setPullTop();
-  fitSearch();
 }
 
 /* -- a fold opening ("Past week"): its cards rise in, what's under it slides down (and up again as it closes) */
@@ -444,7 +682,7 @@ function swipeTouch(event) {
 
 const swipeUp = (event) => swipeEnd(event, false);
 const swipeCancel = (event) => swipeEnd(event, true);
-const HANDLERS = [['pointerdown', swipeDown], ['pointermove', swipeMove], ['pointerup', swipeUp], ['pointercancel', swipeCancel],
+const HANDLERS = [['pointerdown', searchPress], ['pointerdown', swipeDown], ['pointermove', swipeMove], ['pointerup', swipeUp], ['pointercancel', swipeCancel],
   ['touchmove', swipeTouch, { passive: false }]];
 
 /* -- a phone's pull at the top of the list */
@@ -465,12 +703,12 @@ function bindPull() {
   setPullTop();
   pullHandle = m.pull(column, {
     wrap: list,
-    onRelease: () => {
+    // (the same sync as every screen's pull, one at a time, with the edge light: glass/shell.js)
+    onRelease: (over) => {
+      if (V.glass && V.glass.syncNow) { V.glass.syncNow().then((how) => over(how)); return; }
       let result = null;
       try { result = V.cloud && V.cloud.sync ? V.cloud.sync() : null; } catch (error) { result = Promise.reject(error); }
-      const done = Promise.resolve(result);
-      done.then(() => edge('synced'), () => {});
-      return done;
+      Promise.resolve(result).then(() => { edge('synced'); over(true); }, () => over(false));
     },
   });
 }
@@ -618,9 +856,10 @@ function decorate(l) {
   if (column) for (const [type, fn, opts] of HANDLERS) column.addEventListener(type, fn, opts);
   placeSlides(false);
   bindPull();
-  fitSearch();
+  watchSearch();
 }
 function undecorate() {
+  unwatchSearch();
   if (column) for (const [type, fn, opts] of HANDLERS) column.removeEventListener(type, fn, opts);
   if (listWatch) { listWatch.disconnect(); listWatch = null; }
   if (barsWatch) { barsWatch.disconnect(); barsWatch = null; }
@@ -635,7 +874,6 @@ function undecorate() {
   if (list) {
     list.querySelectorAll(':scope > .gn-reveal').forEach((el) => el.remove());
     list.classList.remove('gn-has-reveal');
-    if (column) column.querySelectorAll('.gn-word').forEach((el) => el.classList.remove('gn-word'));
     list.querySelectorAll('.gn-swiping').forEach((el) => { el.classList.remove('gn-swiping'); el.style.transform = ''; el.style.transition = ''; el.style.opacity = ''; });
   }
   document.querySelectorAll('.g-grow-shell').forEach((el) => el.remove());
@@ -701,8 +939,8 @@ document.addEventListener('click', (event) => {
   else if (target.closest('.list-fold')) foldTapped(event);
   else cardTapped(event);
 }, true);
-window.addEventListener('resize', V.debounce ? V.debounce(() => { if (on() && layout) { placeSlides(false); setPullTop(); fitSearch(); } }, 150) : () => {});
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (on() && layout) { placeSlides(false); fitSearch(); } }, () => {});
+window.addEventListener('resize', V.debounce ? V.debounce(() => { if (on() && layout) { placeSlides(false); setPullTop(); } }, 150) : () => {});
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (on() && layout) placeSlides(false); }, () => {});
 if (on()) bind();
 
 V.glassNotes = {
