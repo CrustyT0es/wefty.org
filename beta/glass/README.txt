@@ -1,0 +1,112 @@
+Wefty 2.0 "glass": how the layer works
+=======================================
+
+(This is README.txt, not .md: the PC app's updater only takes the web file kinds in vault/webupdate.py's TYPES.)
+
+The idea
+--------
+2.0 is the existing app in a new look, not a rewrite. The look is a layer that is opt-in:
+
+  html[data-look="glass"]   the glass look is on (js/look.js sets it, in <head>, before the first frame)
+  anything else             the classic look, untouched
+
+Every rule in vault/web/glass/*.css starts with html[data-look="glass"]. Every script in vault/web/glass/*.js does
+nothing unless V.look.isGlass(), and listens to V.on('look') so the switch in Settings > Appearance works live, in both
+directions, with no reload. Never edit an existing rule in styles.css. If a hook is really needed (a class or a
+data-attribute on existing markup) add it in the app's own JS in a way that changes nothing in classic.
+
+Where it shows
+--------------
+  Real site (wefty.org)    classic by default; the owner can switch the new look on in Settings > Appearance
+  Private preview          wefty.org/beta/ (python -m vault.publish --preview <wefty.org checkout>): glass by default,
+                           its own offline copy (IndexedDB "vault-preview", caches "wprev-"), owner only (a gate)
+  V.preview                true in the preview (js/look.js: the address starts with /beta/)
+
+Files
+-----
+  js/look.js        V.preview, V.names, V.look (get / set / isGlass / animations / setAnimations); the lite and calm classes
+  glass/glass.css   tokens (dark, light, Pure black), the aurora, glass surfaces, controls, the shell, motion primitives
+  glass/motion.js   V.motion: the shared motion helpers (below)
+  glass/shell.js    the aurora element, the tab bar's sliding indicator and the weft between tabs, badges, V.glass
+  glass/<area>.css/.js   one pair per area; each is owned by one builder: today, notes, editor, chat, share, study,
+                    notetaker, settings, onboarding, overlays, loading. index.html already loads them all, so
+                    nobody edits index.html. Add your area's rules and code to your own pair.
+
+Tokens
+------
+glass.css REDEFINES the app's own token names (--bg --surface --card --page --field --text --muted --accent --primary
+--line ...) for glass, as light-dark() pairs, so every existing part picks up the colours and stays readable.
+Pure black is html[data-black]: the aurora is off and the canvas black, the glass edges stay.
+New tokens: --g-fill --g-edge --g-hi --g-ring --g-shadow --g-bar --g-blur --g-grad (the one gradient button) --g-glow
+--g-ease --g-spring --g-slide --d-press --d-slide --d-enter. Images and shadows can't go in light-dark(), so they are
+set per theme under [data-theme="dark"] / [data-theme="light"].
+Text contrast stays at 4.5 to 1 or better on the real glass (tests/test_wefty_20_look.py measures it, dark, light and
+Pure black, in the morning, day and night tints). Muted text is never dimmer than #ABA2CF on dark.
+
+The surface vocabulary
+----------------------
+  .g            the board's glass: soft fill, the light edge (a masked gradient border), a drop shadow. V.glass.surface(el)
+  .sheen        a soft light that sweeps across on hover and press
+  .g-bar        glass with blur: ONLY on bars and sheets, never on list cards (blur is costly on a cheap Chromebook)
+  .btn.primary  the one gradient button per screen; everything else is quiet glass (.btn, .btn.quiet, .btn.tonal)
+  the app's own cards, sheets, menus, toasts, fields, chips, segmented controls and switches already look glass.
+
+Motion (the owner's priority: SATISFYING animation, still smooth on a school Chromebook)
+----------------------------------------------------------------------------------------
+  - only transform and opacity animate (plus stroke-dashoffset to draw the thread)
+  - press .12 s; slides and springs .46 s cubic-bezier(.25,1.18,.35,1); entrances .5 s with a stagger of at most 8
+  - every animation can start again at once (Web Animations: the old one is cancelled; CSS: alternate keyframe names)
+  - will-change only while something is moving; no layout thrash (measure, then write)
+  - LITE (html.lite): blur off, aurora still, springs shortened, no decoration. Turns on by itself for weak devices
+    (prefers-reduced-data, 4 GB of memory or 4 processors or fewer, or the frame-drop monitor V.motion.watch()), and
+    from Settings > Appearance > Animations: Auto / Full / Calm (Full: never lite).
+  - CALM (html.calm: prefers-reduced-motion, or Calm): nothing moves, only fades of 120 ms or less.
+  Both are classes on <html>; glass.css has the rules, V.motion.lite() / V.motion.calm() say which is on.
+
+V.motion (glass/motion.js: call these, don't write your own)
+------------------------------------------------------------
+  enter(container, { stagger, selector, max, delay })   the rise-in of a screen's children
+  press(el)  /  press.follow(el)                        one spring pulse / a pointer press that follows the finger
+  spark(el)                                             the four-spark burst from a ticked box
+  roll(el, from, to)                                    rolling numbers; ends on exactly String(to)
+  weft(svgPath)                                         a thread draws itself
+  flip(fromEl, toEl, { reverse })                       a shared element opening / closing (a card into a note)
+  swipe(el, { left, right, onCommit })                  swipe a card: commits past 80 px, springs back below it
+  pull(scroller, { onRelease })                         pull down at the top to sync
+  peek(el, { onPeek })                                  press and hold to preview
+  shrink(scroller, title, { bar })                      a large title that collapses into a slim bar
+  lite(), calm(), watch()                               the modes, and the frame-drop monitor
+Each returns a handle ({ cancel(), finished }) or { destroy() }, does nothing with a missing element, and leaves no
+stray element or inline style behind. tests/test_wefty_20_motion.py drives each of them.
+
+How to add an area (or a screen of one)
+---------------------------------------
+ 1. Put the rules in glass/<area>.css, every one starting with html[data-look="glass"].
+ 2. Put the code in glass/<area>.js: `if (!V.look.isGlass()) ...` guards, V.on('look') to start/stop, V.motion for motion.
+ 3. Add your screens to SCREENS (and your interactions to MOTIONS) in tests/glass_shots.py, then LOOK at the pictures:
+        python tests/glass_shots.py <outdir> --screens today --theme dark,light --size phone,wide --motion
+    names are <screen>-<look>-<theme>-<size>.png, and filmstrips <interaction>-...-strip.png. Never say a screen looks
+    right without having looked at the picture (dark, light, Pure black; 412 px, 360 px at page zoom 1.15, 1280 px).
+ 4. Run your area's old tests with WEFTY_LOOK=glass as well as without. Tests that pin the classic look's exact colours
+    or layout get @pytest.mark.classic_only (skipped under glass); nothing else may be skipped.
+ 5. Write tests/test_wefty_20_<area>.py: glass on/off both live and by reload, no console errors, no sideways scroll at
+    320/360/412 px (page zoom 1.15 and 1.3) and 1280/1366, text contrast, lite and calm, the interactions still work.
+
+Words: plain and short, "Wefty" never "Vault" in anything shown, no em dashes in what people read.
+
+
+Added after the first review
+----------------------------
+  - Preview and the real app share one origin, so js/look.js keeps every localStorage key of the preview under its own
+    name ("preview:<key>") except the sign-in, this device's id and kind, and the theme. Never read another copy of a key
+    by hand; use localStorage as always. The preview never signs the device up for notifications (V.push.support()
+    says 'preview'). The gate screen is a courtesy, not a lock: its sign-out is the real app's too, and it says so.
+  - The app's own .bar is the thin progress bar; the glass bar class is .g-bar.
+  - Transitions: only transform and opacity (the tab bar's words are the one colour that fades). A hover is a light
+    layer (::before) fading in; a switch's lit track is a layer too. Fields snap their focus ring.
+  - Blur: the tab bar and sheets only (menus, toasts and the scrim have none); none at all in lite.
+  - The selected day card on Today: use --g-pill-fill, --g-pill-ring and --g-pill-glow (the board's .slider i); the tab bar's
+    own indicator is --g-tab-fill and matches the board's .tabslide.
+  - The aurora stops drifting after 8 s without input (html.g-idle), and stands still while a page scrolls (html.g-scrolling) or a sheet is open; the frame monitor starts after the first sync; its
+    verdict (wefty-lite-auto) lasts 7 days and Animations Auto or Full forgets it.
+  - V.motion.flip's handle has restore(); V.motion.shrink works through the stylesheet where scroll-driven animations exist.

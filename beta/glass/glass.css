@@ -1,0 +1,578 @@
+/* Wefty 2.0 "glass": the global layer. Every rule starts with html[data-look="glass"] (js/look.js), so the classic look is
+   untouched. Read vault/web/glass/README.md first.
+
+   What's here: the tokens (the app's own names redefined with glass values, dark / light / Pure black, plus the glass
+   ones, --g-*), the time-of-day aurora, the glass surface vocabulary for the app's existing parts (cards, sheets,
+   menus, toasts, fields, chips, segmented controls, switches, buttons), scrollbars, selection, focus rings, the shell
+   (floating tab bar, the Chromebook rail, the screens' top row, your picture, badges) and the motion primitives
+   (.g-enter, .g-press, sparks, lite and calm).
+
+   Motion rules (the owner's priority): only transform and opacity animate (plus the board's own gradient and clip
+   tricks); press .12 s; slides and springs .46 s cubic-bezier(.25,1.18,.35,1); entrances .5 s with a stagger of at most 8
+   items; backdrop blur only on bars and sheets, never on list cards; will-change only while something moves. Lite
+   (html.lite: weak devices, or Settings > Appearance > Animations) turns blur off, makes the aurora still and shortens
+   springs; calm (html.calm: prefers-reduced-motion, or Calm) moves nothing at all, only short fades. */
+
+/* ================================================================== tokens */
+
+html[data-look="glass"] {
+  /* motion */
+  --g-ease: cubic-bezier(.2, .8, .2, 1);
+  --g-spring: cubic-bezier(.34, 1.45, .64, 1);
+  --g-slide: cubic-bezier(.25, 1.18, .35, 1);
+  --g-in: cubic-bezier(.5, 0, .8, .4);
+  --d-press: .12s;
+  --d-slide: .46s;
+  --d-enter: .5s;
+  --ease: var(--g-ease);
+  --spring: var(--g-spring);
+  /* the glass itself (--g-fill, --g-edge, --g-shadow, --g-grad-soft and --g-tab-fill are images and shadows, which
+     light-dark() can't pick between: they're set per theme just below) */
+  --g-hi: light-dark(#ffffff, rgba(255, 255, 255, .14));  /* the 1 px light along the top */
+  --g-ring: light-dark(rgba(110, 80, 210, .13), rgba(255, 255, 255, .07));  /* the hairline round it */
+  --g-bar: light-dark(rgba(255, 255, 255, .55), rgba(24, 18, 46, .5));
+  --g-bar-solid: light-dark(rgb(250, 248, 255), rgb(22, 16, 42));  /* the bar when blur is off (lite) */
+  --g-blur: blur(22px) saturate(170%);
+  --g-grad: linear-gradient(150deg, #8658e2, #6a45c9);  /* white words on it read at 4.65 to 1 or more */  /* the one gradient button */
+  --g-glow: light-dark(rgba(118, 74, 220, .32), rgba(118, 74, 220, .5));
+  --g-tab-edge: light-dark(rgba(255, 255, 255, .35), rgba(214, 196, 255, .28));
+  /* the selected day card on Today (the board's .slider i; the tab bar's own indicator is --g-tab-fill) */
+  --g-pill-fill: linear-gradient(150deg, rgba(150, 108, 240, .55), rgba(98, 66, 200, .38));
+  --g-pill-ring: rgba(214, 196, 255, .45);
+  --g-pill-glow: 0 10px 26px rgba(98, 66, 200, .45);
+  --g-bar-space: 0px;  /* what a screen leaves free under itself for the floating tab bar (a phone: set below) */
+
+  /* surfaces: the app's names, glass values (a light half, then a dark half) */
+  --bg: light-dark(#efe9ff, #0b0918);
+  --surface: light-dark(#f7f3ff, #151029);
+  --surface-2: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .07));
+  --card: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .065));
+  --page: light-dark(rgba(255, 255, 255, .78), rgba(255, 255, 255, .07));
+  --field: light-dark(rgba(255, 255, 255, .72), rgba(255, 255, 255, .06));
+  --sunken: light-dark(rgba(110, 80, 200, .07), rgba(0, 0, 0, .28));
+  --raised: light-dark(rgba(252, 250, 255, .94), rgba(38, 30, 70, .9));
+  --selected: light-dark(#ffffff, rgba(255, 255, 255, .16));
+  --line: light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .10));
+  --line-soft: light-dark(rgba(110, 80, 200, .10), rgba(255, 255, 255, .07));
+  --line-strong: light-dark(rgba(110, 80, 200, .30), rgba(255, 255, 255, .20));
+  --control: light-dark(#6b6490, #9b93c4);
+  --thread: light-dark(rgba(110, 80, 200, .22), rgba(190, 170, 255, .28));
+  --edge-hi: light-dark(transparent, rgba(255, 255, 255, .10));
+  /* words (muted never dimmer than the board's #ABA2CF on dark) */
+  --text: light-dark(#1b1533, #f1edfa);
+  --text-2: light-dark(#3d3560, #cfc8e8);
+  --muted: light-dark(#4f4875, #aba2cf);  /* (light: 4.5 to 1 or more on the strongest lavender tint, 13 px lines) */
+  --placeholder: light-dark(#6b6490, #a298c8);
+  --faint: light-dark(#8f88b0, #7e76a6);
+  /* the main button and the accent */
+  --primary: light-dark(#6a45c9, #7b52db);
+  --primary-hover: light-dark(#5b36c2, #8a62e6);
+  --primary-press: light-dark(#4a2aa3, #6a45c9);
+  --on-primary: #ffffff;
+  --accent: light-dark(#6b47d6, #b2a4ee);
+  --accent-hover: light-dark(#5b36c2, #c2b6f4);
+  --accent-press: light-dark(#4a2aa3, #a294e6);
+  --accent-ink: light-dark(#4b2bb8, #d7ccff);
+  --accent-wash: light-dark(rgba(124, 91, 224, .08), rgba(150, 108, 240, .12));
+  --accent-soft: light-dark(rgba(124, 91, 224, .14), rgba(150, 108, 240, .28));
+  --accent-line: light-dark(rgba(124, 91, 224, .40), rgba(214, 196, 255, .38));
+  --accent-2: light-dark(#a590ee, #9c82ec);
+  --accent-3: light-dark(#cfc4f7, #6a45c9);
+  --on-accent: light-dark(#ffffff, #1b0f3d);
+  --focus: light-dark(#5b36c2, #d7ccff);
+  --brand: light-dark(#6a45c9, #7b52db);
+  /* meaning */
+  --danger: light-dark(#a0233a, #ffa3a3);  /* (light: 4.5 to 1 or more on the palest lavender tint, as text of 12 px) */
+  --warn: light-dark(#9a5505, #ffc96a);
+  --ok: light-dark(#0f7845, #6fd8a4);
+  --danger-soft: light-dark(rgba(176, 42, 64, .11), rgba(255, 120, 140, .14));
+  --warn-soft: light-dark(rgba(154, 85, 5, .12), rgba(255, 201, 106, .13));
+  --ok-soft: light-dark(rgba(15, 120, 69, .12), rgba(111, 216, 164, .13));
+  --danger-fill: light-dark(#c2334a, rgba(255, 120, 140, .2));
+  --on-danger-fill: light-dark(#ffffff, #ffc4c4);
+  /* floating things */
+  --toast: light-dark(rgb(34, 26, 66), rgb(40, 30, 72));
+  --toast-edge: light-dark(rgba(214, 196, 255, .3), rgba(214, 196, 255, .25));
+  --shadow-1: 0 1px 2px light-dark(rgba(60, 40, 140, .10), rgba(0, 0, 0, .5));
+  --shadow-2: 0 8px 22px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .5));
+  --shadow-3: 0 16px 40px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .6));
+  --shadow-fab: 0 10px 24px light-dark(rgba(118, 74, 220, .32), rgba(118, 74, 220, .5));
+  --scrim: light-dark(rgba(40, 24, 90, .34), rgba(6, 4, 16, .6));
+  --ring: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent);
+  /* roundness and the app's own motion names */
+  --r-sm: 8px; --r-md: 15px; --r-lg: 22px; --r-xl: 26px;
+  --ease-out: var(--g-ease);
+  --ease-spring: var(--g-spring);
+  --d-1: .12s; --d-2: .2s; --d-3: .32s;
+}
+
+/* The images and shadows, per theme (data-theme is always light or dark: js/theme.js). */
+html[data-look="glass"][data-theme="dark"] {
+  --g-fill: linear-gradient(155deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .025) 55%, rgba(255, 255, 255, .045));
+  --g-edge: linear-gradient(140deg, rgba(255, 255, 255, .36), rgba(255, 255, 255, .05) 34%, rgba(255, 255, 255, .03) 66%, rgba(186, 160, 255, .34));
+  --g-shadow: 0 14px 34px rgba(4, 2, 14, .45);
+  --g-shadow-hi: 0 22px 48px rgba(4, 2, 14, .55);
+  --g-grad-soft: linear-gradient(150deg, rgba(150, 108, 240, .38), rgba(98, 66, 200, .22));
+  --g-tab-fill: linear-gradient(150deg, rgba(150, 108, 240, .38), rgba(98, 66, 200, .22));
+}
+html[data-look="glass"][data-theme="light"] {
+  --g-fill: linear-gradient(155deg, rgba(255, 255, 255, .74), rgba(255, 255, 255, .44) 55%, rgba(255, 255, 255, .58));
+  --g-edge: linear-gradient(140deg, rgba(255, 255, 255, 1), rgba(200, 180, 255, .35) 34%, rgba(200, 180, 255, .25) 66%, rgba(150, 110, 240, .45));
+  --g-shadow: 0 1px 2px rgba(60, 40, 140, .06), 0 16px 40px rgba(98, 60, 210, .18);
+  --g-shadow-hi: 0 22px 48px rgba(76, 52, 160, .26);
+  --g-grad-soft: linear-gradient(150deg, rgba(124, 91, 224, .2), rgba(98, 66, 200, .12));
+  --g-tab-fill: linear-gradient(150deg, #8358e8, #5b36c2);
+  --g-pill-fill: linear-gradient(150deg, #8358e8, #5b36c2);
+  --g-pill-ring: transparent;
+  --g-pill-glow: 0 10px 24px rgba(110, 70, 220, .38);
+}
+
+/* Pure black: the aurora is off and the canvas black; the glass edges are kept. (:root[data-black] has more weight than
+   the tokens above, so these say it again with more.) */
+html[data-look="glass"][data-black] {
+  --bg: light-dark(#efe9ff, #000000);
+  --surface: light-dark(#f7f3ff, #060510);
+  --sunken: light-dark(rgba(110, 80, 200, .07), rgba(0, 0, 0, .5));
+  --page: light-dark(rgba(255, 255, 255, .78), rgba(255, 255, 255, .06));
+  --field: light-dark(rgba(255, 255, 255, .72), rgba(255, 255, 255, .055));
+  --card: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .06));
+  --text: light-dark(#1b1533, #ece8f6);
+  --g-bar: light-dark(rgba(255, 255, 255, .55), rgba(10, 8, 20, .62));
+  --g-bar-solid: light-dark(rgb(250, 248, 255), rgb(6, 5, 14));
+}
+html[data-look="glass"][data-black] .sheet,
+html[data-look="glass"][data-black] .nt { --page: var(--card); }
+
+/* ================================================================== the aurora */
+
+/* Three tints (morning, day, night) cross-faded by the local hour (shell.js sets html[data-tod]); light has its own
+   lighter set. Drifts slowly: transform only. Still in lite and calm, and gone in Pure black. */
+html[data-look="glass"] #g-aurora {
+  position: fixed; inset: -25%; z-index: 0; pointer-events: none; will-change: transform;
+  animation: g-drift 36s ease-in-out infinite alternate;
+}
+html[data-look="glass"] #g-aurora .tl { position: absolute; inset: 0; opacity: 0; transition: opacity 1.6s var(--g-ease); }
+html[data-look="glass"][data-tod="morning"] #g-aurora .tl-m,
+html[data-look="glass"][data-tod="day"] #g-aurora .tl-d,
+html[data-look="glass"][data-tod="night"] #g-aurora .tl-n { opacity: 1; }
+html[data-look="glass"] #g-aurora .tl-m { background: radial-gradient(38% 26% at 18% 14%, rgba(198, 96, 178, .65), rgba(198, 96, 178, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(240, 146, 112, .36), rgba(240, 146, 112, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .29), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(128, 72, 196, .36), rgba(128, 72, 196, 0) 70%); }
+html[data-look="glass"] #g-aurora .tl-d { background: radial-gradient(38% 26% at 18% 14%, rgba(132, 86, 224, .74), rgba(132, 86, 224, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(92, 78, 222, .48), rgba(92, 78, 222, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(170, 92, 240, .31), rgba(170, 92, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(80, 60, 190, .36), rgba(80, 60, 190, 0) 70%); }
+html[data-look="glass"] #g-aurora .tl-n { background: radial-gradient(38% 26% at 18% 14%, rgba(90, 58, 192, .53), rgba(90, 58, 192, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(54, 50, 168, .34), rgba(54, 50, 168, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(110, 62, 198, .18), rgba(110, 62, 198, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(42, 32, 126, .36), rgba(42, 32, 126, 0) 70%); }
+html[data-look="glass"][data-theme="light"] #g-aurora .tl-d { background: radial-gradient(38% 26% at 18% 14%, rgba(150, 105, 255, .62), rgba(150, 105, 255, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(186, 140, 255, .46), rgba(186, 140, 255, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(255, 150, 220, .42), rgba(255, 150, 220, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(140, 110, 250, .40), rgba(140, 110, 250, 0) 70%); }
+html[data-look="glass"][data-theme="light"] #g-aurora .tl-m { background: radial-gradient(38% 26% at 18% 14%, rgba(255, 140, 200, .56), rgba(255, 140, 200, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(255, 190, 140, .42), rgba(255, 190, 140, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(190, 130, 255, .38), rgba(190, 130, 255, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(160, 120, 250, .38), rgba(160, 120, 250, 0) 70%); }
+html[data-look="glass"][data-theme="light"] #g-aurora .tl-n { background: radial-gradient(38% 26% at 18% 14%, rgba(120, 100, 255, .56), rgba(120, 100, 255, 0) 70%), radial-gradient(34% 24% at 88% 30%, rgba(150, 140, 255, .44), rgba(150, 140, 255, 0) 70%), radial-gradient(46% 30% at 52% 82%, rgba(210, 140, 240, .34), rgba(210, 140, 240, 0) 70%), radial-gradient(30% 22% at 8% 62%, rgba(120, 100, 240, .38), rgba(120, 100, 240, 0) 70%); }
+html[data-look="glass"][data-black] #g-aurora { display: none; }
+@keyframes g-drift { to { transform: translate3d(-5%, 4%, 0) scale(1.07); } }
+html[data-look="glass"].lite #g-aurora, html[data-look="glass"].calm #g-aurora { animation: none; will-change: auto; }
+html[data-look="glass"].calm #g-aurora .tl { transition-duration: .12s; }
+/* The app sits above it; the page's own background is the aurora's colour. */
+html[data-look="glass"] body { background: var(--bg); }
+html[data-look="glass"] #app { position: relative; z-index: 1; }
+/* Nothing out of sight is drawn (the PC app keeps its page running in the tray). */
+/* (and when nothing has been touched for a while: shell.js adds html.g-idle) */
+html.away[data-look="glass"] #g-aurora, html.g-idle[data-look="glass"] #g-aurora { animation-play-state: paused; will-change: auto; }
+html.g-scrolling[data-look="glass"] #g-aurora { animation-play-state: paused; }  /* (its layer is kept: dropping and redrawing it would cost more than the drift) */
+/* (a sheet open: its blur sits on the page, which doesn't need to drift under it) */
+html[data-look="glass"]:has(#layers > .layer:not(.menu-layer)) #g-aurora { animation-play-state: paused; }
+
+/* ================================================================== base: selection, focus, scrollbars, icons */
+
+html[data-look="glass"] ::selection { background: light-dark(rgba(124, 91, 224, .28), rgba(150, 108, 240, .5)); color: var(--text); }
+html[data-look="glass"] :focus-visible {
+  outline: 2px solid var(--focus); outline-offset: 2px;
+  box-shadow: 0 0 0 5px light-dark(rgba(124, 91, 224, .18), rgba(178, 164, 238, .22));
+}
+html[data-look="glass"] .field:focus-visible, html[data-look="glass"] .block-input:focus-visible { box-shadow: var(--ring); }
+@media (hover: hover) and (pointer: fine) {
+  html[data-look="glass"] ::-webkit-scrollbar-thumb { background: light-dark(rgba(110, 80, 200, .30), rgba(214, 196, 255, .22)); border: 3px solid transparent; background-clip: padding-box; }
+  html[data-look="glass"] ::-webkit-scrollbar-thumb:hover { background-color: light-dark(rgba(110, 80, 200, .5), rgba(214, 196, 255, .4)); }
+  html[data-look="glass"] * { scrollbar-color: light-dark(rgba(110, 80, 200, .3), rgba(214, 196, 255, .22)) transparent; }
+}
+
+/* ================================================================== glass surfaces */
+
+/* .g is the board's glass: a soft fill, the light edge (a masked gradient border) and the drop shadow. Put it on a
+   new surface (V.glass.surface(el) adds it from JS); the app's existing parts below get the same look without it. */
+html[data-look="glass"] .g {
+  position: relative; background: var(--g-fill); border-radius: 22px;
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .g::before, html[data-look="glass"] .card:not(button)::before,
+html[data-look="glass"] .menu::before, html[data-look="glass"] .sheet::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+}
+/* The sheen: a soft light that sweeps across on hover and press. */
+html[data-look="glass"] .sheen { overflow: hidden; }
+html[data-look="glass"] .sheen::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, light-dark(rgba(255, 255, 255, .32), rgba(255, 255, 255, .13)) 50%, rgba(255, 255, 255, 0) 65%);
+  transform: translateX(-130%);
+}
+html[data-look="glass"] .sheen:active::after, html[data-look="glass"] .sheen.sweep::after { transform: translateX(130%); transition: transform .9s var(--g-ease); }
+@media (hover: hover) { html[data-look="glass"] .sheen:hover::after { transform: translateX(130%); transition: transform .9s var(--g-ease); } }
+/* A bar or a sheet: glass with the blur (the only places it's used). Called .g-bar, as the app's own .bar is the thin
+   progress bar. */
+html[data-look="glass"] .g-bar { background: var(--g-bar); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); }
+html[data-look="glass"].lite .g-bar { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* The app's own cards (settings groups, Share's cards, the clipboard's, stats...): glass. Rows that are buttons
+   (Notes' list) are the Notes area's. */
+html[data-look="glass"] :is(.card:not(button), .send-card, .help-card, .ask-card, .cap-card, .aic-card, .template) {
+  position: relative; background: var(--g-fill); border: 0; border-radius: var(--r-lg);
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] :is(.send-card, .help-card, .ask-card, .cap-card, .aic-card, .template)::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+}
+
+/* Sheets and dialogs: the scrim blurs what's behind, the sheet is glass and springs up. */
+html[data-look="glass"] .layer { background: var(--scrim); transition: opacity .24s var(--g-ease); }
+/* (no blur on the scrim: a full-screen backdrop blur is the costliest kind; a darker scrim reads the same) */
+html[data-look="glass"] .menu-layer, html[data-look="glass"] .menu-layer.shown { -webkit-backdrop-filter: none; backdrop-filter: none; background: transparent; }
+html[data-look="glass"] .sheet {
+  background: light-dark(rgba(250, 247, 255, .86), rgba(32, 24, 62, .78));
+  -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+  border-radius: var(--r-xl) var(--r-xl) 0 0; box-shadow: inset 0 1px 0 var(--g-hi), var(--shadow-3);
+  transform: translateY(105%); transition: transform .46s var(--g-slide);
+}
+html[data-look="glass"] .layer.shown .sheet { transform: none; }
+/* (a phone's sheet comes up from below the screen and goes back down; util.js removes the layer 180 ms after leaving starts) */
+html[data-look="glass"] .layer.leaving .sheet { transform: translateY(105%); transition: transform .18s var(--g-in); }
+html[data-look="glass"] .sheet::before { background: light-dark(rgba(110, 80, 200, .3), rgba(255, 255, 255, .28)); }
+html[data-look="glass"] .sheet-actions { border-top-color: var(--line); }
+@media (min-width: 700px) {
+  html[data-look="glass"] .sheet { border-radius: var(--r-xl); transform: translateY(40px) scale(.97); }
+  html[data-look="glass"] .layer.shown .sheet { transform: none; }
+  html[data-look="glass"] .layer.leaving .sheet { transform: translateY(24px) scale(.98); }
+}
+html[data-look="glass"].lite .sheet { -webkit-backdrop-filter: none; backdrop-filter: none; background: light-dark(rgba(250, 247, 255, .98), rgba(30, 22, 58, .97)); transition-duration: .2s; }
+
+/* Menus: floating glass, a spring in. */
+html[data-look="glass"] .menu {
+  position: fixed; border: 0; border-radius: 18px; background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--shadow-3); transform-origin: var(--g-origin, 50% 0);
+  animation: g-menu-in .26s var(--g-spring) both;
+}
+html[data-look="glass"] .menu-item { border-radius: 12px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .menu-item:hover, html[data-look="glass"] .menu-item:focus { background: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .08)); }
+html[data-look="glass"] .menu-item:active { transform: scale(.98); }
+html[data-look="glass"].lite .menu { background: light-dark(rgba(250, 247, 255, .99), rgba(38, 30, 70, .99)); animation-duration: .14s; }
+@keyframes g-menu-in { from { opacity: 0; transform: translateY(-6px) scale(.96); } to { opacity: 1; transform: none; } }
+
+/* Toasts. */
+html[data-look="glass"] #toasts { bottom: calc(var(--g-bar-space) + 14px + var(--safe-bottom)); }
+html[data-look="glass"] .toast {
+  border: 0; border-radius: 18px; background: var(--toast);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 0 0 1px var(--toast-edge), 0 10px 26px rgba(0, 0, 0, .45);
+  animation: g-toast-in .42s var(--g-spring) both;
+}
+/* (nearly solid, no blur: nothing from the page shows through the words; the one definition of the rise is here, overlays.css uses it too) */
+@keyframes g-toast-in { from { opacity: 0; transform: translateY(16px) scale(.94); } to { opacity: 1; transform: none; } }
+html[data-look="glass"] .toast.leaving { transition: opacity .18s var(--g-in), transform .18s var(--g-in); transform: translateY(8px) scale(.97); }
+
+/* ================================================================== controls */
+
+/* Buttons: the one gradient button per screen (.primary), quiet glass for the rest. Press .12 s, a light sweep on hover.
+   Only transform and opacity move: a hover is a light layer (::before) that fades in, never a colour, shadow or filter
+   that changes. */
+html[data-look="glass"] .btn {
+  --g-lift: light-dark(rgba(110, 80, 200, .15), rgba(255, 255, 255, .12));
+  border: 0; border-radius: var(--r-md); min-height: 44px; overflow: hidden; color: var(--text);
+  background: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .07));
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .9), rgba(255, 255, 255, .12)), inset 0 0 0 1px var(--g-ring);
+  transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .btn::before, html[data-look="glass"] .fab::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: var(--g-lift); opacity: 0;
+  transition: opacity .2s var(--g-ease);
+}
+html[data-look="glass"] .btn::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .2) 50%, rgba(255, 255, 255, 0) 65%); transform: translateX(-130%);
+}
+@media (hover: hover) { html[data-look="glass"] .btn:hover::after { transform: translateX(130%); transition: transform .8s var(--g-ease); } }
+html[data-look="glass"] .btn:hover:not(:disabled)::before, html[data-look="glass"] .fab:hover::before { opacity: 1; }
+/* A hover lifts the button a pixel on the spring, as the tiles and cards lift (a finger has no hover: nothing here for it). */
+@media (hover: hover) {
+  html[data-look="glass"] .btn { transition: transform .2s var(--g-spring); }
+  html[data-look="glass"] .btn:hover:not(:disabled):not(:active) { transform: translateY(-1px); }
+}
+html[data-look="glass"] .btn:active:not(:disabled) { transform: scale(.96); transition-duration: var(--d-press); }
+html[data-look="glass"] .btn.primary {
+  --g-lift: rgba(255, 255, 255, .22);
+  color: var(--on-primary); background: var(--g-grad);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 24px var(--g-glow);
+}
+html[data-look="glass"] .btn.tonal {
+  --g-lift: light-dark(rgba(110, 70, 220, .16), rgba(255, 255, 255, .16));
+  color: light-dark(#3a1d92, #d7ccff); background: var(--g-grad-soft);
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .5), rgba(255, 255, 255, .2)), inset 0 0 0 1px var(--accent-line);
+}
+html[data-look="glass"] .btn.quiet { background: transparent; box-shadow: none; color: var(--text-2); }
+html[data-look="glass"] .btn.quiet:hover:not(:disabled) { color: var(--text); }
+html[data-look="glass"] .btn.danger { --g-lift: rgba(255, 255, 255, .12); background: var(--danger-fill); color: var(--on-danger-fill); box-shadow: inset 0 0 0 1px light-dark(transparent, rgba(255, 163, 163, .35)); }
+html[data-look="glass"] .btn.danger-quiet { background: transparent; box-shadow: none; color: var(--danger); --g-lift: var(--danger-soft); }
+html[data-look="glass"] .btn:disabled { opacity: .45; }
+
+html[data-look="glass"] .icon-btn { border-radius: 15px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .icon-btn:active { transform: scale(.9); }
+html[data-look="glass"] .icon-btn:hover { background: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .07)); }
+html[data-look="glass"] .icon-btn.on { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* The round new-note button. */
+html[data-look="glass"] .fab {
+  --g-lift: rgba(255, 255, 255, .13);
+  border-radius: 20px; background: var(--g-grad); color: var(--on-primary); overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 24px var(--g-glow);
+  transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .fab:hover { background: var(--g-grad); }
+html[data-look="glass"] .fab:active { background: var(--g-grad); transform: scale(.9); }
+@media (max-width: 899px) { html[data-look="glass"] .fab { bottom: calc(var(--g-bar-space) + 12px); } }
+
+/* Fields (a box can't carry a light layer of its own, so the focus ring and hover edge simply change). */
+html[data-look="glass"] .field {
+  border: 0; border-radius: 15px; background: var(--field);
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .08)), inset 0 0 0 1px var(--line);
+  transition: none;
+}
+html[data-look="glass"] .field:focus { border: 0; background: light-dark(rgba(255, 255, 255, .92), rgba(255, 255, 255, .09)); box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 5px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .2)); }
+html[data-look="glass"] .field:hover:not(:focus) { box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .1)), inset 0 0 0 1px var(--line-strong); }
+
+/* Chips. */
+html[data-look="glass"] .chip {
+  border: 0; border-radius: 15px; background: light-dark(rgba(255, 255, 255, .6), rgba(255, 255, 255, .06));
+  box-shadow: inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, .1)), inset 0 0 0 1px var(--g-ring);
+  transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .chip:active { transform: scale(.95); }
+html[data-look="glass"] .chip:hover { box-shadow: inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, .12)), inset 0 0 0 1px var(--line-strong); }
+html[data-look="glass"] .chip.on {
+  background: var(--g-tab-fill); color: #fff; border: 0;
+  box-shadow: inset 0 1px 0 var(--g-tab-edge), inset 0 0 0 1px light-dark(transparent, rgba(214, 196, 255, .4)), 0 6px 16px light-dark(rgba(110, 70, 220, .3), rgba(98, 66, 200, .35));
+}
+html[data-look="glass"] .chip.on .count { color: rgba(255, 255, 255, .85); }
+
+/* Segmented controls. */
+html[data-look="glass"] .segmented { background: light-dark(rgba(110, 80, 200, .09), rgba(0, 0, 0, .25)); border-radius: 16px; box-shadow: inset 0 0 0 1px var(--g-ring); }
+html[data-look="glass"] .segmented button { border-radius: 13px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .segmented button:active { transform: scale(.96); }
+html[data-look="glass"] .segmented button[aria-checked="true"], html[data-look="glass"] .segmented button[aria-selected="true"] {
+  background: var(--selected); border-color: transparent; color: var(--text);
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 4px 12px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .4));
+}
+
+/* Switches: the thumb springs (transform) and the lit track fades in over the plain one (opacity). */
+html[data-look="glass"] .switch {
+  background: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .1)); border: 0;
+  box-shadow: inset 0 0 0 1.5px var(--control); transition: none;
+}
+html[data-look="glass"] .switch::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--g-grad); opacity: 0; pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 4px 12px var(--g-glow); transition: opacity .25s var(--g-ease);
+}
+html[data-look="glass"] .switch::after { top: 4px; left: 4px; width: 18px; height: 18px; z-index: 1; transition: transform .32s var(--g-spring); }
+html[data-look="glass"] .switch:active::after { transform: scaleX(1.22); transform-origin: 0 50%; }
+html[data-look="glass"] .switch:checked:active::after { transform: translateX(18px) scaleX(1.22); transform-origin: 100% 50%; }
+html[data-look="glass"] .switch:checked { background: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .1)); box-shadow: none; }
+html[data-look="glass"] .switch:checked::before { opacity: 1; }
+html[data-look="glass"] .switch:checked::after { transform: translateX(18px); background: #fff; }
+
+/* Thin progress bars. */
+html[data-look="glass"] .bar { border-radius: 2px; }
+html[data-look="glass"] .bar i { background: var(--g-grad); }
+
+/* Badges pop in (a number changing is shell.js). */
+html[data-look="glass"] .badge {
+  background: var(--g-grad); color: #fff; font-weight: 700; box-shadow: 0 0 0 2px var(--bg), 0 4px 12px var(--g-glow);
+}
+html[data-look="glass"] .badge:not([hidden]) { animation: g-pop .55s var(--g-spring) both; }
+@keyframes g-pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* ================================================================== the shell: the tab bar, the rail, the top row */
+
+/* A phone: a floating glass bar. It's out of the flow (screens scroll under it and leave --g-bar-space free at the
+   bottom); the sliding indicator and the weft that passes between tabs are shell.js's. */
+@media (max-width: 899px) {
+  html[data-look="glass"] { --g-bar-space: calc(98px + var(--safe-bottom)); }
+  html[data-look="glass"] #app.ready:not(.gate) { grid-template-rows: minmax(0, 1fr); grid-template-areas: "view"; }
+  html[data-look="glass"] #app.ready[data-view=settings] { --g-bar-space: 0px; }
+  html[data-look="glass"] .tabs {
+    position: fixed; left: 12px; right: 12px; bottom: calc(14px + var(--safe-bottom)); z-index: 5;
+    min-height: 0; height: 70px; padding: 0 4px; border: 0; border-radius: 26px; background: var(--g-bar);
+    -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
+    box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 16px 40px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .6));
+    justify-content: stretch;
+  }
+  html[data-look="glass"].lite .tabs { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html[data-look="glass"] .tabs .tab { flex: 1 1 0; max-width: none; min-height: 70px; height: 70px; border-radius: 22px; }
+  /* The screens scroll under the bar and keep their last row clear of it. */
+  html[data-look="glass"] .view { padding-bottom: var(--g-bar-space); }
+  html[data-look="glass"] .view[data-tab=notes] { padding-bottom: 0; }
+  /* (Notes' list leaves the pick bar and the floating tab bar room, 170 px, always: the list's length never changes as picking starts and ends) */
+  html[data-look="glass"] .view[data-tab=notes] .list-column:not(.searching),
+  html[data-look="glass"] .view[data-tab=notes] .notes-layout.selecting .list-column { padding-bottom: calc(170px + var(--safe-bottom)); }
+  /* (cards change height by a pixel as picking starts and ends: the place isn't moved by the browser's scroll anchoring) */
+  html[data-look="glass"] .view[data-tab=notes] .list-column { overflow-anchor: none; }
+  /* A fade under the bar, like the board's, so the last words don't run into the glass. */
+  html[data-look="glass"] #app.ready:not(.gate):not([data-view=settings])::after {
+    content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(128px + var(--safe-bottom)); z-index: 4; pointer-events: none;
+    background: linear-gradient(180deg, light-dark(rgba(239, 233, 255, 0), rgba(11, 9, 24, 0)), light-dark(rgba(239, 233, 255, .5), rgba(11, 9, 24, .5)) 55%, light-dark(rgba(239, 233, 255, .72), rgba(11, 9, 24, .72)));
+  }
+  html[data-look="glass"][data-black] #app.ready:not(.gate):not([data-view=settings])::after { background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, .55) 55%, rgba(0, 0, 0, .8)); }
+  html[data-look="glass"] .tour-offer { bottom: calc(var(--g-bar-space) + 8px); }
+}
+
+/* Both: the tab itself. Its words are the one place a colour fades (a few letters, no layout): white as the pill arrives,
+   muted again once it has gone (shell.js: .g-over lights the tabs the pill sweeps past; the tab it leaves fades at once, so white words never linger on the pale bar). */
+html[data-look="glass"] .tab { position: relative; z-index: 1; color: var(--muted); border-radius: 20px; transition: color .22s var(--g-ease); }
+html[data-look="glass"] .tab.on { color: #fff; transition: color .18s linear .1s; }
+html[data-look="glass"] .tab.g-over { color: #fff; transition: color .08s linear; }
+html[data-look="glass"] .tab.on .tab-icon { color: inherit; }
+html[data-look="glass"] .tab .tab-icon { transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .tab:active .tab-icon { transform: scale(.84); }
+html[data-look="glass"] .tab.on .tab-icon { transform: translateY(-1px); }
+html[data-look="glass"] .tab.on:active .tab-icon { transform: translateY(-1px) scale(.88); }
+html[data-look="glass"] .tab-label { font-weight: 500; }
+html[data-look="glass"] .tab.on .tab-label { font-weight: 600; }
+@media (hover: hover) { html[data-look="glass"] .tab:not(.on):hover { color: var(--text); } }
+/* The weft under the name: always drawn (a dash as long as the line), shown by its offset. shell.js sets --g-weft (its
+   length) and passes it from tab to tab. */
+html[data-look="glass"] .tab .weave { visibility: visible; color: #fff; overflow: visible; }
+html[data-look="glass"] .tab .weave path { stroke: currentColor; stroke-dasharray: var(--g-weft, 24); stroke-dashoffset: var(--g-weft, 24); }
+html[data-look="glass"] .tab.on .weave path { stroke-dashoffset: 0; }
+html[data-look="glass"] .tabs[data-glass="no-js"] .tab:not(.on) .weave path { stroke-dashoffset: var(--g-weft, 24); }
+/* The sliding indicator (one element, moved with transform). */
+html[data-look="glass"] .g-tabslide {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; display: flex; align-items: center; justify-content: center;
+  transition: transform var(--d-slide) var(--g-slide);
+}
+html[data-look="glass"] .g-tabslide i {
+  display: block; width: 66px; height: 56px; border-radius: 19px; background: var(--g-tab-fill);
+  box-shadow: inset 0 1px 0 var(--g-tab-edge), inset 0 0 0 1px light-dark(transparent, rgba(214, 196, 255, .28)), 0 8px 18px light-dark(rgba(110, 70, 220, .35), rgba(98, 66, 200, .3));
+}
+html[data-look="glass"] .g-tabslide.g-still { transition: none; }
+html[data-look="glass"] .g-tabslide.g-sa i { animation: g-stretch-a .46s cubic-bezier(.25, .8, .3, 1); }
+html[data-look="glass"] .g-tabslide.g-sb i { animation: g-stretch-b .46s cubic-bezier(.25, .8, .3, 1); }
+@keyframes g-stretch-a { 0% { transform: none; } 28% { transform: scale(1.07, .96); } 60% { transform: scale(.985, 1.015); } 100% { transform: none; } }
+@keyframes g-stretch-b { 0% { transform: none; } 28% { transform: scale(1.07, .96); } 60% { transform: scale(.985, 1.015); } 100% { transform: none; } }
+html[data-look="glass"] .tab-dot { background: var(--g-grad); box-shadow: 0 0 0 2px var(--bg), 0 0 8px var(--g-glow); }
+
+/* Wide (a Chromebook, the PC app): a glass rail down the side. */
+@media (min-width: 900px) {
+  html[data-look="glass"] .tabs {
+    background: var(--g-bar); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur); border-right: 0;
+    box-shadow: inset -1px 0 0 var(--g-ring), 6px 0 28px light-dark(rgba(76, 52, 160, .08), rgba(4, 2, 14, .25)); position: relative;
+  }
+  html[data-look="glass"].lite .tabs { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html[data-look="glass"] .tabs .tab { height: 62px; border-radius: 16px; padding: 8px 0 6px; }
+  html[data-look="glass"] .g-tabslide i { width: 64px; height: 62px; border-radius: 16px; }
+  html[data-look="glass"] .rail-home { border-radius: 16px; transition: transform .22s var(--g-spring); }
+  html[data-look="glass"] .rail-home:active { transform: scale(.92); }
+  html[data-look="glass"] .rail-home .mark { filter: drop-shadow(0 6px 14px var(--g-glow)); }
+}
+@media (min-width: 900px) and (hover: hover) {
+  html[data-look="glass"] .tab:hover, html[data-look="glass"] .rail-home:hover { background: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .05)); }
+  html[data-look="glass"] .tab.on:hover { background: transparent; }
+  html[data-look="glass"] .tab:not(.on):hover .tab-icon { transform: translateY(-2px) scale(1.08); }
+  html[data-look="glass"] .rail-home:hover { transform: translateY(-2px); }
+}
+
+/* The screens' top row: a big title, round icon buttons, your picture as a glowing round. */
+html[data-look="glass"] .page-head h1, html[data-look="glass"] .list-title h1, html[data-look="glass"] .page > h1,
+html[data-look="glass"] .today-greet h1 { font-weight: 700; letter-spacing: -.025em; }
+html[data-look="glass"] .app-head > .icon-btn, html[data-look="glass"] .app-head .head-home { border-radius: 15px; }
+html[data-look="glass"] .app-head .head-mark { filter: drop-shadow(0 6px 14px var(--g-glow)); }
+html[data-look="glass"] .av {
+  background: linear-gradient(150deg, #9a6cf2, #5b3bb8); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 2px light-dark(rgba(124, 91, 224, .35), rgba(214, 196, 255, .35));
+}
+html[data-look="glass"] .me { transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .me:active { transform: scale(.9); }
+html[data-look="glass"] .me.on { background: var(--accent-soft); }
+@media (hover: hover) { html[data-look="glass"] .me:hover .av { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 2px var(--accent), 0 6px 16px var(--g-glow); } }
+html[data-look="glass"] .av .dot { box-shadow: 0 0 0 2.5px var(--bg); }
+
+/* ================================================================== motion primitives (V.motion, glass/motion.js) */
+
+/* .g-enter rises in (the board's .enter); alternate the run class to run it again. V.motion.enter() uses WAAPI and needs
+   neither, but this works with plain markup. */
+html[data-look="glass"] .g-enter { opacity: 0; transform: translateY(12px) scale(.985); animation-duration: .5s; animation-timing-function: var(--g-ease); animation-fill-mode: both; }
+html[data-look="glass"] .g-run-a .g-enter { animation-name: g-rise-a; }
+html[data-look="glass"] .g-run-b .g-enter { animation-name: g-rise-b; }
+@keyframes g-rise-a { to { opacity: 1; transform: none; } }
+@keyframes g-rise-b { to { opacity: 1; transform: none; } }
+/* The weft (a wavy thread path) draws itself. */
+html[data-look="glass"] .g-weft { fill: none; stroke-linecap: round; }
+/* A checkbox that sparks: the four sparks sit in the box and fly out when V.motion.spark() runs. */
+html[data-look="glass"] .g-spark { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 3px; background: light-dark(#8b6fe0, #c9b8ff); opacity: 0; pointer-events: none; }
+/* Rolling numbers: each digit is a column that slides (V.motion.roll sets the offsets). */
+html[data-look="glass"] .g-roll { position: relative; display: inline-flex; height: 1em; line-height: 1; overflow: hidden; font-variant-numeric: tabular-nums; }
+html[data-look="glass"] .g-roll-d { display: block; height: 1em; overflow: hidden; }
+html[data-look="glass"] .g-roll-s { display: flex; flex-direction: column; }
+html[data-look="glass"] .g-roll-s span { display: block; height: 1em; line-height: 1em; text-align: center; }
+/* A shared element opening (V.motion.flip) and peeking (V.motion.peek) are drawn on a clone, over everything. */
+html[data-look="glass"] .g-flip { position: fixed; z-index: 70; margin: 0; pointer-events: none; transform-origin: 0 0; will-change: transform, opacity; }
+html[data-look="glass"] .g-peek { position: fixed; z-index: 70; transform-origin: 50% 50%; will-change: transform, opacity; }
+html[data-look="glass"] .g-swipe-back { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 22px; border-radius: inherit; opacity: 0; pointer-events: none; }
+html[data-look="glass"] .g-pull-hint { position: absolute; left: 0; right: 0; top: 0; height: 52px; display: grid; place-items: center; opacity: 0; pointer-events: none; font: 500 13px/1 var(--font); color: var(--text-2); }
+
+/* A large title that shrinks and fades as its page scrolls, and a slim glass bar that fades in (V.motion.shrink). Where the
+   browser has scroll-driven animations the scroller carries a named scroll timeline (motion.js) and these follow it on the
+   compositor, with no script per frame; elsewhere motion.js does it with one scroll listener. */
+@supports (animation-timeline: scroll()) {
+  html[data-look="glass"] .g-shrink-title {
+    transform-origin: 0 0; animation: g-shrink-title linear both; animation-range: 0px var(--g-shrink-d, 84px);
+  }
+  html[data-look="glass"] .g-shrink-bar {
+    opacity: 0; visibility: hidden; pointer-events: none; animation: g-shrink-bar linear both;  /* (hidden at rest: its blur isn't drawn under the page until it shows) */
+    animation-range: calc(var(--g-shrink-d, 84px) * .62) calc(var(--g-shrink-d, 84px) * 1.14);
+  }
+  @keyframes g-shrink-title { to { transform: translate3d(0, 18px, 0) scale(.84); opacity: 0; } }
+  @keyframes g-shrink-bar { from { opacity: 0; visibility: hidden; transform: translate3d(0, -8px, 0); pointer-events: none; } to { opacity: 1; visibility: visible; transform: none; pointer-events: auto; } }
+}
+
+/* A finger needs 44 px: the app's own chips and icon buttons carry an invisible one (::after); these didn't. */
+@media (pointer: coarse) {
+  html[data-look="glass"] .chat-go, html[data-look="glass"] .chat-pill { position: relative; }
+  html[data-look="glass"] .chat-go::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; }
+  html[data-look="glass"] .chat-pill::after { content: ""; position: absolute; inset: -5px 0; }
+  html[data-look="glass"] .chat-tools .icon-btn::after { inset: -4px; }
+  html[data-look="glass"] .list-go { min-height: 44px; margin: -13px -6px; }
+}
+
+/* ================================================================== lite and calm */
+
+html[data-look="glass"].lite *, html[data-look="glass"].lite *::before, html[data-look="glass"].lite *::after { transition-duration: min(var(--g-lite-cap, .14s), 1s); }
+html[data-look="glass"].lite .g-enter { animation-duration: .18s; }
+html[data-look="glass"].lite .badge:not([hidden]) { animation-duration: .25s; }
+html[data-look="glass"].lite .g-tabslide { transition-duration: .22s; }
+html[data-look="glass"].lite .g-tabslide.g-sa i, html[data-look="glass"].lite .g-tabslide.g-sb i { animation: none; }
+html[data-look="glass"].lite .sheen::after, html[data-look="glass"].lite .btn::after { display: none; }
+/* Calm: nothing moves. Fades of 120 ms or less. */
+html[data-look="glass"].calm *, html[data-look="glass"].calm *::before, html[data-look="glass"].calm *::after {
+  animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
+  transition-duration: .12s !important; transition-delay: 0s !important; scroll-behavior: auto !important;
+}
+html[data-look="glass"].calm .g-tabslide { transition: none; }
+html[data-look="glass"].calm .tab .weave path { transition: none; }
+html[data-look="glass"].calm .sheen::after, html[data-look="glass"].calm .btn::after { display: none; }
+html[data-look="glass"].calm .sheet, html[data-look="glass"].calm .layer.shown .sheet { transform: none; }
+/* Calm moves nothing: a press changes no size either, and a toast leaves by fading only. */
+html[data-look="glass"].calm :is(.btn, .chip, .icon-btn, .menu-item, .tab, .segmented button, .fab, .me, .rail-home, .sheen, .chat-go):active,
+html[data-look="glass"].calm .tab:active .tab-icon, html[data-look="glass"].calm .tab.on:active .tab-icon,
+html[data-look="glass"].calm .switch:active::after, html[data-look="glass"].calm .btn:hover:not(:disabled) { transform: none; }
+html[data-look="glass"].calm .toast.leaving { transform: none; }
+html[data-look="glass"].calm .menu, html[data-look="glass"].calm .toast { animation-name: g-fade-in; animation-duration: .12s !important; }
+@keyframes g-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  html[data-look="glass"] *, html[data-look="glass"] *::before, html[data-look="glass"] *::after {
+    animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
+    transition-duration: .12s !important; transition-delay: 0s !important; scroll-behavior: auto !important;
+  }
+  html[data-look="glass"] #g-aurora { animation: none; }
+}

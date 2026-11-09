@@ -1,0 +1,271 @@
+/* Wefty 2.0 "glass", area: Share. This file belongs to the Share builder; nobody else edits it.
+   Share (js/share.js, send.js, files.js, clips.js): the Send, Files and Clipboard parts and their switch.
+   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
+   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+
+/* ================================================================== the title row lines up with Notes' (round 1 fix) */
+
+/* A title with a line under it (Share's): the title and your picture sit on one line, as Notes' do, the line below. */
+html[data-look="glass"] header.app-head:has(.head-sub) { align-items: flex-start; padding-top: calc(14px + var(--safe-top)); }
+html[data-look="glass"] header.app-head:has(.head-sub) .head-title { padding-top: 5px; }
+html[data-look="glass"] .app-head .head-sub { margin-top: 1px; }
+
+/* ================================================================== one set of edges (round 2: the owner's "doesn't line up")
+
+   What was wrong: Send's card (.send-card) is only a layout grid in the classic look, with no padding, because every row in
+   it was its own card. Glass gave it a fill and an edge, so the rows ran flush to the edge of the card round them (the three
+   buttons ended exactly on it, the Send button overhung it), and glass's own .btn height (44) beat Send's (56), so the
+   button sat lower than the box beside it. Now there is ONE card with room inside it, and everything in it shares the same
+   inner edges, the same gap and the same height:
+
+     --sh-pad   the room inside a card (all four sides)
+     --sh-gap   between rows, and between the buttons of a row
+     --sh-h     the height of every row and button in a card (a box that grows with its words never gets shorter than this)
+     --sh-r     the corners of what sits inside a card (the card itself is --r-lg, 22, as every glass card)
+
+   The page's gutter is the app's own (16 px: .page), the same as Today's and Notes'. The title of a list ("Sent and
+   received") keeps the 2 px optical inset Today's headings have. */
+
+html[data-look="glass"] .view:is([data-tab=send], [data-tab=files], [data-tab=clips]) {
+  --sh-pad: 14px; --sh-gap: 10px; --sh-h: 56px; --sh-r: 16px;
+  --sh-chip: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .06));
+  --sh-chip-edge: light-dark(rgba(255, 255, 255, .9), rgba(255, 255, 255, .12));
+  --sh-well: light-dark(rgba(110, 80, 200, .06), rgba(0, 0, 0, .22));
+}
+
+/* The switch (Send | Files | Clipboard): on the card's edges (full width, grid), and a narrow one never cuts a word: the icons
+   go first (a container query on the switch itself, so browser zoom or a small phone both get it). */
+html[data-look="glass"] .segmented.share-switch { margin: 2px 0 16px; container-type: inline-size; }
+@container (max-width: 300px) {
+  html[data-look="glass"] .share-switch button .icon { display: none; }
+  html[data-look="glass"] .share-switch button { gap: 4px; padding-inline: 4px; }
+  html[data-look="glass"] .share-switch .share-label { font-size: 13px; }
+}
+
+/* The glass card: Send's, and Clipboard's box (the paste box and Send to all, which had no card at all). */
+html[data-look="glass"] :is(.send-card, .clip-page > .send-row) {
+  display: grid; gap: var(--sh-gap); padding: var(--sh-pad); margin-top: 0; border-radius: var(--r-lg); container-type: inline-size;
+}
+html[data-look="glass"] .clip-page > .send-row {
+  position: relative; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .clip-page > .send-row::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .clip-page > .send-row { gap: var(--sh-gap); }
+/* A narrow Clipboard card: "Send to all" is long, so it goes under the box (full width) instead of squeezing it into two lines. */
+@container (max-width: 336px) {
+  html[data-look="glass"] .clip-page > .send-row > * { grid-column: 1 / -1; }  /* (a query styles what is inside the card, not the card) */
+}
+
+/* ---- Send to: the first row (a button when there is more than one device to send to) */
+html[data-look="glass"] .send-to-wrap { gap: 8px; min-width: 0; }
+html[data-look="glass"] .send-to-row {
+  min-height: var(--sh-h); padding: 0 16px; border: 0; border-radius: var(--sh-r); background: var(--sh-chip);
+  box-shadow: inset 0 1px 0 var(--sh-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .send-to-row > .icon { color: var(--accent-ink); }
+html[data-look="glass"] .send-to-label { color: var(--muted); }
+html[data-look="glass"] .send-hint { margin: 0 2px; }
+
+/* ---- the three buttons (Photo, A file, Camera): glass chips on one grid, the same width, the same height */
+html[data-look="glass"] .send-card .tiles { gap: var(--sh-gap); min-width: 0; }
+html[data-look="glass"] .send-card .tile {
+  min-width: 0; min-height: var(--sh-h); padding: 6px 8px; border: 0; border-radius: var(--sh-r); background: var(--sh-chip); color: var(--text);
+  box-shadow: inset 0 1px 0 var(--sh-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .send-card .tile .icon { color: var(--accent-ink); }
+html[data-look="glass"] .send-card .tile strong { min-width: 0; font: 600 15px/18px var(--font); white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
+
+/* A narrow card (a small phone, bigger text): the icon over its word, so no word is ever cut. (A container query, so it
+   follows the card's own width, with browser zoom or without.) */
+@container (max-width: 336px) {
+  html[data-look="glass"] .send-card .tile { flex-direction: column; gap: 3px; padding: 6px 4px; }
+  html[data-look="glass"] .send-card .tile strong { font-size: 13.5px; }
+  html[data-look="glass"] .send-to-row { padding: 0 14px; gap: 8px; }
+}
+
+/* The three buttons and the Send to row: the press and the hover are one recipe, as the board's chips and Today's tiles:
+   a spring on the press, a lift on a mouse, a light that fades in and a sheen that sweeps across. Only transform and opacity move. */
+html[data-look="glass"] :is(.send-card .tile, button.send-to-row, .clip-page > .btn.wide-btn) {
+  --g-lift: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .11));
+  position: relative; overflow: hidden; transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] :is(.send-card .tile, button.send-to-row)::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: var(--g-lift); opacity: 0;
+  transition: opacity .2s var(--g-ease);
+}
+html[data-look="glass"] :is(.send-card .tile, button.send-to-row)::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translateX(-130%);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, light-dark(rgba(255, 255, 255, .5), rgba(255, 255, 255, .13)) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] :is(.send-card .tile, button.send-to-row):active { transform: scale(.96); transition-duration: var(--d-press); background: var(--sh-chip); }
+html[data-look="glass"] :is(.send-card .tile, button.send-to-row):active::after { transform: translateX(130%); transition: transform .8s var(--g-ease); }
+html[data-look="glass"] :is(.send-card .tile, button.send-to-row):active::before { opacity: 1; }
+html[data-look="glass"] :is(.send-card .tile, button.send-to-row) .icon { transition: transform .22s var(--g-spring); }
+@media (hover: hover) {
+  html[data-look="glass"] :is(.send-card .tile, button.send-to-row):hover { transform: translateY(-2px); }
+  html[data-look="glass"] :is(.send-card .tile, button.send-to-row):hover:active { transform: scale(.96); }
+  html[data-look="glass"] :is(.send-card .tile, button.send-to-row):hover::before { opacity: 1; }
+  html[data-look="glass"] :is(.send-card .tile, button.send-to-row):hover::after { transform: translateX(130%); transition: transform .8s var(--g-ease); }
+  html[data-look="glass"] .send-card .tile:hover .icon { transform: translateY(-2px) rotate(-6deg) scale(1.08); }
+}
+
+/* ---- the words and Send: one row, one height. The box and the button are the same height and sit on the same line; a box
+   that grows with a longer text grows upwards from that line (the button keeps its own height and stays on the bottom). */
+html[data-look="glass"] .send-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sh-gap); align-items: end; margin: 0; min-width: 0; }
+html[data-look="glass"] .send-row textarea.field {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: var(--sh-h); padding-top: 17px; padding-bottom: 17px; border-radius: var(--sh-r);
+  background: var(--field);  /* (glass's own field: the placeholder reads at 4.5 to 1 on it, a tinted chip fill was 4.47 in light) */
+  box-shadow: inset 0 1px 0 var(--sh-chip-edge), inset 0 0 0 1px var(--line);
+}
+html[data-look="glass"] .send-row textarea.field:focus { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 5px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .2)); }
+
+/* Send: the one gradient button of the screen, with glass depth: a light along its top edge, a gloss over its upper part, a
+   darker inside along the bottom, a rim, and a soft coloured shadow under it. The arrow springs up on a press and a sheen
+   sweeps across; letting go springs the button back. */
+html[data-look="glass"] .send-row .btn {
+  box-sizing: border-box; min-height: var(--sh-h); padding: 0 22px; gap: 8px; border-radius: var(--sh-r); font-size: 16px; font-weight: 600;
+  transition: transform .22s var(--g-spring);
+}
+html[data-look="glass"] .send-row .btn.primary {
+  --g-lift: rgba(255, 255, 255, .2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .24), rgba(255, 255, 255, 0) 42%), var(--g-grad);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 -10px 16px -8px rgba(40, 12, 120, .5),
+    0 10px 22px -4px var(--g-glow);
+}
+html[data-look="glass"] .send-row .btn::after {
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] .send-row .btn:active:not(:disabled) { transform: scale(.95); transition-duration: var(--d-press); }
+html[data-look="glass"] .send-row .btn:active:not(:disabled)::after { transform: translateX(130%); transition: transform .7s var(--g-ease); }
+html[data-look="glass"] .send-row .btn .icon { transition: transform .22s var(--g-spring); }
+html[data-look="glass"] .send-row .btn:active .icon { transform: translateY(-3px); }
+@media (hover: hover) { html[data-look="glass"] .send-row .btn:hover:not(:disabled):not(:active) .icon { transform: translateY(-2px); } }
+
+/* Nothing to send yet (no words, nothing in the tray): the same button in glass, not grey and not switched off (a press still
+   says what to do): a soft purple fill, a ring, the arrow and word in the accent, no glow. It is the gradient again the
+   moment there is something to send (glass/share.js gives it a small spring then). */
+html[data-look="glass"] .send-card:has(> .tray[hidden]) .send-row:has(textarea:placeholder-shown) .btn.primary,
+html[data-look="glass"] .clip-page > .send-row:has(textarea:placeholder-shown) .btn.primary {
+  --g-lift: light-dark(rgba(110, 70, 220, .16), rgba(255, 255, 255, .16));
+  color: light-dark(#3a1d92, #d7ccff); background: var(--g-grad-soft);
+  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .55), rgba(255, 255, 255, .2)), inset 0 0 0 1px var(--accent-line);
+}
+
+/* ---- the tray (what waits to go): a well inside the card, on the same edges */
+html[data-look="glass"] .send-card .tray {
+  min-width: 0; padding: 12px; border: 0; border-radius: var(--sh-r); background: var(--sh-well); box-shadow: inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .tray-title strong { font-weight: 700; }
+html[data-look="glass"] .stage {
+  border: 0; border-radius: 14px; background: var(--sh-chip); box-shadow: inset 0 1px 0 var(--sh-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .stage-file .icon { color: var(--accent-ink); }
+html[data-look="glass"] .stage-x { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 2px 8px rgba(0, 0, 0, .4); }
+
+/* ================================================================== the lists under the card (same edges as the card) */
+
+/* The list's title, as Today's section titles are. */
+html[data-look="glass"] .view:is([data-tab=send], [data-tab=clips], [data-tab=files]) .page > h2.section {
+  margin: 28px 2px 12px; color: var(--text); font: 700 19px/24px var(--font-display); letter-spacing: -.01em;
+}
+html[data-look="glass"] .view:is([data-tab=send], [data-tab=clips], [data-tab=files]) .page > h2.section::after {
+  content: ""; display: inline-block; flex: none; width: 26px; height: 6px; margin-left: 2px; background: var(--g-weft-line, var(--accent)); opacity: .75;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 6'%3E%3Cpath d='M1 3 C 4 .5, 7 5.5, 10.5 3 S 17 .5, 20 3 S 26 5.5, 29 3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 6'%3E%3Cpath d='M1 3 C 4 .5, 7 5.5, 10.5 3 S 17 .5, 20 3 S 26 5.5, 29 3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+}
+
+/* A sent or received thing, and a clip: a glass row (the light along the top, the hairline round it; no drop shadow, as there
+   can be many of them). */
+html[data-look="glass"] :is(.transfer, .clip) {
+  border: 0; border-radius: 20px; background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .latest .clip { background: none; box-shadow: none; border-radius: 0; }
+html[data-look="glass"] .transfer.fresh { box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .transfer .t-icon, html[data-look="glass"] .transfer .t-thumb { border-radius: 14px; }
+
+/* "Nothing sent yet": a glass panel on the card's edges, the mark in its tile above the words. */
+html[data-look="glass"] .transfers > .empty.small {
+  padding: 28px 18px; border-radius: var(--r-lg); background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+
+/* The room used: a thin groove with the gradient in it, then the words, on the same edges. */
+html[data-look="glass"] .space-row { margin-top: 22px; }
+html[data-look="glass"] .space-row .bar {
+  height: 6px; border-radius: 3px; background: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .09));
+  box-shadow: inset 0 1px 1px light-dark(rgba(60, 40, 140, .12), rgba(0, 0, 0, .35));
+}
+html[data-look="glass"] .space-row .bar i { border-radius: 3px; transition: none; }  /* (the meter is drawn afresh each time: a width transition never played, and only transform and opacity move) */
+html[data-look="glass"] .space-row .space-words { margin-left: auto; text-align: right; color: var(--text-2); }  /* (wrapped under the bar: still on the right edge; --text-2, as the words sit on the aurora itself) */
+
+/* ================================================================== Clipboard */
+
+html[data-look="glass"] .clip-page > .btn.wide-btn { min-height: var(--sh-h); margin: var(--sh-gap) 0 0; border-radius: var(--sh-r); width: 100%; }
+html[data-look="glass"] .clip-page > .btn.wide-btn:active:not(:disabled) { transform: scale(.97); }
+html[data-look="glass"] .clip-latest .latest { margin-bottom: var(--sh-gap); padding: var(--sh-pad) 16px; }
+html[data-look="glass"] .clip-offer { margin-bottom: var(--sh-gap); padding: 16px; }
+html[data-look="glass"] .clip-offer-buttons .btn { min-height: 48px; border-radius: var(--sh-r); }
+html[data-look="glass"] .clip-foot:not(:empty) { margin-top: 24px; border-top-color: var(--g-hair, var(--line)); }
+html[data-look="glass"] .clip-step .switch-row { padding-inline: 2px; }
+html[data-look="glass"] .clip-actions .btn { border-radius: 14px; }
+
+/* ================================================================== Files */
+
+html[data-look="glass"] .files-layout { gap: var(--sh-gap); }
+html[data-look="glass"] .files-main { gap: var(--sh-gap); }
+
+/* Where to look (Your PC, This phone, Wefty Drive): glass buttons on one grid, the same width, on the card's edges; the one you
+   are in is lit as a picked chip is. A word that doesn't fit wraps (and the icons go in a narrow card), nothing is cut. */
+@media (max-width: 899px) {
+  html[data-look="glass"] .files-sources {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--sh-gap); padding: 0; margin: 0; container-type: inline-size;
+  }
+  html[data-look="glass"] .files-source {
+    min-width: 0; min-height: 52px; padding: 6px 8px; justify-content: center; gap: 6px; border: 0; border-radius: var(--sh-r); background: var(--sh-chip);
+    color: var(--text); font: 600 14px/17px var(--font); text-align: center;
+    box-shadow: inset 0 1px 0 var(--sh-chip-edge), inset 0 0 0 1px var(--g-ring);
+  }
+  html[data-look="glass"] .files-source span:last-child { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+  html[data-look="glass"] .files-source .icon { color: var(--accent-ink); }
+  html[data-look="glass"] .files-source.on {
+    background: var(--g-tab-fill); color: #fff; border: 0;
+    box-shadow: inset 0 1px 0 var(--g-tab-edge), inset 0 0 0 1px light-dark(transparent, rgba(214, 196, 255, .4)), 0 6px 16px light-dark(rgba(110, 70, 220, .3), rgba(98, 66, 200, .35));
+  }
+  html[data-look="glass"] .files-source.on .icon { color: inherit; }
+}
+@container (max-width: 330px) { html[data-look="glass"] .files-source .icon { display: none; } }
+html[data-look="glass"] .files-source { transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .files-source:active { transform: scale(.96); transition-duration: var(--d-press); }
+@media (min-width: 900px) {
+  html[data-look="glass"] .files-source { border-radius: 14px; }
+  html[data-look="glass"] .files-source.on {
+    background: var(--g-grad-soft); color: var(--text); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line);
+  }
+  html[data-look="glass"] .files-source:not(.on):hover { background: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .06)); }
+}
+
+/* The cards of Files: the same glass, the same radius. */
+html[data-look="glass"] :is(.files-host, .files-tip, .files-upload) {
+  border: 0; border-radius: 20px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .files-upload { background: var(--accent-wash); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .files-host-pick { border: 0; border-radius: 12px; background: var(--field); box-shadow: inset 0 0 0 1px var(--line-strong); }
+html[data-look="glass"] .files-empty-icon { border-radius: 20px; background: var(--g-fill); color: var(--accent-ink); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 10px 26px var(--g-glow); }
+html[data-look="glass"] .files-empty { padding-block: 32px; }
+html[data-look="glass"] .files-list { border-radius: 20px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); overflow: hidden; padding: 0 4px; }
+html[data-look="glass"] .files-row { border-bottom-color: var(--g-hair, var(--line-soft)); }
+html[data-look="glass"] .files-roots .chip, html[data-look="glass"] .files-crumb { border-radius: 12px; }
+
+/* ================================================================== lite and calm */
+
+/* Lite: no sheen and no lift layers. Calm: nothing moves, so a press and a hover change no size. */
+html[data-look="glass"].lite :is(.send-card .tile, button.send-to-row)::after,
+html[data-look="glass"].calm :is(.send-card .tile, button.send-to-row)::after { display: none; }
+html[data-look="glass"].calm :is(.send-card .tile, button.send-to-row, .files-source, .send-row .btn, .clip-page > .btn.wide-btn):is(:hover, :active),
+html[data-look="glass"].calm :is(.send-card .tile, .send-row .btn):is(:hover, :active) .icon { transform: none; }
+html[data-look="glass"].lite .send-card .tile:hover .icon { transform: none; }

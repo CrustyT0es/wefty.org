@@ -1,0 +1,433 @@
+/* Wefty 2.0 "glass", area: Today. This file belongs to the Today builder; nobody else edits it.
+   Today's screen (js/today.js): the week strip, Quick actions, the picked day's rows and ticking them, Tests coming up, Flash cards, Jump back in, the pull to sync and the large title that shrinks.
+   Rules (vault/web/glass/README.txt has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
+   V.motion's helpers instead of writing your own; nothing here changes the classic look.
+
+   How it is made: Today (js/today.js) draws its whole page again at every change, so nothing here relies on a CSS
+   transition running on a part that was drawn a moment ago. The styles are for how things LOOK; the moving (the
+   week's sliding highlight, the ticks, the rolling numbers, the entrance) is glass/today.js, which plays it with
+   V.motion at the moment it happens. A class `g-opening` on the page is there for the first 1.4 s of an opening. */
+
+/* ================================================================== tokens that are Today's own */
+
+html[data-look="glass"] {
+  --g-weft-line: light-dark(#7c5be0, #9c82ec);
+  --g-weft-track: light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .12));
+  --g-weft-hi: light-dark(#4b2bb8, #cdb8ff);
+  --g-ring-a: light-dark(#a58bf5, #d3c4ff);
+  --g-ring-b: light-dark(#6a45c9, #7f5be0);
+  --g-box-line: light-dark(rgba(90, 60, 190, .5), rgba(214, 200, 255, .45));
+  --g-box-fill: light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .04));
+  --g-box-on-a: light-dark(#9672f2, #b9a6ff);
+  --g-box-on-b: light-dark(#6a45c9, #7f5be0);
+  --g-hair: light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .10));
+  --g-strike: light-dark(#7c5be0, #cdbeff);
+  --g-row-hover: light-dark(rgba(110, 80, 200, .05), rgba(255, 255, 255, .035));
+}
+html[data-look="glass"][data-theme="dark"] { --g-day-fill: linear-gradient(155deg, rgba(255, 255, 255, .075), rgba(255, 255, 255, .02)); --g-slider-glow: 0 12px 24px -6px rgba(98, 66, 200, .55); }
+/* (the highlight's light falls downwards and stays under it: a neighbouring day's words are never on a purple haze) */
+html[data-look="glass"][data-theme="light"] { --g-day-fill: linear-gradient(155deg, rgba(255, 255, 255, .86), rgba(255, 255, 255, .6)); --g-slider-glow: 0 12px 18px -9px rgba(110, 70, 220, .5); }
+
+/* ================================================================== the top: greeting and the thread under it */
+
+html[data-look="glass"] .page.today .today-greet { padding-top: 6px; }
+html[data-look="glass"] .page.today .today-greet h1 { font: 700 34px/1.08 var(--font-display); letter-spacing: -.025em; }
+html[data-look="glass"] .page.today .today-date { margin-top: 6px; font-size: 15px; line-height: 20px; }
+html[data-look="glass"] .page.today .today-line {
+  position: relative; height: 12px; margin: 14px 0 4px; background: none; -webkit-mask: none; mask: none; overflow: visible;
+}
+html[data-look="glass"] .page.today .g-hweft { display: block; width: 100%; height: 12px; overflow: visible; }
+html[data-look="glass"] .page.today .g-hweft path { fill: none; stroke-linecap: round; stroke: var(--g-weft-line); stroke-width: 1.8; }
+html[data-look="glass"] .page.today .g-hglow { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+html[data-look="glass"] .page.today .g-hglow path { stroke: var(--g-weft-hi); stroke-width: 4; }
+html[data-look="glass"]:not(.lite) .page.today .g-hglow { filter: blur(3px); }
+@media (min-width: 900px) {
+  html[data-look="glass"] .page.today.wide .today-greet h1 { font-size: 30px; line-height: 36px; font-weight: 700; }
+  html[data-look="glass"] .page.today.wide .today-hello .today-date { font-size: 30px; line-height: 36px; font-weight: 600; }
+  html[data-look="glass"] .page.today.wide .today-line { margin-top: 14px; }
+}
+
+/* the counts and the streak chip: small glass pills */
+html[data-look="glass"] .page.today .today-count {
+  border-radius: 12px; transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .page.today .today-count:hover { background: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .07)); }
+html[data-look="glass"] .page.today .today-count:active { transform: scale(.96); }
+html[data-look="glass"] .page.today .streak-chip {
+  border: 0; background: var(--g-fill); color: var(--text); transition: transform var(--d-press) var(--g-ease);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 6px 16px light-dark(rgba(76, 52, 160, .12), rgba(4, 2, 14, .35));
+}
+html[data-look="glass"] .page.today .streak-chip:active { transform: scale(.95); }
+@media (hover: hover) { html[data-look="glass"] .page.today .streak-chip:hover { box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong), 0 8px 20px light-dark(rgba(76, 52, 160, .16), rgba(4, 2, 14, .4)); } }
+
+/* ================================================================== the week */
+
+html[data-look="glass"] .page.today .today-week-title { font-size: 13px; }
+html[data-look="glass"] .page.today .week-step {
+  border: 0; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+  transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .page.today .week-step:not([aria-disabled=true]):active { transform: scale(.9); }
+html[data-look="glass"] .page.today .week-step[aria-disabled=true] { background: none; box-shadow: none; opacity: .55; }
+
+/* the strip: room above and below for the lift and the glow (the strip cuts off what is outside it) */
+html[data-look="glass"] .page.today .today-week-days { position: relative; padding-top: 6px; padding-bottom: 16px; margin-top: -6px; margin-bottom: -10px; }
+html[data-look="glass"] .page.today .wday {
+  z-index: 1; border: 0 solid transparent; border-radius: 18px; background: none; box-shadow: none; min-height: 68px; padding: 10px 12px 12px;
+  transition: transform .14s var(--g-ease);
+}
+html[data-look="glass"] .page.today .wday::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: var(--g-day-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); transition: opacity .2s var(--g-ease);
+}
+html[data-look="glass"] .page.today .wday[aria-selected=true]::before { opacity: 0; transition: opacity .08s linear; }  /* (gone at once: the sliding pill is the picked day's fill, never two pills) */
+html[data-look="glass"] .page.today .wday:not([aria-selected=true]):active { transform: scale(.96); }
+@media (hover: hover) and (pointer: fine) {
+  html[data-look="glass"] .page.today .wday:not([aria-selected=true]):hover { transform: translateY(-3px); }
+  html[data-look="glass"] .page.today .wday:not([aria-selected=true]):hover::before { box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--line-strong); }
+}
+html[data-look="glass"] .page.today .wday.today:not([aria-selected=true]) { background: none; }
+html[data-look="glass"] .page.today .wd-label { font-size: 13px; line-height: 16px; transition: color .25s var(--g-ease); }
+html[data-look="glass"] .page.today .wday.today:not([aria-selected=true]) .wd-label { color: var(--accent-ink); }
+html[data-look="glass"] .page.today .wd-item { font-size: 14px; color: var(--text-2); }
+/* the picked day: the sliding highlight sits behind it (glass/today.js), its words are white on it */
+html[data-look="glass"] .page.today .wday[aria-selected=true] { border: 0 solid var(--accent); box-shadow: none; }  /* (no border is drawn: its colour only says which day is the picked one) */
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-label,
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-item,
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-item.test { color: #fff; }
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-item .none,
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-item .wd-more,
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-item .wd-sep { color: #fff; }
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-item .late-w { color: #fff; font-weight: 700; text-decoration: underline; text-decoration-color: rgba(255, 255, 255, .55); text-underline-offset: 3px; }
+html[data-look="glass"] .page.today .wd-item .late-w { color: var(--danger); }
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-dot.test { background: #fff; }
+html[data-look="glass"] .page.today .wday[aria-selected=true] .wd-dot.remind { border-color: #fff; }
+html[data-look="glass"] .page.today .wd-dot.test { box-shadow: 0 0 7px var(--accent); }
+/* the weft under the picked day */
+html[data-look="glass"] .page.today .wday::after {
+  content: ""; position: absolute; left: 12px; bottom: 8px; width: 34px; height: 6px; background: #fff; opacity: 0; pointer-events: none;
+  transition: opacity .25s var(--g-ease);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 6'%3E%3Cpath d='M1 3 C 4 .5, 7 5.5, 10.5 3 S 17 .5, 20 3 S 26 5.5, 29 3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 6'%3E%3Cpath d='M1 3 C 4 .5, 7 5.5, 10.5 3 S 17 .5, 20 3 S 26 5.5, 29 3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+}
+html[data-look="glass"] .page.today .wday[aria-selected=true]::after { opacity: 1; }
+/* a row dragged over a day (a mouse): lit */
+html[data-look="glass"] .page.today .wday.drop-on::before { opacity: 1; background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+html[data-look="glass"] .page.today .wday.drop-no::before { opacity: 1; background: var(--danger-soft); box-shadow: inset 0 0 0 1.5px var(--danger); }
+/* the sliding highlight (one element, moved with transform; it stretches a little on the way, as the tab bar's does) */
+html[data-look="glass"] .g-slider {
+  position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; transition: transform var(--d-slide) var(--g-slide);
+}
+html[data-look="glass"] .g-slider[hidden] { display: none; }
+html[data-look="glass"] .g-slider i {
+  display: block; width: 100%; height: 100%; border-radius: 18px; background: var(--g-pill-fill);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 1px var(--g-pill-ring), var(--g-slider-glow);
+}
+html[data-look="glass"] .g-slider.g-still { transition: none; }
+html[data-look="glass"] .g-slider.g-sa i { animation: g-stretch-a .46s cubic-bezier(.25, .8, .3, 1); }
+html[data-look="glass"] .g-slider.g-sb i { animation: g-stretch-b .46s cubic-bezier(.25, .8, .3, 1); }
+html[data-look="glass"].lite .g-slider { transition-duration: .22s; }
+html[data-look="glass"].lite .g-slider.g-sa i, html[data-look="glass"].lite .g-slider.g-sb i { animation: none; }
+html[data-look="glass"].calm .g-slider { transition: none; }
+
+/* ================================================================== Quick actions */
+
+html[data-look="glass"] .page.today .today-tile {
+  position: relative; border: 0; background: var(--g-fill); transition: transform .16s var(--g-spring);
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .page.today .today-tile::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .page.today .tile-ic {
+  position: relative; border-radius: 17px; color: light-dark(#4b2bb8, #ede6ff); background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .page.today .tile-ic::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .page.today .tile-ic .icon { position: relative; }
+/* the one that matters most: New note, in the gradient */
+html[data-look="glass"] .page.today .today-tile[data-key="q:new"] .tile-ic {
+  color: #fff; background: var(--g-grad); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 24px var(--g-glow);
+}
+html[data-look="glass"] .page.today .today-tile[data-key="q:new"] .tile-ic::before { display: none; }
+html[data-look="glass"] .page.today .tile-count {
+  background: var(--g-grad); color: #fff; box-shadow: 0 0 0 3px var(--bg), 0 4px 12px var(--g-glow); border-radius: 11px; min-width: 24px; height: 22px; font: 700 12px/22px var(--font);
+  top: -8px; right: -10px;
+}
+html[data-look="glass"] .page.today .tile-label { color: var(--text-2); }
+@media (max-width: 899px) {
+  html[data-look="glass"] .page.today .today-tile, html[data-look="glass"] .page.today .today-tile.big { background: none; box-shadow: none; border-radius: 20px; }
+  html[data-look="glass"] .page.today .today-tile::before { display: none; }
+  html[data-look="glass"] .page.today .today-tile .tile-ic, html[data-look="glass"] .page.today .today-tile.big .tile-ic {
+    width: 56px; height: 56px; border-radius: 20px; transition: transform .16s var(--g-spring);
+  }
+  html[data-look="glass"] .page.today .today-tile:active .tile-ic { transform: scale(.88); }
+  html[data-look="glass"] .page.today .today-tile .tile-label, html[data-look="glass"] .page.today .today-tile.big .tile-label { font: 500 12.5px/16px var(--font); }
+  html[data-look="glass"] .page.today .today-tile .tile-count { box-shadow: 0 0 0 3px var(--bg), 0 4px 12px var(--g-glow); }
+  /* (the icons are 56 px where the row has room; a small phone, or bigger text, keeps the classic 48 so the row stays small) */
+  html[data-look="glass"] .page.today .today-sec[data-section=quick] { padding-top: 14px; container-type: inline-size; }
+}
+@container (max-width: 360px) {
+  html[data-look="glass"] .page.today .today-tile .tile-ic, html[data-look="glass"] .page.today .today-tile.big .tile-ic { width: 48px; height: 48px; border-radius: 16px; }
+}
+@media (max-width: 899px) and (hover: hover) {
+  html[data-look="glass"] .page.today .today-tile:hover .tile-ic { background: var(--g-fill); transform: translateY(-3px); }
+  html[data-look="glass"] .page.today .today-tile[data-key="q:new"]:hover .tile-ic { background: var(--g-grad); }
+}
+/* wide: the tiles are glass cards that lift and catch the light */
+@media (min-width: 900px) {
+  html[data-look="glass"] .page.today .today-tile { overflow: hidden; border-radius: 22px; }
+  html[data-look="glass"] .page.today .today-tile::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translateX(-130%);
+    background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, light-dark(rgba(255, 255, 255, .3), rgba(255, 255, 255, .12)) 50%, rgba(255, 255, 255, 0) 65%);
+  }
+  html[data-look="glass"] .page.today .today-tile:active { transform: scale(.98); }
+  html[data-look="glass"] .page.today .today-tile .tile-ic { overflow: visible; }
+  html[data-look="glass"] .page.today .today-tile[data-key="q:new"] { background: var(--g-grad); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 10px 24px var(--g-glow); }
+  html[data-look="glass"] .page.today .today-tile[data-key="q:new"]::before { display: none; }
+  html[data-look="glass"] .page.today .today-tile[data-key="q:new"] .tile-ic { background: rgba(255, 255, 255, .18); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3); }
+  html[data-look="glass"] .page.today .today-tile[data-key="q:new"] .tile-label,
+  html[data-look="glass"] .page.today .today-tile[data-key="q:new"] .tile-text small { color: #fff; }
+}
+@media (min-width: 900px) {
+  /* (a small tile's icon is 32 px: its count sits on the corner, not over the picture) */
+  html[data-look="glass"] .page.today .today-tile:not(.big) .tile-count { top: -12px; right: -12px; min-width: 20px; height: 18px; font: 700 11px/18px var(--font); border-radius: 9px; box-shadow: 0 0 0 2px var(--bg), 0 3px 10px var(--g-glow); }
+}
+@media (min-width: 900px) and (hover: hover) {
+  html[data-look="glass"] .page.today .today-tile:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow-hi); }
+  html[data-look="glass"] .page.today .today-tile:hover::after { transform: translateX(130%); transition: transform .9s var(--g-ease); }
+  html[data-look="glass"] .page.today .today-tile:hover .tile-ic .icon { transform: rotate(-8deg) scale(1.1); }
+  html[data-look="glass"] .page.today .today-tile .tile-ic .icon { transition: transform .22s var(--g-spring); }
+}
+
+/* ================================================================== section headings */
+
+html[data-look="glass"] .page.today .today-sec-head { margin: 22px 2px 10px; }
+@media (min-width: 900px) { html[data-look="glass"] .page.today .today-sec-head { margin: 28px 2px 12px; } }
+html[data-look="glass"] .page.today .today-sec-head h2 { font: 700 19px/24px var(--font-display); letter-spacing: -.01em; }
+html[data-look="glass"] .page.today .today-sec-head > h2:only-child::after,
+html[data-look="glass"] .page.today .today-sec-head h2:not(.dp-title)::after {
+  content: ""; display: inline-block; width: 26px; height: 6px; margin-left: 10px; vertical-align: 3px; background: var(--g-weft-line); opacity: .75;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 6'%3E%3Cpath d='M1 3 C 4 .5, 7 5.5, 10.5 3 S 17 .5, 20 3 S 26 5.5, 29 3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 6'%3E%3Cpath d='M1 3 C 4 .5, 7 5.5, 10.5 3 S 17 .5, 20 3 S 26 5.5, 29 3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+}
+html[data-look="glass"] .page.today .dp-title { font: 700 19px/24px var(--font-display); letter-spacing: -.01em; }
+html[data-look="glass"] .page.today .dg-date { font-size: 14px; }
+html[data-look="glass"] .page.today .dg-meta { font-size: 13.5px; color: var(--muted); }
+html[data-look="glass"] .page.today .dg-meta .late-w { color: var(--danger); }
+html[data-look="glass"] .page.today .today-link,
+html[data-look="glass"] .page.today .dp-all { color: var(--accent-ink); font-size: 15px; font-weight: 600; border-radius: 12px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .page.today .today-link:active, html[data-look="glass"] .page.today .dp-all:active { transform: scale(.95); }
+
+/* ================================================================== every card on Today: glass */
+
+html[data-look="glass"] .page.today .today-box {
+  position: relative; border: 0; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .page.today .today-box::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .page.today .today-box.sweeping { overflow: hidden; }
+html[data-look="glass"] .page.today .today-box.sweeping::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translateX(-130%);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, light-dark(rgba(255, 255, 255, .3), rgba(255, 255, 255, .13)) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] .page.today .today-box.sweeping.go::after { transform: translateX(130%); transition: transform .9s var(--g-ease); }
+
+/* ================================================================== the picked day's rows */
+
+html[data-look="glass"] .page.today .today-todo { padding: 4px 0; }
+html[data-look="glass"] .page.today .today-row + .today-row,
+html[data-look="glass"] .page.today .today-row + .today-more-row,
+html[data-look="glass"] .page.today .dg-list > li + li { border-top: 0; }
+html[data-look="glass"] .page.today .today-row { position: relative; transition: background .2s var(--g-ease); min-height: 60px; }
+html[data-look="glass"] .page.today .today-row + .today-row::after {
+  content: ""; position: absolute; left: 52px; right: 14px; top: 0; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--g-hair) 20%, var(--g-hair) 80%, rgba(255, 255, 255, 0));
+}
+@media (hover: hover) { html[data-look="glass"] .page.today .today-row:hover { background: var(--g-row-hover); } }
+html[data-look="glass"] .page.today .today-row-text strong { font-size: 16px; font-weight: 500; transition: color .28s var(--g-ease); }
+html[data-look="glass"] .page.today button.today-row-text:hover strong { color: var(--text); }
+html[data-look="glass"] .page.today .today-row.done strong { color: var(--muted); }
+html[data-look="glass"] .page.today .today-row.done.g-struck strong { text-decoration-color: transparent; }
+html[data-look="glass"] .page.today .today-row.done.g-struck.g-undoing strong { text-decoration-color: transparent; }
+html[data-look="glass"] .page.today .today-where, html[data-look="glass"] .page.today .today-sub { font-size: 13.5px; color: var(--muted); }
+html[data-look="glass"] .page.today .today-row-more { border-radius: 14px; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .page.today .today-row-more:active { transform: scale(.9); }
+html[data-look="glass"] .page.today .today-row-more[aria-expanded=true] { background: var(--accent-soft); color: var(--accent-ink); }
+/* a to-do's chip: late reads as a small red pill, a reminder as a soft one */
+html[data-look="glass"] .page.today .today-chip { border-radius: 9px; font-weight: 600; }
+html[data-look="glass"] .page.today .today-chip.late { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35)); }
+html[data-look="glass"] .page.today .today-chip.plain { background: var(--surface-2); }
+
+/* the box: a spring when pressed; ticked, the gradient fills it and the check is drawn in (glass/today.js plays the
+   moment of ticking: this is how it looks once it's there) */
+html[data-look="glass"] .page.today .today-tick { transition: transform .2s var(--g-spring); }
+html[data-look="glass"] .page.today .today-tick::before {
+  width: 24px; height: 24px; border-radius: 8px; border: 1.6px solid var(--g-box-line); background: var(--g-box-fill);
+  transition: transform .2s var(--g-spring);
+}
+html[data-look="glass"] .page.today .today-tick:active::before { transform: scale(.82); }
+@media (hover: hover) { html[data-look="glass"] .page.today .today-tick:not([aria-pressed=true]):hover::before { border-color: light-dark(rgba(90, 60, 190, .85), rgba(214, 200, 255, .9)); box-shadow: 0 0 0 4px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .18)); } }
+html[data-look="glass"] .page.today .today-tick[aria-pressed=true]::before { background: none; border-color: transparent; }
+html[data-look="glass"] .page.today .today-tick .g-fill {
+  position: absolute; left: 10px; top: 10px; width: 24px; height: 24px; border-radius: 8px; opacity: 0; pointer-events: none;
+  background: linear-gradient(150deg, var(--g-box-on-a), var(--g-box-on-b)); box-shadow: 0 4px 12px light-dark(rgba(106, 69, 201, .4), rgba(127, 91, 224, .55));
+}
+html[data-look="glass"] .page.today .today-tick[aria-pressed=true] .g-fill { opacity: 1; }
+html[data-look="glass"] .page.today .today-tick .icon { visibility: visible; }
+html[data-look="glass"] .page.today .today-tick .icon svg { stroke-width: 3; }
+html[data-look="glass"] .page.today .today-tick .icon svg path { stroke-dasharray: 40; stroke-dashoffset: 40; }
+html[data-look="glass"] .page.today .today-tick[aria-pressed=true] .icon svg path { stroke-dashoffset: 0; }
+/* the wavy strike across a done title (drawn by glass/today.js, one per line of the title) */
+html[data-look="glass"] .page.today .g-strike { position: absolute; height: 8px; overflow: visible; pointer-events: none; color: var(--g-strike); }
+html[data-look="glass"] .page.today .g-strike path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+html[data-look="glass"] .page.today .today-row-text strong { position: relative; }
+html[data-look="glass"] .page.today .today-row-text strong:has(.g-strike) { overflow: visible; }
+html[data-look="glass"] .page.today .dg-repeat .dg-lead, html[data-look="glass"] .page.today .dg-extra .dg-lead { color: var(--accent-ink); }
+html[data-look="glass"] .page.today .today-more-row { color: var(--accent-ink); }
+html[data-look="glass"] .page.today .dp-note {
+  border: 0; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .page.today .dp-note:active { transform: scale(.96); }
+html[data-look="glass"] .page.today .dg-list > li.warn { background: var(--warn-soft); }
+
+/* ================================================================== a test: the ring, the thread, the countdown */
+
+html[data-look="glass"] .page.today .today-test { padding: 14px 16px 16px; gap: 12px 12px; }
+@media (max-width: 899px) { html[data-look="glass"] .page.today .today-test { padding: 14px; gap: 10px 12px; } }
+html[data-look="glass"] .page.today .today-days {
+  position: relative; width: 66px; height: 66px; border-radius: 50%; background: none; box-shadow: none; color: var(--text);
+}
+html[data-look="glass"] .page.today .today-days::before {
+  content: ""; position: absolute; inset: -16px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, light-dark(rgba(124, 91, 224, .18), rgba(150, 108, 240, .2)), light-dark(rgba(124, 91, 224, .06), rgba(150, 108, 240, .08)) 55%, rgba(150, 108, 240, 0));
+}
+html[data-look="glass"] .page.today .today-days b { position: relative; font: 700 21px/22px var(--font-display); }
+html[data-look="glass"] .page.today .today-days span:not(.g-roll):not(.sr-only) { position: relative; font: 500 11px/14px var(--font); color: var(--text-2); }
+html[data-look="glass"] .page.today .today-days.word b { font-size: 12.5px; line-height: 16px; }
+html[data-look="glass"] .page.today .g-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+html[data-look="glass"] .page.today .g-ring circle { fill: none; stroke-width: 7; }
+html[data-look="glass"] .page.today .g-ring .g-ring-bg { stroke: var(--g-weft-track); }
+html[data-look="glass"] .page.today .g-ring .g-ring-fg { stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; stroke: url(#g-ring-grad); }
+html[data-look="glass"] .page.today .g-ring-stop-a { stop-color: var(--g-ring-a); }
+html[data-look="glass"] .page.today .g-ring-stop-b { stop-color: var(--g-ring-b); }
+html[data-look="glass"] .page.today .test-text strong { font-size: 17px; font-weight: 600; }
+html[data-look="glass"] .page.today .test-text span { font-size: 14px; }
+html[data-look="glass"] .page.today .today-test .today-bar { height: 12px; border-radius: 0; background: none; box-shadow: none; overflow: visible; position: relative; }
+html[data-look="glass"] .page.today .today-test .today-bar > i { display: none; }
+html[data-look="glass"] .page.today .g-thread { display: block; width: 100%; height: 12px; overflow: visible; }
+html[data-look="glass"] .page.today .g-thread path { fill: none; stroke-width: 3; stroke-linecap: round; }
+html[data-look="glass"] .page.today .g-thread .g-track { stroke: var(--g-weft-track); }
+html[data-look="glass"] .page.today .g-thread .g-fill-line { stroke: var(--accent); }
+html[data-look="glass"] .page.today .test-nums b { font-weight: 600; }
+html[data-look="glass"] .page.today .test-go .btn { border-radius: 15px; }
+html[data-look="glass"] .page.today .today-quiz { color: var(--text); }
+html[data-look="glass"] .page.today button.test-text { transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .page.today button.test-text:active { transform: scale(.98); }
+
+/* ================================================================== flash cards, decks, Jump back in */
+
+html[data-look="glass"] .page.today .fc-n b { font: 700 28px/32px var(--font-display); }
+html[data-look="glass"] .page.today .today-deck { border-top-color: var(--g-hair); border-radius: 0; transition: transform var(--d-press) var(--g-ease); }
+html[data-look="glass"] .page.today .today-decks .today-deck:first-child { border-top-color: var(--g-hair); }
+@media (hover: hover) { html[data-look="glass"] .page.today .today-deck:hover { color: var(--accent-ink); } }
+html[data-look="glass"] .page.today .today-deck:active { transform: scale(.99); }
+html[data-look="glass"] .page.today .today-cards { padding-bottom: 6px; }
+html[data-look="glass"] .page.today .today-note {
+  position: relative; border: 0; background: var(--g-fill); overflow: hidden; border-radius: 22px;
+  box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow); transition: transform .16s var(--g-ease), box-shadow .26s var(--g-ease);
+}
+html[data-look="glass"] .page.today .today-note::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .page.today .today-note::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transform: translateX(-130%);
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, light-dark(rgba(255, 255, 255, .3), rgba(255, 255, 255, .12)) 50%, rgba(255, 255, 255, 0) 65%);
+}
+html[data-look="glass"] .page.today .today-note:active { transform: scale(.97); }
+html[data-look="glass"] .page.today .today-note:active::after { transform: translateX(130%); transition: transform .9s var(--g-ease); }
+@media (hover: hover) and (pointer: fine) {
+  html[data-look="glass"] .page.today .today-note:hover { transform: translateY(-4px); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow-hi); }
+  html[data-look="glass"] .page.today .today-note:hover::after { transform: translateX(130%); transition: transform 1s var(--g-ease); }
+}
+html[data-look="glass"] .page.today .today-jump { padding-top: 6px; padding-bottom: 22px; margin-top: -6px; margin-bottom: -16px; }
+@media (min-width: 900px) { html[data-look="glass"] .page.today .today-jump { margin-left: -4px; margin-right: -4px; padding-left: 4px; padding-right: 4px; } }
+html[data-look="glass"] .page.today .tn-title { font-size: 15px; }
+html[data-look="glass"] .page.today .today-howto .tile-ic, html[data-look="glass"] .page.today .start-ic { border-radius: 14px; }
+
+/* ================================================================== the slim bar the greeting folds into (phone) */
+
+html[data-look="glass"] main.view[data-tab="today"] > .g-tbar-wrap { position: sticky; top: 0; z-index: 6; height: 0; margin: 0; pointer-events: none; }
+html[data-look="glass"] main.view[data-tab="today"] .g-tbar {
+  position: absolute; left: 0; right: 0; top: 0; box-sizing: border-box; height: calc(56px + var(--safe-top)); padding: var(--safe-top) 20px 0;
+  display: flex; align-items: center; gap: 10px; border: 0; border-radius: 0 0 20px 20px; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  opacity: 0; pointer-events: none; transform: translate3d(0, -8px, 0);
+  box-shadow: inset 0 -1px 0 var(--g-ring), 0 10px 28px light-dark(rgba(76, 52, 160, .16), rgba(4, 2, 14, .35));
+}
+html[data-look="glass"] main.view[data-tab="today"] .g-tbar img, html[data-look="glass"] main.view[data-tab="today"] .g-tbar .g-tbar-mark { width: 26px; height: 26px; border-radius: 8px; flex: none; }
+html[data-look="glass"] main.view[data-tab="today"] .g-tbar-t { font: 700 17px/1 var(--font-display); letter-spacing: -.01em; }
+html[data-look="glass"] main.view[data-tab="today"] .g-tbar-d { margin-left: auto; font: 500 13px/1 var(--font); color: var(--muted); }
+html[data-look="glass"] main.view[data-tab="today"] .g-tbar:focus-visible { outline-offset: -4px; }
+html[data-look="glass"] main.view[data-tab="today"] .g-tbar:active { transition: transform .12s var(--g-ease); }
+/* (where scroll-driven animations aren't there, glass/today.js sets these three as it scrolls) */
+
+/* ================================================================== the pull to sync */
+
+html[data-look="glass"] main.view[data-tab="today"] > .g-pull-hint { z-index: 0; }
+
+/* ================================================================== the cards that come and go */
+
+html[data-look="glass"] .page.today .today-checkin-sec, html[data-look="glass"] .page.today .today-weekly { margin-top: 24px; }
+html[data-look="glass"] .page.today .checkin-mood, html[data-look="glass"] .page.today .week-which button { border-radius: 16px; transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .page.today .checkin-mood:active { transform: scale(.9); }
+@media (hover: hover) { html[data-look="glass"] .page.today .checkin-mood:hover { transform: translateY(-3px) scale(1.04); } }
+html[data-look="glass"] .page.today .week-card .week-shot { border-radius: 16px; box-shadow: var(--g-shadow); }
+html[data-look="glass"] .page.today .start-box, html[data-look="glass"] .page.today .fw-box { padding: 16px; }
+html[data-look="glass"] .page.today .fw-chip {
+  border: 0; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .page.today .fw-chip:active { transform: scale(.95); }
+html[data-look="glass"] .page.today .fw-chip-ring { background: conic-gradient(var(--accent) calc(var(--done, 0) * 360deg), var(--g-weft-track) 0); }
+html[data-look="glass"] .page.today .start-box .bar, html[data-look="glass"] .page.today .fw-bar { background: var(--g-weft-track); border-radius: 3px; height: 6px; overflow: hidden; }
+html[data-look="glass"] .page.today .start-ic, html[data-look="glass"] .page.today .today-howto .tile-ic { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); color: var(--accent-ink); }
+html[data-look="glass"] .page.today .start-n { background: var(--g-grad-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .page.today .ht-eg code { background: var(--surface-2); }
+html[data-look="glass"] .page.today .sub-row, html[data-look="glass"] .page.today .sub-soon { border-radius: 16px; }
+
+/* ================================================================== ticking, opening, picking: what the page needs to play them */
+
+/* the entrance is played by V.motion.enter on these; they are hidden for a frame at most, never by CSS (so a page with no
+   scripting still shows) */
+html[data-look="glass"] .g-spark-host { position: fixed; z-index: 80; width: 44px; height: 44px; pointer-events: none; }
+html[data-look="glass"] .page.today.g-opening .tile-count { animation: g-pop .55s var(--g-spring) .6s both; }
+html[data-look="glass"].lite .page.today.g-opening .tile-count { animation-duration: .25s; animation-delay: 0s; }
+html[data-look="glass"] .page.today .alldone-line {
+  display: flex; align-items: center; gap: 10px; margin: 14px 6px 0; font: 500 15px/1.3 var(--font); color: var(--text-2);
+}
+
+/* ================================================================== lite and calm */
+
+html[data-look="glass"].lite .page.today .today-box.sweeping::after, html[data-look="glass"].lite .page.today .today-note::after,
+html[data-look="glass"].lite .page.today .today-tile::after { display: none; }
+html[data-look="glass"].lite .page.today .g-hglow { filter: none; }
+html[data-look="glass"].lite .page.today .today-days::before { display: none; }
+html[data-look="glass"].calm .page.today .today-box.sweeping::after, html[data-look="glass"].calm .page.today .today-note::after,
+html[data-look="glass"].calm .page.today .today-tile::after { display: none; }
+html[data-look="glass"].calm .page.today .today-tile:hover, html[data-look="glass"].calm .page.today .today-note:hover,
+html[data-look="glass"].calm .page.today .wday:hover { transform: none; }
+html[data-look="glass"].calm .page.today :is(.today-tile, .wday, .today-note, .today-tick, .today-count, .streak-chip, .today-link, .dp-all, .today-row-more, .checkin-mood, .dp-note, .fw-chip, .week-step, .today-deck):active,
+html[data-look="glass"].calm .page.today :is(.today-tile, .today-tick):active :is(.tile-ic, ::before) { transform: none; }
+html[data-look="glass"].calm .page.today .today-tick:active::before { transform: none; }
+html[data-look="glass"].calm .page.today .today-tile:hover .tile-ic, html[data-look="glass"].calm .page.today .today-tile:hover .tile-ic .icon { transform: none; }
+html[data-look="glass"].calm .page.today.g-opening .tile-count { animation: none; }
+
+/* ================================================================== touch targets (round 1 fix) */
+html[data-look="glass"] .page.today button.test-text { min-height: 44px; }

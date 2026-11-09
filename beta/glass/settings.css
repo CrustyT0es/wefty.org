@@ -1,0 +1,23 @@
+/* Wefty 2.0 "glass", area: Settings. This file belongs to the Settings builder; nobody else edits it.
+   Settings (js/settings.js, settingsui.js, profile.js's menu): the home, the pages and their cards, the search.
+   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
+   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+
+/* ================================================================== narrow screens and bigger text (fixes from round 1) */
+
+/* A row never makes its card wider than the screen: at 320 px with the page zoomed to 130% (246 px) the Theme control used to
+   push the card to 298 px, and the right-hand side was cut off. */
+html[data-look="glass"] :is(.settings-card, .setting, .setting-text, .segmented) { min-width: 0; }
+html[data-look="glass"] .setting > .segmented { max-width: 100%; }
+html[data-look="glass"] .segmented button { min-width: 0; padding-inline: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* (a finger needs 44 px: the segmented buttons were 40) */
+@media (pointer: coarse) { html[data-look="glass"] .segmented button { min-height: 44px; } }
+/* When the card is narrow (a small phone with bigger text, or the page zoomed: the card's own width counts, not the screen's) a
+   three-way control puts each icon above its word, so all three fit. */
+html[data-look="glass"] .settings-card { container-type: inline-size; }
+@container (max-width: 236px) {
+  html[data-look="glass"] .segmented button { flex-direction: column; gap: 3px; padding: 6px 2px; min-height: 52px; font-size: 12.5px; line-height: 14px; }
+  html[data-look="glass"] .setting { flex-wrap: wrap; }
+  html[data-look="glass"] .setting > .segmented { width: 100%; }
+}

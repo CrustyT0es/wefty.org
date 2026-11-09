@@ -1,0 +1,31 @@
+/* Wefty 2.0 "glass", area: Chat. This file belongs to the Chat builder; nobody else edits it.
+   Chat (js/chat.js, chattools.js): the chat list, messages and the box, the agent's action list, attached notes.
+   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
+   V.motion's helpers instead of writing your own; nothing here changes the classic look. */
+
+/* ================================================================== the aurora shows through; the head and the notice are glass (round 1 fixes) */
+
+/* The chat's panes were opaque (--bg, --surface), so the aurora vanished on this screen. They are clear now, the head a glass
+   strip and the sides a faint panel. (No blur: nothing scrolls under them.) */
+html[data-look="glass"] .chat-pane, html[data-look="glass"] .chat-app .chat-pane, html[data-look="glass"] .chat-composer { background: transparent; }
+html[data-look="glass"] .chat-head { background: var(--g-bar); border-bottom: 0; box-shadow: inset 0 -1px 0 var(--g-ring); }
+html[data-look="glass"].lite .chat-head { background: var(--g-bar-solid); }
+@media (min-width: 900px) {
+  html[data-look="glass"] .chat-app .chat-side { background: light-dark(rgba(255, 255, 255, .3), rgba(255, 255, 255, .025)); border-right-color: var(--g-ring); }
+  html[data-look="glass"] .chat-head, html[data-look="glass"] .chat-composer { background: transparent; }
+  html[data-look="glass"] .chat-head { box-shadow: inset 0 -1px 0 var(--g-ring); }
+}
+/* "Chat uses Google's free Gemini": the icon and the words on one row, the button under them, full width. */
+html[data-look="glass"] .chat-trouble {
+  position: relative; display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: start; gap: 10px 12px; padding: 14px 16px;
+  border: 0; border-radius: var(--r-lg); background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow);
+}
+html[data-look="glass"] .chat-trouble::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+html[data-look="glass"] .chat-trouble[data-kind=setup] { background: var(--g-fill); }
+html[data-look="glass"] .chat-trouble > .icon { width: 22px; height: 22px; margin-top: 1px; justify-self: center; }
+html[data-look="glass"] .chat-trouble > span { min-width: 0; }
+html[data-look="glass"] .chat-trouble > .btn { grid-column: 1 / -1; width: 100%; min-height: 44px; font-size: 14.5px; }
