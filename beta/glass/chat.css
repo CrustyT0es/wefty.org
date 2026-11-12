@@ -35,12 +35,15 @@ html[data-look="glass"] .chat-trouble > .btn { grid-column: 1 / -1; width: 100%;
    Tokens for this screen (one set of edges, one gap, one height, as Share's):
      --ch-pad    the room inside the box and the cards (all four sides)
      --ch-gap    between what sits side by side in a row
-     --ch-btn    the round buttons of the box (Attach, Send): the board's 44 px
+     --ch-btn    the round buttons of the box (Send): the board's 44 px
+     --ch-size   the chips under the words (Attach, the model, Think, Web), --ch-tool-gap the one gap between them
      --ch-chip   a quiet glass chip's fill, --ch-chip-edge its light top edge
      --ch-well   the darker inside of a note chip or a code block */
 html[data-look="glass"] .chat-app {
-  --ch-pad: 8px; --ch-gap: 6px; --ch-btn: 44px;
+  --ch-pad: 8px; --ch-gap: 6px; --ch-btn: 44px; --ch-size: 36px; --ch-tool-gap: 8px;
   --ch-chip: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .07));
+  --ch-box-lit: light-dark(rgba(124, 91, 224, .5), rgba(214, 196, 255, .42));
+  --ch-toggle-on: light-dark(rgba(124, 91, 224, .55), rgba(214, 196, 255, .55));
   --ch-chip-hover: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .12));
   --ch-chip-edge: light-dark(rgba(255, 255, 255, .9), rgba(255, 255, 255, .12));
   --ch-well: light-dark(rgba(110, 80, 200, .07), rgba(11, 9, 24, .32));
@@ -269,32 +272,97 @@ html[data-look="glass"] .chat-action-btn.chat-show-btn { background: var(--g-gra
 html[data-look="glass"] .chat-actions-more { border-top: 0; border-radius: 0 0 22px 22px; }
 html[data-look="glass"] .chat-cal { border: 0; border-radius: 22px; background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
 
-/* ---- the box: one glass bar (blur: it's a bar), Attach / the model / Think / Web on the left, Send on the right,
-   each at the same inset from the box's edge (--ch-pad), all on one centre line. */
+/* ---- the box: one pill of frosted glass that floats over the conversation (round 4, the owner: "the typing box doesn't
+   float"). The composer lies over the foot of the scroller instead of under it: the thread leaves room under its last
+   words for the box (glass/chat.js `float`), and the words fade out over the last 40 px before the box, then show
+   faintly, blurred, through it, and never in the gap under it. One frame: a hairline and a soft shadow under it; with the
+   typing (a tap) it rises a pixel and its edge brightens, nothing more; with the keyboard, one clear ring. */
+html[data-look="glass"] .chat-pane { position: relative; }
+html[data-look="glass"] .chat-composer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none; }
+html[data-look="glass"] .chat-composer > * { pointer-events: auto; }
+html[data-look="glass"] .chat-thread { padding-bottom: 158px; }  /* (the room for a one-line box; glass/chat.js measures the rest) */
+@media (max-width: 899px) { html[data-look="glass"] .chat-thread { padding-bottom: 152px; } }
 html[data-look="glass"] .chat-box {
   gap: 2px; padding: var(--ch-pad); border: 0; border-radius: 26px; background: var(--g-bar); -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
-  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), var(--g-shadow); transition: box-shadow .2s var(--g-ease);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), var(--g-shadow);
+  transition: box-shadow .24s var(--g-ease), transform .32s var(--g-spring);
 }
 html[data-look="glass"].lite .chat-box { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
 html[data-look="glass"] .chat-box:focus-within {
-  border: 0; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1.5px var(--accent-line), 0 0 0 5px light-dark(rgba(124, 91, 224, .14), rgba(150, 108, 240, .16)), var(--g-shadow);
+  border: 0; transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--ch-box-lit), var(--g-shadow), 0 6px 22px -10px var(--g-glow);
 }
-html[data-look="glass"] .chat-input { min-height: 40px; padding: 9px 10px 5px; font-size: 16px; line-height: 22px; }
+html.g-kbd[data-look="glass"] .chat-box:focus-within { outline: 2px solid var(--focus); outline-offset: 3px; }
+html[data-look="glass"].calm .chat-box:focus-within { transform: none; }
+html[data-look="glass"] .chat-input { min-height: 38px; padding: 9px 10px 3px; font-size: 16px; line-height: 22px; }  /* (one line: a 40 px box, as classic's: js/chat.js `grow`; 12 px of room round the words, as classic's, so each line more is 22 px) */
 html[data-look="glass"] .chat-input::placeholder { color: var(--placeholder); }
-html[data-look="glass"] .chat-tools { gap: var(--ch-gap); min-height: var(--ch-btn); }
+/* The row under the words, on one grid: Attach, the model, Think and Web are glass chips of one height (--ch-size) with
+   one gap between each (--ch-tool-gap), Send at the far end; every one centred on the same line, each icon on its chip's
+   centre (the paperclip's drawing sits low and right in its square: moved back by its own offset). */
+html[data-look="glass"] .chat-tools { gap: var(--ch-tool-gap); min-height: var(--ch-btn); }
 html[data-look="glass"] .chat-tools .icon-btn {
   width: var(--ch-btn); height: var(--ch-btn); border-radius: 15px; color: var(--text-2); transition: transform .16s var(--g-spring);
 }
+html[data-look="glass"] .chat-tools .icon-btn.chat-clip {
+  width: var(--ch-size); height: var(--ch-size); border-radius: 50%; background: var(--ch-chip); color: var(--text-2);
+  box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .chat-tools .icon-btn.chat-clip:hover:not(:disabled) { background: var(--ch-chip-hover); color: var(--text); }
+html[data-look="glass"] .chat-tools .icon-btn.chat-clip .icon { width: 18px; height: 18px; }
+html[data-look="glass"] .chat-tools .icon-btn.chat-clip .icon svg { translate: 1.72% 1.95%; }  /* (its drawing's middle is at 11.59, 11.53 of 24) */
 html[data-look="glass"] .chat-tools .icon-btn:active { transform: scale(.9); transition-duration: var(--d-press); }
 html[data-look="glass"] .chat-pill {
-  position: relative; height: 34px; padding: 0 12px; border: 0; border-radius: 17px; background: var(--ch-chip); color: var(--text);
+  position: relative; height: var(--ch-size); padding: 0 12px; border: 0; border-radius: calc(var(--ch-size) / 2); background: var(--ch-chip); color: var(--text);
   box-shadow: inset 0 1px 0 var(--ch-chip-edge), inset 0 0 0 1px var(--g-ring); font-weight: 600; transition: transform .16s var(--g-spring);
 }
 html[data-look="glass"] .chat-pill:hover { background: var(--ch-chip-hover); }
 html[data-look="glass"] .chat-pill:active { transform: scale(.95); transition-duration: var(--d-press); }
 html[data-look="glass"] .chat-pill .icon { color: var(--accent-ink); }
-html[data-look="glass"] .chat-toggle[aria-pressed=true] { background: var(--g-grad-soft); color: var(--text); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-pill-ring); }
+html[data-look="glass"] .chat-toggle { justify-content: center; color: var(--text-2); }
+html[data-look="glass"] .chat-toggle .icon { width: 18px; height: 18px; color: var(--text-2); transition: color .2s var(--g-ease); }
+/* On, unmistakably: the iris wash, a lit rim, the icon and words in the accent; off: a plain chip, the icon grey. */
+html[data-look="glass"] .chat-toggle[aria-pressed=true] {
+  background: var(--g-grad-soft); background-color: var(--accent-soft); color: var(--accent-ink);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1.5px var(--ch-toggle-on), 0 4px 14px -6px var(--g-glow);
+}
+html[data-look="glass"] .chat-toggle[aria-pressed=true] .icon { color: var(--accent-ink); }
 html[data-look="glass"] .chat-model-name { display: inline-block; }
+/* (round 4, the owner's phone: the picker read "H...") On a narrow screen the model's name shows whole ("Haiku", "Sonnet",
+   "Gemini Fast"; its version only when there's room), and Think and Web are round chips the size of Attach (their words
+   are their names for a screen reader, and their tips). */
+@media (max-width: 459px) {
+  html[data-look="glass"] .chat-model { flex: none; gap: 5px; padding: 0 10px; }
+  html[data-look="glass"] .chat-model .chat-model-name { overflow: visible; text-overflow: clip; white-space: nowrap; }
+  html[data-look="glass"] .chat-model-ver { display: none; }
+  html[data-look="glass"] .chat-toggle { flex: none; width: var(--ch-size); padding: 0; }
+  html[data-look="glass"] .chat-toggle > span:not(.icon) { display: none; }
+}
+@media (max-width: 359px) {
+  html[data-look="glass"] .chat-app { --ch-tool-gap: 5px; --ch-size: 34px; }
+  html[data-look="glass"] .chat-model { gap: 4px; padding: 0 8px; }
+}
+/* Still no room (bigger text on a narrow phone): Think and Web are switches in the model's sheet (glass/chat.js fitTools),
+   and a dot on the model's chip says one of them is on. */
+html[data-look="glass"] .chat-box.g-tight .chat-toggle { display: none; }
+html[data-look="glass"] .chat-box.g-tight .chat-model:not([data-g-on="0"])::before {
+  content: ""; position: absolute; top: 3px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 2px var(--g-bar-solid);
+}
+html[data-look="glass"] .g-model-toggles { display: grid; gap: 8px; margin-top: 12px; }
+html[data-look="glass"] .g-model-toggle {
+  display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 14px; border-radius: 18px; background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); cursor: pointer;
+}
+html[data-look="glass"] .g-model-toggle-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
+html[data-look="glass"] .g-model-toggle-name { font-weight: 600; color: var(--text); }
+html[data-look="glass"] .g-model-toggle-about { font-size: 13px; color: var(--text-2); }
+
+/* (round 4) A message whose menu is open: never the classic's square outline (a tap, a mouse); with the keyboard a rounded
+   ring round the whole answer, clear of its words and its cost line. The cost line has room of its own. */
+html[data-look="glass"] :is(.chat-claude, .chat-you).ctx-open { outline: none; border-radius: 18px; }
+html.g-kbd[data-look="glass"] :is(.chat-claude, .chat-you).ctx-open { outline: 2px solid var(--focus); outline-offset: 4px; }
+html[data-look="glass"] .chat-meta { padding: 6px 6px 4px; }
+html[data-look="glass"] .chat-claude { padding-bottom: 4px; }
 /* Send: the screen's one gradient button, with glass depth (a light along the top, a gloss over its upper half, a
    darker inside along the bottom, a rim and a soft coloured shadow), a sheen sweeping across on a press, and a spring.
    Nothing to send yet: a quiet glass circle. */

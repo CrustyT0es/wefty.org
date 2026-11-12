@@ -44,6 +44,7 @@ let panelRows = 0;
 let rowsState = null;     // { day, map: tick key -> ticked, tops: tick key -> top in the panel }
 let opened = 0;           // when Today was opened (js/start.js's 'tab'), until a real draw has used it
 let openStart = 0;        // when the entrance now running began
+let entered = false;      // the entrance has played once (round 4: coming back from another tab, Today is simply there)
 let sawPlaceholder = false;
 let finishedDay = '';     // the day whose last to-do was ticked here (its "All done" line stays while nothing is left on it)
 let moment = null;        // the last change on the rows (a tick), carried on into the draws that follow it: { t0, day, changed, gone, from, justDone, mine }
@@ -209,8 +210,7 @@ function rollNumbers(p, opening) {
     const was = numbers[name];
     numbers[name] = value;
     if (!m || !full()) continue;
-    if (opening) m.roll(el, 0, value);
-    else if (was !== undefined && was !== value) m.roll(el, was, value, { duration: 320 });
+    if (was !== undefined && was !== value) m.roll(el, was, value, { duration: opening ? 750 : 320 });
   }
 }
 
@@ -657,7 +657,11 @@ function drawn(p) {
   const real = !!opened && !placeholder;
   const settled = sawPlaceholder && !placeholder;
   if (placeholder) sawPlaceholder = true;
-  const opening = real || settled;
+  // (round 4, the owner's Today after a tab switch: everything dim and still rising, the "1" of "1 to do" caught mid-roll)
+  // The entrance plays when Today is the app's first screen; arriving from another tab, the page is there at once (the
+  // tab's own 180 ms brighten, glass/loading.js), its numbers as they are, rolling only when one has changed.
+  const opening = (real || settled) && !entered && !(V.motion && V.motion.switched && V.motion.switched());
+  if (real || settled) entered = true;
   if (!placeholder) { opened = 0; sawPlaceholder = false; }
   const continuing = !opening && !placeholder && openStart && now() - openStart < ENTRANCE_MS;
   if (opening) openStart = now();
@@ -682,8 +686,9 @@ function drawn(p) {
   lastDay = today || lastDay;
   if (animating && !calm()) {  // (calm: nothing is made to wait, the page is simply there)
     // The board's rise (12 px and a fade, .5 s, 45 ms apart, the first 8 only), without its tiny change of size: a button
-    // measures 44 px the whole time it comes, and a part that is looked at while it comes is still the size it is.
-    const parts = p.querySelectorAll(':scope > header, :scope > .today-greet, :scope > .today-week, :scope > .today-welcome, :scope > .today-sec, :scope > .today-getting, .today-col > .today-sec, .today-col > .today-trouble');
+    // measures 44 px the whole time it comes, and a part that is looked at while it comes is still the size it is. (The top
+    // row, the same on every screen, is where it belongs from the first frame: round 4.)
+    const parts = p.querySelectorAll(':scope > .today-greet, :scope > .today-week, :scope > .today-welcome, :scope > .today-sec, :scope > .today-getting, .today-col > .today-sec, .today-col > .today-trouble');
     parts.forEach((el, i) => {
       const wait = Math.min(i, 7) * 45;
       animate(el, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }],
@@ -775,7 +780,7 @@ function stop() {
   if (observer) { observer.disconnect(); observer = null; }
   leave();
   view = null;
-  opened = 0; openStart = 0; sawPlaceholder = false; numbers = {}; lastDay = '';
+  opened = 0; openStart = 0; sawPlaceholder = false; numbers = {}; lastDay = ''; entered = false;
 }
 
 V.on('tab', (name) => {

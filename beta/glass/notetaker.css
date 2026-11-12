@@ -132,7 +132,7 @@ html[data-look="glass"] .nt-body:not(:has(> .nt-live)) {
 /* A phone, listening with the tabs in reach: what's under the screen (Today, Notes...) isn't drawn round the floating tab bar,
    only the app's own background is (it's inert meanwhile: js/notetaker.js cover()). */
 @media (max-width: 699px) {
-  html[data-look="glass"]:has(#layers > .nt-layer.shown[data-tabs=below]) #app > :not(nav.tabs) { visibility: hidden; }
+  html[data-look="glass"] #app.g-nt-below > :not(nav.tabs) { visibility: hidden; }  /* (glass/shell.js sets it) */
 }
 html[data-look="glass"] .nt-foot {
   display: flex; flex-wrap: wrap; gap: var(--nt-gap); justify-content: stretch;

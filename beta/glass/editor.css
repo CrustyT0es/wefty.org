@@ -70,7 +70,7 @@ html[data-look="glass"] .editor-layer.g-growing { border-radius: 24px; overflow:
    its corners are the window's, never the layer's own, so the note at rest is square and full screen. The round + under it
    goes while that happens (it would peek out from under the window). */
 html[data-look="glass"] .editor-layer.g-window { border-radius: 0; box-shadow: none; }
-html[data-look="glass"]:has(.editor-layer.g-window) .fab { opacity: 0; pointer-events: none; transition: opacity .12s linear; }
+html[data-look="glass"] #app.g-ed-window .fab { opacity: 0; pointer-events: none; transition: opacity .12s linear; }  /* (glass/shell.js sets it) */
 html[data-look="glass"] .g-grow-card { transition: none; }
 html[data-look="glass"] .editor-layer.g-leaving { pointer-events: none; }
 html[data-look="glass"] .editor { background: transparent; }
@@ -286,6 +286,14 @@ html[data-look="glass"] .editor .play-btn:active { background: var(--g-grad); tr
   html[data-look="glass"] .pane .goal-line { left: 20px; right: 20px; bottom: 1px; height: 3px; border-radius: 2px; }
   /* the words' column: 720 px of words as before, the card round them */
   html[data-look="glass"] .pane .editor-scroll { padding: 26px var(--g-ed-side) 56px; }
+  /* (round 4, the owner's Chromebook: a line of words cut in half under the toolbar) The words never stop under the toolbar:
+     they fade out softly as they scroll up to it, and the caret's line is always kept a line clear of it (the browser's own
+     scrolling to the caret, and the keys', keep this much room at the top). At rest the faded band is the page's empty top. */
+  html[data-look="glass"] .pane .editor-scroll {
+    scroll-padding-top: 30px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0, 0, 0, .35) 8px, #000 24px);
+    mask-image: linear-gradient(to bottom, transparent 0, rgba(0, 0, 0, .35) 8px, #000 24px);
+  }
   html[data-look="glass"] .pane .editor-body { padding: 24px 20px 24px; }
   html[data-look="glass"] .pane .note-title { padding: 6px 2px 8px; }
 }
@@ -347,6 +355,38 @@ html[data-look="glass"] .save-state[data-g-sync="syncing"]::after { animation: g
 html[data-look="glass"] .save-state.g-landed::before { animation: g-ed-dot-pop .5s var(--g-spring); }
 @keyframes g-ed-breathe { 0%, 100% { opacity: 1; transform: none; } 50% { opacity: .45; transform: scale(.82); } }
 @keyframes g-ed-dot-pop { 0% { transform: scale(.4); } 60% { transform: scale(1.35); } 100% { transform: none; } }
+
+/* (round 4, the owner's Chromebook) A tool's ring for the keyboard is drawn inside its own rounded edge: the strip scrolls, and a
+   ring outside the button was cut off by the strip's edges. */
+html[data-look="glass"] .editor-tools .tool-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; box-shadow: none; }
+/* The strip on a wide screen: where it has more tools than room, it fades out under a round glass arrow on that side
+   (glass/editor.js), which slides it along. The arrows show and go with a fade and a small spring; a keyboard's Tab keeps
+   each tool clear of them. */
+html[data-look="glass"] .g-strip-go {
+  position: absolute; top: 50%; z-index: 2; display: grid; place-items: center; width: 32px; height: 32px; margin-top: -16px; padding: 0;
+  border: 0; border-radius: 50%; color: var(--text); background: var(--g-float, var(--raised)); cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), 0 4px 12px light-dark(rgba(76, 52, 160, .18), rgba(4, 2, 14, .45));
+  opacity: 0; transform: scale(.6); pointer-events: none; transition: opacity .18s var(--g-ease), transform .3s var(--g-spring);
+}
+html[data-look="glass"] .g-strip-go .icon { width: 18px; height: 18px; }
+html[data-look="glass"] .g-strip-go::after { content: ""; position: absolute; inset: -6px; }
+html[data-look="glass"] .editor-tools.g-strip-l .g-strip-go.prev,
+html[data-look="glass"] .editor-tools.g-strip-r .g-strip-go.next { opacity: 1; transform: none; pointer-events: auto; }
+html[data-look="glass"] .editor-tools .g-strip-go:active { transform: scale(.86); transition-duration: var(--d-press); }
+@media (hover: hover) { html[data-look="glass"] .editor-tools .g-strip-go:hover { background: var(--g-ed-on-fill); color: var(--g-ed-on-ink); } }
+html[data-look="glass"] .editor-tools:is(.g-strip-l, .g-strip-r) .tool-strip { scroll-padding-inline: 40px; }
+html[data-look="glass"] .editor-tools.g-strip-r .tool-strip {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 52px), transparent calc(100% - 8px)); mask-image: linear-gradient(to right, #000 calc(100% - 52px), transparent calc(100% - 8px));
+}
+html[data-look="glass"] .editor-tools.g-strip-l .tool-strip {
+  -webkit-mask-image: linear-gradient(to right, transparent 8px, #000 52px); mask-image: linear-gradient(to right, transparent 8px, #000 52px);
+}
+html[data-look="glass"] .editor-tools.g-strip-l.g-strip-r .tool-strip {
+  -webkit-mask-image: linear-gradient(to right, transparent 8px, #000 52px, #000 calc(100% - 52px), transparent calc(100% - 8px));
+  mask-image: linear-gradient(to right, transparent 8px, #000 52px, #000 calc(100% - 52px), transparent calc(100% - 8px));
+}
+html[data-look="glass"].calm .g-strip-go { transform: none; transition: opacity .12s linear; }
+@media (max-width: 899px) { html[data-look="glass"] .g-strip-go { display: none; } }
 
 /* ================================================================== + More: its tiles */
 

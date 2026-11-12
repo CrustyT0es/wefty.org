@@ -19,7 +19,7 @@
                 data is on its way, and ONLY then: this device has no notes yet and the first sync is running. After 250 ms (a wait
                 under that shows nothing, not a flash of grey), gone the moment the data is there; the real screen rises in.
                 V.skel.today() / notes() / chat() / bubbles() / list() / rows() / week() make the shapes for other screens.
-     transitions  a screen that gives way to another (a tab, Settings) slides and fades in, from the side it is on in the tab bar.
+     transitions  a screen that gives way to another (a tab, Settings) is drawn in its place and brightens in 180 ms (round 4).
      V.edge     the edge light. A thin glass edge of light round the screen's corners, invisible at rest. Other parts only say
                 V.emit('edge', kind): saved (one thread round the screen), done (the whole edge blooms), synced, arrived (a thread),
                 error (a short red-tinted flash), loading (a slow loop). One run per 1.5 s; none while a sheet's scrim is fading in
@@ -95,7 +95,8 @@ function sample(label, ms) {
 
 const MIN_SHOW = 380;     // ms of it before it may go: a logo that flashes is worse than one that waits a moment
 const HARD_STOP = 7000;   // (the CSS has its own at 6 s, for when no script runs)
-const splashState = { el: null, finished: false, exiting: false, gone: false, timer: 0, hard: 0, why: '', slowSeen: false };
+const splashState = { el: null, finished: false, exiting: false, gone: false, timer: 0, hard: 0, why: '', slowSeen: false,
+  started: false, early: '' };
 
 const paintedAt = () => {
   try {
@@ -148,6 +149,10 @@ function exitSplash() {
 /* The first screen is drawn (or a sign-in screen): the splash settles away. Safe to call any number of times. */
 function splashDone(why = 'ready') {
   const s = splashState;
+  // (1.22.5 in 2.0: asked before the splash began, by a screen drawn in the page's very first moments, such as "Already
+  // signed in" for a link, js/start.js's screen(): it ends as soon as it begins, never sitting over that screen until its
+  // hard stop)
+  if (!s.started) { s.early = s.early || why; return; }
   if (!s.el || s.finished) return;
   s.finished = true;
   s.why = why;
@@ -158,6 +163,7 @@ function splashDone(why = 'ready') {
 
 function startSplash() {
   const s = splashState;
+  s.started = true;
   s.el = document.getElementById('g-splash');
   if (!s.el) return;
   if (!on()) { s.el.remove(); s.el = null; s.gone = true; return; }  // (classic never shows it)
@@ -179,6 +185,7 @@ function startSplash() {
     };
     requestAnimationFrame(tick);
   }
+  if (s.early) splashDone(s.early);  // (a screen was drawn before it began: see splashDone)
 }
 
 V.splash = {
@@ -427,24 +434,25 @@ V.skel = {
 
 /* ================================================================== screens give way to each other */
 
-/* Where each screen sits in the tab bar: a screen further right comes in from the right, one further left from the left. */
-const ORDER = { today: 0, notes: 1, send: 2, files: 2, clips: 2, claude: 3, settings: 4 };
 let lastView = null;
 let transitions = 0;
 
+/* (round 4, the owner's Today caught just after a tab switch: everything dim, the top row's buttons still on their way, and a
+   half-hidden glass disc beside the search button, which was the pull-to-sync pill, made visible by this fade) The new screen
+   is drawn in its place and only brightens, from most of the way there, in 180 ms (calm 120, lite 160): nothing on it moves,
+   nothing starts blank, and what is hidden on it (the pull's pill, the slim bar before a scroll) stays hidden. */
+const SLIDE_FROM = 0.6;
 function slide(was, view) {
   if (!HAS_WAAPI) return;
   const main = document.querySelector('main.view');
   if (!main) return;
-  const dir = (ORDER[view] === undefined ? 1 : ORDER[view]) >= (ORDER[was] === undefined ? 1 : ORDER[was]) ? 1 : -1;
   for (const item of [...main.children]) {
-    if (item.nodeType !== 1 || item.classList.contains('fab') || item.hidden) continue;
+    if (item.nodeType !== 1 || item.classList.contains('fab') || item.classList.contains('g-pull-hint') || item.hidden) continue;
     for (const a of item.getAnimations()) { if (a.id === 'g-slide') a.cancel(); }
-    let frames;
-    let options;
-    if (calm()) { frames = [{ opacity: 0.3 }, { opacity: 1 }]; options = { duration: 120, easing: 'linear' }; }
-    else if (lite()) { frames = [{ opacity: 0.3 }, { opacity: 1 }]; options = { duration: 160, easing: 'ease-out' }; }
-    else { frames = [{ opacity: 0.3, transform: `translateX(${dir * 18}px)` }, { opacity: 1, transform: 'none' }]; options = { duration: 320, easing: EASE }; }
+    const seen = getComputedStyle(item);
+    if (seen.display === 'none' || seen.visibility === 'hidden' || parseFloat(seen.opacity) === 0) continue;
+    const frames = [{ opacity: SLIDE_FROM }, { opacity: 1 }];
+    const options = calm() ? { duration: 120, easing: 'linear' } : lite() ? { duration: 160, easing: 'ease-out' } : { duration: 180, easing: EASE };
     try { item.animate(frames, { ...options, id: 'g-slide' }); } catch (error) { /* gone */ }
   }
 }
@@ -472,6 +480,8 @@ const edge = (() => {
   let disc = null;
   let bloom = null;
   let glow = null;
+  let top = null;                                            // (round 4) a sync's glow from the top edge, and its sweep
+  let sweep = null;
   let job = null;                                            // what is on now: { kind, anims }
   let last = { kind: '', at: -1e9 };
   let started = [];                                          // the kinds started, newest last (for the tests)
@@ -496,7 +506,9 @@ const edge = (() => {
     run = box('div', 'ge-run', [box('div', 'ge-ring', [disc])]);
     glow = box('div', 'ge-glow');
     bloom = box('div', 'ge-bloom');
-    el.append(run, glow, bloom);
+    sweep = box('i', 'ge-sweep');
+    top = box('div', 'ge-top', [sweep]);
+    el.append(run, glow, bloom, top);
     document.body.append(el);
     return el;
   }
@@ -529,6 +541,20 @@ const edge = (() => {
     Promise.all(anims.map((a) => a.finished.catch(() => {}))).then(finish);
     setTimeout(finish, ms + 300);  // (a page that was hidden never finishes its animations)
     return true;
+  }
+
+  /* (round 4) A sync that came back: a glow comes down from the top edge, a soft light sweeps along it once, and it fades. */
+  function fromTop(kind) {
+    const ms = lite() ? 760 : 1150;
+    el.classList.remove('ge-loop');
+    delete el.dataset.tone;
+    el.hidden = false;
+    const anims = [
+      top.animate([{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 0.85, offset: 0.6 }, { opacity: 0 }], { duration: ms, easing: 'linear', fill: 'both' }),
+      sweep.animate([{ transform: 'translateX(-60%)' }, { transform: `translateX(${Math.round(window.innerWidth * 1.1)}px)` }],
+        { duration: ms, easing: 'cubic-bezier(.4,.1,.3,1)', fill: 'both' }),
+    ];
+    return play(kind, '', anims, ms);
   }
 
   /* One thread of light round the screen: the head of a conic gradient turns once, with its violet tail fading behind it. */
@@ -629,7 +655,7 @@ const edge = (() => {
     clear();
     last = { kind, at: now };
     if (wasLooping) loopTimer = -1;  // (the wait goes on after this one)
-    return kind === 'done' || kind === 'error' ? flash(kind) : thread(kind);
+    return kind === 'done' || kind === 'error' ? flash(kind) : kind === 'synced' ? fromTop(kind) : thread(kind);
   }
 
   function remove() {

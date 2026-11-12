@@ -39,6 +39,7 @@ V.send = (() => {
   let queueRunning = false;
   let queueAgain = false;
   let retry = null;
+  let queueDrawn = Promise.resolve();  // the Sending list's last drawing (it reads V.db first)
 
   /* Rows of Share > Send: those addressed to one of the three devices (not Vault Drive's or other parts' own rows), and
      of those only what this device sent or was sent. */
@@ -119,10 +120,13 @@ V.send = (() => {
     }
   }
 
-  /* A video's first frame (a second in, or a tenth of a short one, as many start black). */
+  /* A video's first frame (a second in, or a tenth of a short one, as many start black). `file`: the File; or (1.22.3,
+     Wefty Drive's videos already in the cloud: js/files.js) its signed link, read with preload=metadata and a seek, so
+     only the bits that frame needs come down, and crossOrigin, so the frame may be read back (the cloud allows it). */
   function videoThumb(file) {
     return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file);
+      const remote = typeof file === 'string';
+      const url = remote ? file : URL.createObjectURL(file);
       const video = document.createElement('video');
       let done = false;
       let nudge = null;
@@ -134,7 +138,7 @@ V.send = (() => {
         video.pause();
         video.removeAttribute('src');
         video.load();
-        URL.revokeObjectURL(url);
+        if (!remote) URL.revokeObjectURL(url);
         if (error) reject(error); else resolve(value);
       };
       const timer = setTimeout(() => finish(null, new Error('The video took too long')), 12000);
@@ -154,6 +158,20 @@ V.send = (() => {
       };
       video.muted = true;
       video.playsInline = true;
+      if (remote) {
+        // Only what the frame needs: its length and where it starts, then that one frame (a seek fetches it).
+        video.crossOrigin = 'anonymous';
+        video.preload = 'metadata';
+        video.addEventListener('loadedmetadata', () => {
+          const length = video.duration;
+          video.addEventListener('seeked', grab, { once: true });
+          nudge = setTimeout(() => video.play().catch(() => {}), 1500);  // (a phone that waits to be asked to play)
+          video.currentTime = Number.isFinite(length) && length > 0 ? Math.min(1, length / 10) : 0.1;
+        }, { once: true });
+        video.addEventListener('error', () => finish(null, new Error('This browser can\'t play that video')), { once: true });
+        video.src = url;
+        return;
+      }
       video.preload = 'auto';
       // Some phones only load a frame once asked to play (muted, so it's allowed); it's stopped straight after.
       video.addEventListener('loadedmetadata', () => { nudge = setTimeout(() => video.play().catch(() => {}), 1500); }, { once: true });
@@ -176,6 +194,11 @@ V.send = (() => {
       if (isVideo(file.type)) return await videoThumb(file);
     } catch (error) { /* a kind this browser can't show (HEIC in Chrome): no preview, the icon stays */ }
     return null;
+  }
+
+  /* A video already in the cloud (its signed link): its frame, as preview() makes one, or null (js/files.js). */
+  async function videoPreview(url) {
+    try { return await videoThumb(url); } catch (error) { return null; }
   }
 
   /* -- the tray: what's picked, waiting for Send */
@@ -268,23 +291,28 @@ V.send = (() => {
     if (!V.data.user) return;
     queueRunning = true;
     const sent = new Map();  // to -> names, said in one toast each at the end
+    const refused = [];      // turned down as too big in this run (and not said before): said once, together, at the end
     try {
       let stopped = false;
       do {
         queueAgain = false;
-        for (const item of (await V.db.all('outgoing')).sort(inOrder)) {
+        for (const listed of (await V.db.all('outgoing')).sort(inOrder)) {
           if (!navigator.onLine) { stopped = true; break; }
-          if (!(await V.db.get('outgoing', item.id))) continue;  // "Don't send" pressed meanwhile
+          const item = await V.db.get('outgoing', listed.id);
+          if (!item) continue;  // "Don't send" pressed meanwhile
+          if (item.refused) continue;  // (too big for the cloud: it waits for Try again or Remove, never tried by itself)
           try {
             if (await upload(item)) {
               if (!sent.has(item.to)) sent.set(item.to, []);
               sent.get(item.to).push(item.name);
+              if (await mayFitNow(item.size)) queueAgain = true;
             }
           } catch (error) {
+            // (1.22.2) The cloud turned it down as too big (its own limit, under Wefty's): kept here, marked, and never
+            // tried again by itself, so it isn't sent up again and again, nor said at every sync. The rest go on.
             if (V.fileTooBig(error)) {
-              await V.db.del('outgoing', item.id);
-              V.emit('outgoing');
-              V.problem(error);
+              const aside = await setAside(item);
+              if (aside && !aside.told) refused.push(aside);
               continue;
             }
             if (error && error.full) {  // (out of room: it waits here, and goes the next time something is sent)
@@ -309,8 +337,102 @@ V.send = (() => {
       for (const [to, names] of sent) {
         V.toast(names.length === 1 ? `Sent ${names[0]} to ${V.deviceName(to)}` : `Sent ${names.length} files to ${V.deviceName(to)}`);
       }
+      if (refused.length) await tellTooBig(refused).catch((error) => console.error('Wefty: a file too big for the cloud', error));
       draw();
     }
+  }
+
+  /* -- files the cloud turned down as too big (1.22.2)
+
+     A cloud whose own limit is still under Wefty's (V.FILE_CLOUD_WAS: a free Supabase project) turns big files down:
+     the owner's 61 and 120 MB photos, whose message then came up over Today again and again. Such a file now stays in
+     Sending, marked `refused` (on this device only, in V.db's "outgoing"), with Try again (one go, now) and Remove; it's
+     never tried again by itself, unless the cloud has since taken a file at least as big (its limit was raised). Said
+     once per file (`told`), when it was turned down: never at a sync, a start or a tab, and again only when Try again
+     is turned down too. */
+
+  async function setAside(item) {
+    const now = await V.db.get('outgoing', item.id);
+    if (!now) return null;  // (taken out meanwhile)
+    const aside = { ...now, refused: new Date().toISOString() };
+    await V.db.put('outgoing', aside);
+    trouble.delete(item.id);
+    V.emit('outgoing');
+    return aside;
+  }
+
+  /* A file of `size` went up: the files turned down as too big that are no bigger can go now (the cloud's limit went
+     up). Said again only if they're turned down after all (`told` stays). */
+  async function mayFitNow(size) {
+    let freed = false;
+    for (const row of await V.db.all('outgoing')) {
+      if (row.refused && (row.size || 0) <= (size || 0)) {
+        await V.db.put('outgoing', { ...row, refused: null });
+        freed = true;
+      }
+    }
+    return freed;
+  }
+
+  /* The one card for the files turned down in a run: their names, the cloud's limit, Show (Share > Send, at the first
+     of them). A card in the corner like the arrivals' (V.notice), never a dialog over the screen. */
+  async function tellTooBig(list) {
+    for (const row of list) {
+      const now = await V.db.get('outgoing', row.id);
+      if (now && now.refused) await V.db.put('outgoing', { ...now, told: true });
+    }
+    const first = list[0];
+    let picture = null;
+    if (first.thumb instanceof Blob) {
+      let url = local.get(first.id);
+      if (!url) { url = URL.createObjectURL(first.thumb); local.set(first.id, url); }
+      picture = V.h('img', { src: url, alt: '' });
+    }
+    V.notice({
+      title: list.length === 1 ? 'File too big' : 'Files too big', icon: 'file', picture, cls: 'whole', ms: 15000,
+      text: V.fileRefusedWords(list.map((row) => row.name), Math.min(...list.map((row) => row.size || 0))),
+      actions: [{ label: 'Show', kind: 'tonal', onClick: () => { showOutgoing(first.id); } }],
+    });
+  }
+
+  /* Share > Send, at a file still waiting here (the card's Show): brought into sight and lit, the keyboard on it. */
+  async function showOutgoing(id) {
+    try { if (V.editor && V.editor.covering && V.editor.covering()) V.editor.close(); } catch (error) { /* (still goes) */ }
+    // (opened at its top, so the place Send was left at isn't put back over the scroll to the file: js/start.js)
+    if (!(root && root.isConnected && root.dataset.tab === 'send')) V.go('send', { top: true });
+    else drawQueue();
+    await queueDrawn;
+    const row = parts && parts.queue.querySelector(`[data-out="${CSS.escape(id)}"]`);
+    if (!row) return;
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    row.scrollIntoView({ block: 'center', behavior: calm ? 'auto' : 'smooth' });
+    row.classList.remove('lit');
+    void row.offsetWidth;  // (lit again if it was already)
+    row.classList.add('lit');
+    setTimeout(() => row.classList.remove('lit'), 1600);
+    const button = row.querySelector('button');
+    if (button) button.focus({ preventScroll: true });
+  }
+
+  /* Try again: one go, now (turned down again, it's said again). Remove: out of the queue, as "Don't send". */
+  async function tryAgain(id) {
+    const row = await V.db.get('outgoing', id);
+    if (!row) return;
+    await V.db.put('outgoing', { ...row, refused: null, told: false });
+    trouble.delete(id);
+    V.emit('outgoing');
+    drawQueue();
+    runQueue();
+  }
+
+  async function dropOutgoing(id) {
+    await V.db.del('outgoing', id);
+    V.emit('outgoing');
+    const own = local.get(id);
+    if (own) URL.revokeObjectURL(own);
+    local.delete(id);
+    trouble.delete(id);
+    draw();
   }
 
   /* One file (and its preview) up, then its row. False if "Don't send" was pressed meanwhile. */
@@ -327,7 +449,7 @@ V.send = (() => {
       const thumb = folder + THUMB_NAME;
       try {
         await V.cloud.upload(thumb, item.thumb, { mime: 'image/jpeg' });
-        await V.db.put('files', { key: thumb, blob: item.thumb, at: Date.now() });
+        await V.db.put('files', { key: thumb, blob: item.thumb, at: Date.now() }).catch(() => {});  // (a full device: DATA-10)
         Object.assign(extra, { thumb, thumb_size: item.thumb.size, w: item.w || 0, h: item.h || 0 });
         if (item.seconds) extra.seconds = item.seconds;
         if (item.group) Object.assign(extra, { group: item.group, n: item.n || 0 });
@@ -686,7 +808,9 @@ V.send = (() => {
     await V.db.clear('shared');
     const all = shared.flatMap((s) => s.files || []);
     const words = shared.map((s) => [s.title, s.text, s.url].filter(Boolean).join('\n')).filter(Boolean).join('\n\n');
-    const copied = words && !all.length && V.clips && V.clips.mayShare(words) ? await V.clips.shareShared(words) : '';
+    // (1.22.5) Never on every device's clipboard by itself: any web page can post to the share target, as if it had
+    // been shared from another app (SEC-10). The sheet's first button, Copy on all my devices, does it.
+    const copied = '';
     // Where to paste it, never naming the device in hand: the PC has it already; a Chromebook's tab and the phone's
     // Vault need opening first ("Keep this clipboard in step").
     const where = ['Paste it on your PC now',
@@ -706,6 +830,8 @@ V.send = (() => {
     V.sheet({
       title: copied === 'sent' ? 'Copied on all your devices' : 'Shared with Wefty', content,
       actions: [
+        ...(words && !all.length && copied !== 'sent'
+          ? [{ label: 'Copy on all my devices', icon: 'copy', onClick: () => V.clips.copyShared(words) }] : []),
         { label: 'Save as a note', onClick: async () => {
           V.go('notes');
           await V.notes.create(V.TEMPLATES[0], {
@@ -713,8 +839,6 @@ V.send = (() => {
           }, { fresh: true });
           if (all.length) await V.editor.addFiles(all);  // pictures and other files alike (a shared PDF is kept too)
         } },
-        ...(words && !all.length && copied !== 'sent'
-          ? [{ label: 'Copy on all my devices', icon: 'copy', onClick: () => V.clips.share(words) }] : []),
         { label: 'Send to PC', kind: 'primary', icon: 'send', onClick: () => stage(words, all) },
       ],
     });
@@ -1029,30 +1153,39 @@ V.send = (() => {
       url = URL.createObjectURL(item.thumb);
       local.set(item.id, url);
     }
-    const why = getting ? 'Getting it ready...' : trouble.get(item.id);
-    return V.h('div.transfer.out.pending' + (url ? '.has-thumb' : ''), {},
+    // (1.22.2: one the cloud turned down as too big waits here with Try again and Remove: js/send.js's setAside)
+    const refused = !getting && !!item.refused;
+    const why = getting ? 'Getting it ready...' : refused ? 'Too big for your cloud right now' : trouble.get(item.id);
+    return V.h('div.transfer.out.pending' + (refused ? '.refused' : '') + (url ? '.has-thumb' : ''), { dataset: { out: item.id } },
       url ? V.h('div.t-thumb', {}, V.h('img', { src: url, alt: '' })) : V.h('div.t-icon', {}, V.icon(kindIcon({ kind: 'file', mime: item.mime }))),
       V.h('div.t-main', {}, V.h('div.t-name', { text: item.name }),
-        V.h('div.bar', {}, V.h('i', { style: { width: Math.round(100 * (progress.get(item.id) || 0)) + '%' } })),
+        refused ? null : V.h('div.bar', {}, V.h('i', { style: { width: Math.round(100 * (progress.get(item.id) || 0)) + '%' } })),
         V.h('div.t-meta', {}, V.h('span', { text: `To ${V.deviceName(item.to)}` }), V.h('span', { text: V.size(item.size) }),
           why ? V.h('span.t-status', { text: why }) : null)),
-      getting ? null : V.h('div.t-actions', {}, V.iconButton('x', 'Don\'t send', async () => {
-        await V.db.del('outgoing', item.id);
-        V.emit('outgoing');
-        const own = local.get(item.id);
-        if (own) URL.revokeObjectURL(own);
-        local.delete(item.id);
-        draw();
-      }, 'quiet')));
+      getting ? null : V.h('div.t-actions', {}, refused ? [
+        V.button('Try again', { kind: 'quiet', aria: `Try sending ${item.name} again`, onClick: () => tryAgain(item.id) }),
+        V.button('Remove', { kind: 'quiet', aria: `Remove ${item.name}`, onClick: () => dropOutgoing(item.id) }),
+      ] : V.iconButton('x', 'Don\'t send', () => dropOutgoing(item.id), 'quiet')));
   }
 
   function drawQueue() {
-    if (!parts) return;
-    V.db.all('outgoing').then((waiting) => {
+    if (!parts) return queueDrawn;
+    const box = parts.queue;
+    queueDrawn = V.db.all('outgoing').then((waiting) => {
+      // (the keyboard stays on the file it was on, as its buttons are made again; that file gone, on the next one)
+      const active = document.activeElement;
+      const row = active && box.contains(active) ? active.closest('[data-out]') : null;
+      const had = row ? row.dataset.out : active && box.contains(active) ? '-' : '';
+      const going = preparing.length + waiting.filter((item) => !item.refused).length;
       const rows = [...preparing.map((item) => queueRow(item, true)),
         ...waiting.sort(inOrder).map((item) => queueRow(item, false))];
-      V.clear(parts.queue, rows.length ? V.h('h2.section', { text: navigator.onLine ? 'Sending' : 'Waiting for the internet' }) : null, rows);
-    });
+      V.clear(box, rows.length ? V.h('h2.section', { text: !going ? 'Not sent' : navigator.onLine ? 'Sending' : 'Waiting for the internet' }) : null, rows);
+      if (had) {
+        const back = box.querySelector(`[data-out="${CSS.escape(had)}"] button`) || box.querySelector('[data-out] button');
+        if (back) back.focus({ preventScroll: true });
+      }
+    }, () => {});
+    return queueDrawn;
   }
 
   /* "Send to [Your PC] ⌄": one row. With more than one device to send to it's a button opening a menu of them; with one
@@ -1201,7 +1334,7 @@ V.send = (() => {
 
   return {
     render, files, text, sendFiles, unsend, runQueue, takeShared, stage, unseen, deviceSetting,
-    targets, preview,
+    targets, preview, videoPreview, THUMB_NAME,
     // For js/arrive.js's card: the preview, the big view, opening and marking what came as arrived.
     image, viewer, received, openHere, openLink, kindIcon,
     checkIncoming: () => {

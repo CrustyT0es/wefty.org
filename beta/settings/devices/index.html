@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d0d17" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.supabase.co http://127.0.0.1:*; media-src 'self' blob: https://*.supabase.co; connect-src 'self' https://wefty.org https://*.supabase.co wss://*.supabase.co http://127.0.0.1:* ws://127.0.0.1:* https://api.anthropic.com https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.supabase.co http://127.0.0.1:*; media-src 'self' blob: https://*.supabase.co http://127.0.0.1:*; connect-src 'self' https://wefty.org https://*.supabase.co wss://*.supabase.co http://127.0.0.1:* ws://127.0.0.1:* https://api.anthropic.com https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self'">
   <script src="js/moved.js"></script>
   <script src="js/theme.js"></script>
   <script src="js/look.js"></script>
@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="glass/onboarding.css">
   <link rel="stylesheet" href="glass/overlays.css">
   <link rel="stylesheet" href="glass/loading.css">
+  <link rel="stylesheet" href="glass/swipeback.css">
   <!-- ===== Wefty 2.0 glass: the splash screen (CSS). Shown only while html[data-look="glass"] is set (js/look.js, in the head,
        before the first frame); the classic look never shows it. It is here, inline, because the page's security rules allow
        inline styles but not inline scripts: it paints before any script has loaded. glass/loading.js ends it (V.splash.done(),
@@ -336,5 +337,6 @@ html[data-look="glass"].calm #g-splash.gs-out .gs-stage { animation: none; }
   <script src="glass/onboarding.js"></script>
   <script src="glass/overlays.js"></script>
   <script src="glass/loading.js"></script>
+  <script src="glass/swipeback.js"></script>
 </body>
 </html>

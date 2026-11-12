@@ -275,7 +275,9 @@ function shown(view) {
     settle();
     return;
   }
-  // Share opened from another tab: its parts rise in, as Today's do.
+  // Share as the app's first screen: its parts rise in, as Today's do. (Arriving from another tab it's there in its place,
+  // brightened by glass/loading.js: round 4.)
+  if (V.motion && V.motion.switched && V.motion.switched()) return;
   items.forEach((el, i) => animate(el, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }],
     { duration: lite() ? 180 : 500, delay: lite() ? 0 : Math.min(i, 7) * 45, easing: EASE, fill: 'backwards' }));
 }
@@ -465,5 +467,89 @@ V.on('tab', (view) => {
   shown(main);
   watch(main);
 });
+/* ================================================================== Wefty Drive's big view grows out of its tile (1.22.3 in glass)
+
+   A picture or video tapped in Wefty Drive opens its big view (js/files.js: a sheet with .files-view-sheet). In glass that sheet
+   comes out of the tile (or row) tapped, as a note grows out of its card (V.motion.flip): the tile's face is hidden while the
+   view is open, so it looks like the one picture moving, and shows again when the view goes. The sheet's own slide up is left
+   out for that one opening; closing is the sheet's usual slide down. */
+let tile = null;  // { face, at }: the face of the Drive file just tapped
+document.addEventListener('click', (event) => {
+  if (!on()) return;
+  const open = event.target && event.target.closest ? event.target.closest('.files-list.drive .files-row .files-open') : null;
+  const face = open && !open.closest('.files-list.picking') ? open.querySelector('.files-thumb, .files-icon') : null;
+  tile = face ? { face, at: performance.now() } : null;
+}, true);
+function growView(layer) {
+  const sheet = layer.querySelector(':scope > .sheet.files-view-sheet');
+  const from = tile;
+  tile = null;
+  if (!sheet || !from || performance.now() - from.at > 1200 || !from.face.isConnected || typeof sheet.animate !== 'function') return;
+  const a = from.face.getBoundingClientRect();
+  if (a.width < 8 || a.bottom < 0 || a.top > window.innerHeight) return;
+  // (from where it is when open: no slide this once)
+  sheet.style.transition = 'none';
+  sheet.style.transform = 'none';
+  const b = sheet.getBoundingClientRect();
+  // The layer is there at once, opaque (a layer never shows the page through it: its usual fade would, while the view grows);
+  // only the dimming behind it fades in, a copy of it under the sheet.
+  const scrim = document.createElement('div');
+  scrim.setAttribute('aria-hidden', 'true');
+  Object.assign(scrim.style, { position: 'absolute', inset: '0', pointerEvents: 'none', background: getComputedStyle(layer).backgroundColor });
+  layer.prepend(scrim);
+  Object.assign(layer.style, { transition: 'none', opacity: '1', background: 'transparent' });
+  let done = false;
+  const settle = () => {
+    if (done) return;
+    done = true;
+    scrim.remove();
+    Object.assign(layer.style, { transition: '', opacity: '', background: '' });
+    Object.assign(sheet.style, { transition: '', transform: '', transformOrigin: '' });
+  };
+  if (!b.width || !b.height) { settle(); return; }
+  // The tile's face is hidden while its view is open (one picture, moved), and shows again once the view goes.
+  const face = from.face;
+  const was = face.style.visibility;
+  face.style.visibility = 'hidden';
+  const back = new MutationObserver(() => {
+    if (layer.isConnected && !layer.classList.contains('leaving')) return;
+    back.disconnect();
+    settle();  // (closed while it grew: it goes the usual way)
+    face.style.visibility = was;
+  });
+  back.observe(document.getElementById('layers') || document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  // (the picture itself is there from the start, growing with the sheet: it doesn't rise in after it as the rows below do)
+  const still = () => sheet.querySelectorAll('.files-view, .files-viewer').forEach((el) => el.getAnimations().forEach((x) => { try { x.cancel(); } catch (error) { /* gone */ } }));
+  still();
+  requestAnimationFrame(still);
+  let animation = null;
+  try {
+    scrim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: calm() ? 120 : 260, easing: 'linear', fill: 'backwards' });
+    sheet.style.transformOrigin = '0 0';
+    if (calm()) animation = sheet.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: 'linear', fill: 'backwards' });
+    else {
+      // (it fades in over its first moment only: from the tile's own size, so the page is never seen through it)
+      const small = `translate(${a.left - b.left}px, ${a.top - b.top}px) scale(${a.width / b.width}, ${a.height / b.height})`;
+      animation = sheet.animate([{ transform: small, opacity: 0, offset: 0 }, { opacity: 1, offset: 0.1 }, { transform: 'none', opacity: 1, offset: 1 }],
+        { duration: lite() ? 220 : 460, easing: lite() ? 'ease-out' : SLIDE, fill: 'backwards' });
+    }
+  } catch (error) { console.error(error); }
+  if (animation) animation.finished.then(settle, settle); else settle();
+}
+function watchLayers() {
+  const layers = document.getElementById('layers');
+  if (!layers || layers.dataset.gDriveView) return;
+  layers.dataset.gDriveView = '1';
+  new MutationObserver((changes) => {
+    if (!on() || !tile) return;
+    for (const change of changes) {
+      for (const node of change.addedNodes) {
+        if (node.nodeType === 1 && node.classList.contains('layer') && node.querySelector(':scope > .sheet.files-view-sheet')) growView(node);
+      }
+    }
+  }).observe(layers, { childList: true });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchLayers); else watchLayers();
+
 V.on('look', () => { if (!on()) { dropGhost(); document.querySelectorAll('.g-share-pill, .g-tile-gone').forEach((el) => el.remove()); document.querySelectorAll('.g-pilled').forEach((el) => el.classList.remove('g-pilled')); } });
 })();

@@ -27,6 +27,8 @@ html[data-look="glass"][data-black] { --g-float: light-dark(rgb(252, 250, 255), 
 /* The scrim fades; the panel is glass (the blur is glass.css's) and springs up. */
 html[data-look="glass"] .layer:not(.menu-layer) { transition: opacity .26s var(--g-ease); }
 html[data-look="glass"] .layer.leaving:not(.menu-layer) { transition-duration: .17s; }
+/* (A sheet on its way out still takes presses for those 180 ms, as in the classic look and as a phone's own sheets do: a
+   double tap on one of its buttons never lands on the card or the tab under it.) */
 html[data-look="glass"] .sheet {
   background: light-dark(rgba(250, 247, 255, .88), rgba(30, 22, 58, .8));
   box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 -18px 50px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .55));
@@ -44,6 +46,9 @@ html[data-look="glass"] {
 html[data-look="glass"][data-black] { --g-sheet: light-dark(rgb(250, 247, 255), rgb(14, 11, 26)); }
 html[data-look="glass"] .sheet { background: var(--g-sheet); -webkit-backdrop-filter: none; backdrop-filter: none; transition: transform .433s var(--g-sheet-spring); }
 html[data-look="glass"][data-black] .sheet { background: var(--g-sheet); }
+/* (round 4) With bigger text (the page zoomed), 88dvh is 88 % of the screen times the zoom: a long sheet ran past the top. The
+   layer is the screen in the page's own pixels, so a sheet is at most its height less a little room at the top. */
+html[data-look="glass"] .sheet:not(.help-sheet):not(.hs-sheet) { max-height: min(88dvh, calc(100% - 24px - var(--safe-top, 0px))); }  /* (Help is the whole screen; a hint sheet keeps its own) */
 html[data-look="glass"] .layer.leaving .sheet { transition: transform .17s cubic-bezier(.4, 0, .9, .45); }
 @media (max-width: 699px) {
   html[data-look="glass"] .sheet:not(.help-sheet) {
@@ -122,7 +127,7 @@ html[data-look="glass"] #toasts { gap: 10px; width: min(calc(100% - 32px), 440px
    made") just above its tools, where a toast comes in, and the toast hid the question: while one is asked, toasts come in
    at the top, as they do with a sheet up) */
 @media (max-width: 899px) {
-  html[data-look="glass"] body:has(.editor-layer .editor-ask .ask-card) #toasts { top: calc(10px + var(--safe-top)); bottom: auto; }
+  html[data-look="glass"] #toasts.g-over-ask { top: calc(10px + var(--safe-top)); bottom: auto; }  /* (glass/shell.js sets it) */
 }
 html[data-look="glass"] .toast {
   min-height: 52px; padding: 8px 8px 8px 18px; border-radius: 22px; gap: 10px;
@@ -301,6 +306,68 @@ html[data-look="glass"][data-theme="dark"] select.field, html[data-look="glass"]
 }
 html[data-look="glass"] .folder-pick { padding-right: 34px; background-position: right 10px center; border-radius: 14px; }
 html[data-look="glass"] select.field option, html[data-look="glass"] .folder-pick option { background: var(--surface); color: var(--text); }
+
+/* A long menu on a phone, as a sheet (glass/overlays.js menuSheet, round 4): rows like a menu's, a little room between the
+   groups, the on/off ones a real switch, the Trash last in red; the list scrolls inside the sheet with soft edges. */
+html[data-look="glass"] .g-msheet .sheet-body {
+  overflow-y: auto; overscroll-behavior: contain; padding-block: 6px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+}
+html[data-look="glass"] .g-msheet .g-msheet-list { position: static; display: grid; gap: 2px; margin: 0 -8px; padding: 0; min-width: 0; max-height: none; background: none; box-shadow: none; border: 0; border-radius: 0; animation: none; }
+html[data-look="glass"] .g-msheet-gap { height: 10px; }
+html[data-look="glass"] .g-msheet .g-msheet-item {
+  position: relative; isolation: isolate; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 50px; padding: 0 12px;
+  border: 0; border-radius: 14px; background: transparent; color: var(--text); font: 500 16px/22px var(--font); text-align: left;
+  transition: transform var(--d-press) var(--g-ease);
+}
+html[data-look="glass"] .g-msheet-item::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: var(--g-lift-soft); opacity: 0;
+  transition: opacity .16s var(--g-ease);
+}
+html[data-look="glass"] .g-msheet-item:active::before, html[data-look="glass"] .g-msheet-item:focus-visible::before { opacity: 1; }
+html[data-look="glass"] .g-msheet-item:active { transform: scale(.98); }
+html[data-look="glass"] .g-msheet-item .icon { flex: none; width: 22px; height: 22px; color: var(--text-2); }
+html[data-look="glass"] .g-msheet-label { flex: 1; min-width: 0; }
+html[data-look="glass"] .g-msheet-item.danger { color: var(--danger); }
+html[data-look="glass"] .g-msheet-item.danger .icon { color: var(--danger); }
+html[data-look="glass"] .g-msheet-item.danger::before { background: var(--danger-soft); }
+html[data-look="glass"] .g-msheet-item:disabled { opacity: .45; }
+html[data-look="glass"] .g-msheet-switch { cursor: pointer; }
+html[data-look="glass"] .g-msheet-switch .switch { flex: none; }
+html[data-look="glass"].calm .g-msheet-item:active { transform: none; }
+
+/* Wefty's own list for a drop-down (glass/overlays.js, round 4): a glass menu as wide as its field at least, popping out of it
+   and scrolling when long (wide), or a sheet (a phone). Each option a rounded row: indented by its depth, its emoji on a small
+   glass square, the one in use in the accent with a tick, "New folder..." last under the menus' thread. */
+html[data-look="glass"] .menu.g-pick-menu { min-width: max(180px, var(--g-pick-min, 0px)); max-width: min(420px, calc(100vw - 16px)); padding: 6px; overflow-y: auto; overscroll-behavior: contain; }
+html[data-look="glass"] .g-pick-list { display: grid; gap: 2px; }
+html[data-look="glass"] .g-pick-option {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 0 12px 0 calc(10px + var(--g-pick-depth, 0) * 18px);
+  border: 0; border-radius: 12px; background: transparent; color: var(--text); font: 500 15px/20px var(--font); text-align: left;
+  transition: transform .16s var(--g-spring), background-color .16s var(--g-ease);
+}
+@media (pointer: coarse) { html[data-look="glass"] .g-pick-option { min-height: 48px; } }
+html[data-look="glass"] .g-pick-option:active:not(:disabled) { transform: scale(.97); transition-duration: var(--d-press); }
+@media (hover: hover) { html[data-look="glass"] .g-pick-option:hover:not(:disabled) { background: var(--g-lift-soft); } }
+html[data-look="glass"] .g-pick-option:focus { background: var(--g-lift-soft); outline: none; }
+html.g-kbd[data-look="glass"] .g-pick-option:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
+html[data-look="glass"] .g-pick-option.on { color: var(--accent-ink); font-weight: 600; background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .g-pick-option:disabled { opacity: .45; }
+html[data-look="glass"] .g-pick-badge {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; font-size: 15px; line-height: 1;
+  background: light-dark(rgba(255, 255, 255, .7), rgba(255, 255, 255, .07)); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
+}
+html[data-look="glass"] .g-pick-badge .icon { width: 17px; height: 17px; color: var(--accent-ink); }
+html[data-look="glass"] .g-pick-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-look="glass"] .g-pick-tick { flex: none; display: grid; place-items: center; color: var(--accent-ink); animation: g-pick-tick .3s var(--g-spring) backwards; }
+html[data-look="glass"] .g-pick-tick .icon { width: 18px; height: 18px; }
+html[data-look="glass"] .g-pick-option.fresh { color: var(--accent-ink); }
+html[data-look="glass"] .g-pick-sep { margin: 4px 8px; }
+@keyframes g-pick-tick { from { opacity: 0; transform: scale(.4); } }
+html[data-look="glass"] .g-pick-sheet .g-pick-list { margin: 0 -6px; }
+html[data-look="glass"].calm .g-pick-option:active { transform: none; }
+html[data-look="glass"].calm .g-pick-tick { animation-name: g-fade-in; }
 
 /* A tick box: the box lights up with the gradient (a layer fading in), the tick springs into it. A plain box with the
    app's own class (the terms, "never show again") gets the same. `[data-theme]` in the selector: the classic rules for the

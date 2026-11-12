@@ -1296,6 +1296,10 @@ V.notes = (() => {
      what the list shown can use: Upcoming and the Trash keep their own order, and there's nothing to pick in an empty
      list. */
   function moreMenu(anchorEl) {
+    // (The ⋯ as it is when a row of this menu opens a menu of its own, Sort or a folder's options: the list's head is drawn
+    // again when a sync lands, with a new ⋯, and a menu opened on the one that's gone came up in the screen's corner, or,
+    // in the 2.0 glass look, which closes a menu whose button has gone, not at all.)
+    const more = () => (anchorEl.isConnected ? anchorEl : (parts && parts.titleTools.querySelector('.notes-more')) || anchorEl);
     const folder = V.data.folders.get(filter);
     const grid = O.view() === 'grid';
     const sorts = filter !== 'due' && filter !== 'trash';
@@ -1311,7 +1315,7 @@ V.notes = (() => {
         : listIds.length ? { label: 'Select notes', icon: 'select', onClick: () => selectPressed() } : null,
       sorts ? { node: (done) => V.h('button.menu-item.menu-more', {
         type: 'button', role: 'menuitem', 'aria-haspopup': 'menu',
-        onclick: () => { done(); sortMenu(anchorEl, { view: false, returnFocus: true }); },
+        onclick: () => { done(); sortMenu(more(), { view: false, returnFocus: true }); },
       }, V.icon('sort'), V.h('span', { text: 'Sort' }), V.h('span.menu-value', { text: sortName }), V.icon('next', 'menu-go')) } : null,
       { node: (done) => V.h('div.menu-row.menu-view', { role: 'group', 'aria-label': 'View' },
         V.icon('grid'), V.h('span', { text: 'View' }),
@@ -1319,7 +1323,7 @@ V.notes = (() => {
           V.h('button', { type: 'button', role: 'radio', 'aria-checked': String(!grid), text: 'List', onclick: () => setView('list', done) }),
           V.h('button', { type: 'button', role: 'radio', 'aria-checked': String(grid), text: 'Grid', onclick: () => setView('grid', done) }))) },
       (folder && !query) || arrange ? { sep: true } : null,
-      folder && !query ? { label: 'Folder options…', icon: 'folder', onClick: () => folderMenu(folder, anchorEl) } : null,
+      folder && !query ? { label: 'Folder options…', icon: 'folder', onClick: () => folderMenu(folder, more()) } : null,
       // (the chips show only the top folders: here they're all, to drag into order and into each other)
       arrange ? { label: 'Arrange folders', icon: 'arrange', onClick: () => O.arrangeFolders() } : null,
       // Flash cards (its chip is far along the row on a phone), with how many are due today.

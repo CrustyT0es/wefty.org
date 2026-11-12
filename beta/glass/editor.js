@@ -502,7 +502,59 @@ function sync() {
   for (const el of document.querySelectorAll('.editor-layer.g-growing, .editor-layer.g-leaving')) el.classList.remove('g-growing', 'g-leaving');
 }
 
-V.on('note-opened', opened);
+/* ================================================================== the tools strip on a wide screen (round 4)
+
+   The owner's Chromebook: with the notes list beside the note, the tools strip only shows its first tools and the rest are cut
+   off at its edge. On a wide screen the strip scrolls as it always did (the wheel, a finger, Tab), and now says so: its words
+   fade out under a round glass arrow on each side that has more, and a click on the arrow slides the strip a page along. The
+   arrows never take the caret or the keyboard (Tab goes along the tools themselves, each one scrolled clear of the arrows). */
+const WIDE = window.matchMedia ? matchMedia('(min-width: 900px)') : null;
+const strips = new WeakSet();
+function stripArrows(tools) {
+  const strip = tools && tools.querySelector(':scope > .tool-strip');
+  if (!strip || strips.has(strip)) return;
+  strips.add(strip);
+  const arrow = (dir) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'g-strip-go ' + dir;
+    b.tabIndex = -1;
+    b.setAttribute('aria-hidden', 'true');
+    b.title = dir === 'prev' ? 'More tools to the left' : 'More tools to the right';
+    b.append(V.icon(dir === 'prev' ? 'back' : 'next'));
+    b.addEventListener('mousedown', (event) => event.preventDefault());  // (the caret stays where it was)
+    b.addEventListener('click', () => {
+      const by = Math.max(88, strip.clientWidth - 72) * (dir === 'prev' ? -1 : 1);
+      strip.scrollBy({ left: by, behavior: calm() ? 'auto' : 'smooth' });
+    });
+    return b;
+  };
+  const prev = arrow('prev');
+  const next = arrow('next');
+  tools.append(prev, next);
+  const update = () => {
+    if (!strip.isConnected) return;
+    const show = on() && (!WIDE || WIDE.matches) && !strip.closest('.editor.reading');
+    const left = show && strip.scrollLeft > 2;
+    const right = show && strip.scrollWidth - strip.clientWidth - strip.scrollLeft > 2;
+    tools.classList.toggle('g-strip-l', left);
+    tools.classList.toggle('g-strip-r', right);
+    prev.style.left = `${strip.offsetLeft}px`;
+    next.style.left = `${strip.offsetLeft + strip.clientWidth - next.offsetWidth}px`;
+  };
+  strip.addEventListener('scroll', update, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(update).observe(strip);
+  update();
+}
+function strips_() {
+  if (!on()) return;
+  const editor = V.editor && V.editor.root && V.editor.root();
+  const tools = editor && editor.querySelector('.editor-tools');
+  if (tools) stripArrows(tools);
+}
+
+V.on('note-opened', (id) => { opened(id); strips_(); });
+V.on('look', () => { strips_(); document.querySelectorAll('.editor-tools').forEach((t) => { if (!on()) t.classList.remove('g-strip-l', 'g-strip-r'); }); });
 V.on('look', sync);
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, { once: true }); else sync();
 

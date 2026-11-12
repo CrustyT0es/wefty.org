@@ -185,3 +185,32 @@ The integration of the owner's second look (rec4 and six stills), on the merged 
   - The bloom of the edge light (loading.css .ge-bloom) is two soft inner glows, no ring and no line.
   - A popover is opaque (Chat's "Ask about this" bar, the bar at the top while the note-taker is hidden); only a composer, a bar
     that scrolls things under it, may be glass with blur.
+
+
+Swipe right to go back (glass/swipeback.js and swipeback.css)
+--------------------------------------------------------------
+  - On a phone's layout, a screen pushed on top of another (a note, the study screen, Help, the note-taker's live screen,
+    the drawing screen, a chat over its list, a Settings page, Settings itself, Notes' inner lists) follows a finger drawn
+    to the right; past 35 % of the width or a flick (.5 px a ms over the last 80 ms) it goes back, else it springs back.
+  - Going back always presses the screen's own back control (its arrow, X, Hide or Done), so history is exactly as after
+    a tap on it. Moves use the `translate` property, which adds to any transform a screen's own animations use.
+  - Where the screen under it is in the page it's the real one (sliding in from 30 % to the left, dimmed); where it isn't
+    (Settings, Notes' inner lists) the dimmed aurora shows. Settings' carousel then starts where the finger left it
+    (V.swipeBack.taken() -> { x, p }, read by glass/settings.js); Notes' list that goes is a still picture (.g-sb-carry).
+  - A swipe starts anywhere on such a screen, except on what has a sideways use of its own (text being typed in or picked,
+    a sideways scroller, Notes' cards that swipe, a slider, a canvas, a flash card): there, only from the left edge.
+  - Something new that swipes sideways inside a pushed screen: give it data-g-sideways (or touch-action: none / pan-y).
+  - tests/test_wefty_20_swipeback.py; filmstrips: python tests/glass_swipe_shots.py <outdir> [--swipes note,chat,settings].
+
+
+The safety release (Wefty 1.22.5) on the 2.0 tree
+--------------------------------------------------
+  - A screen drawn in the page's very first moments can ask V.splash.done() before glass/loading.js has begun the
+    splash (js/start.js's wait for the page's scripts comes first): "Already signed in", for a link opened where someone
+    is signed in, did, and sat under the splash until its 7 s stop. An early ask is kept (`early`), and the splash ends
+    as soon as it begins. tests/test_wefty_20_loading.py.
+  - The release's notes about a cloud that isn't Wefty's own (on the sign-in screen, in a slot of its own, and in "Is
+    this you?") are the gate's glass notes: 16 px corners and a warm inner line (glass/onboarding.css). "Is this you?"
+    asks in the sheet's own words' colour, not the grey of the lines under a sheet's title.
+  - js/doors.js reads the site's cloud.json where the page is (2.0's preview, /beta/, reads the site's, one folder up),
+    and an old address reads wefty.org's without the page's cookies.

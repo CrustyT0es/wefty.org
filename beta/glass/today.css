@@ -162,7 +162,8 @@ html[data-look="glass"] .page.today .today-tile[data-key="q:new"] .tile-ic {
 }
 html[data-look="glass"] .page.today .today-tile[data-key="q:new"] .tile-ic::before { display: none; }
 html[data-look="glass"] .page.today .tile-count {
-  background: var(--g-grad); color: #fff; box-shadow: 0 0 0 3px var(--bg), 0 4px 12px var(--g-glow); border-radius: 11px; min-width: 24px; height: 22px; font: 700 12px/22px var(--font);
+  background: var(--g-badge-fill); color: #fff; box-shadow: var(--g-badge-depth); text-shadow: 0 1px 1px rgba(40, 16, 110, .45);  /* (round 4: the glass count pill, glass.css) */
+  border-radius: 11px; min-width: 24px; height: 22px; font: 700 12px/22px var(--font);
   top: -8px; right: -10px;
 }
 html[data-look="glass"] .page.today .tile-label { color: var(--text-2); }
@@ -174,7 +175,7 @@ html[data-look="glass"] .page.today .tile-label { color: var(--text-2); }
   }
   html[data-look="glass"] .page.today .today-tile:active .tile-ic { transform: scale(.88); }
   html[data-look="glass"] .page.today .today-tile .tile-label, html[data-look="glass"] .page.today .today-tile.big .tile-label { font: 500 12.5px/16px var(--font); }
-  html[data-look="glass"] .page.today .today-tile .tile-count { box-shadow: 0 0 0 3px var(--bg), 0 4px 12px var(--g-glow); }
+  html[data-look="glass"] .page.today .today-tile .tile-count { box-shadow: var(--g-badge-depth); }
   /* (the icons are 56 px where the row has room; a small phone, or bigger text, keeps the classic 48 so the row stays small) */
   html[data-look="glass"] .page.today .today-sec[data-section=quick] { padding-top: 14px; container-type: inline-size; }
 }
@@ -202,7 +203,7 @@ html[data-look="glass"] .page.today .tile-label { color: var(--text-2); }
 }
 @media (min-width: 900px) {
   /* (a small tile's icon is 32 px: its count sits on the corner, not over the picture) */
-  html[data-look="glass"] .page.today .today-tile:not(.big) .tile-count { top: -12px; right: -12px; min-width: 20px; height: 18px; font: 700 11px/18px var(--font); border-radius: 9px; box-shadow: 0 0 0 2px var(--bg), 0 3px 10px var(--g-glow); }
+  html[data-look="glass"] .page.today .today-tile:not(.big) .tile-count { top: -12px; right: -12px; min-width: 20px; height: 18px; font: 700 11px/18px var(--font); border-radius: 9px; box-shadow: var(--g-badge-depth); }
 }
 @media (min-width: 900px) and (hover: hover) {
   html[data-look="glass"] .page.today .today-tile:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--g-hi), var(--g-shadow-hi); }
@@ -316,7 +317,7 @@ html[data-look="glass"] .page.today .today-days::before {
   background: radial-gradient(closest-side, light-dark(rgba(124, 91, 224, .18), rgba(150, 108, 240, .2)), light-dark(rgba(124, 91, 224, .06), rgba(150, 108, 240, .08)) 55%, rgba(150, 108, 240, 0));
 }
 html[data-look="glass"] .page.today .today-days b { position: relative; font: 700 21px/22px var(--font-display); }
-html[data-look="glass"] .page.today .today-days span:not(.g-roll):not(.sr-only) { position: relative; font: 500 11px/14px var(--font); color: var(--text-2); }
+html[data-look="glass"] .page.today .today-days > span:not(.g-roll):not(.sr-only) { position: relative; font: 500 11px/14px var(--font); color: var(--text-2); }  /* ("days": never a rolling digit's parts) */
 html[data-look="glass"] .page.today .today-days.word b { font-size: 12.5px; line-height: 16px; }
 html[data-look="glass"] .page.today .g-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 html[data-look="glass"] .page.today .g-ring circle { fill: none; stroke-width: 7; }

@@ -63,6 +63,7 @@ const CARDS = {
   'ai-trouble': ['AI unavailable', 'spark'],
   notifications: ['Notifications', 'bell'],
   'too-big': ['Note too big', 'cloud'],
+  'file-too-big': ['File too big', 'file'],
   asleep: ['Cloud asleep', 'cloud'],
   'signed-out': ['Signed out', 'lock'],
   'forgot-password': ['Sign-in', 'key'],
@@ -71,7 +72,7 @@ const CARDS = {
 };
 const PLAIN_TITLE = 'Something went wrong';
 /* Cards that say where things stand rather than that something broke: amber, with no red flash of the edge light. */
-const WARN = new Set(['offline', 'asleep', 'too-big', 'signed-out', 'update']);
+const WARN = new Set(['offline', 'asleep', 'too-big', 'file-too-big', 'signed-out', 'update']);
 
 function messageCard({ icon = 'alert', title = '', text = '', action = null, secondary = null, onClose = null, kind = 'err', ms = 6500 } = {}) {
   const box = document.getElementById('toasts');
@@ -176,6 +177,11 @@ function byKeyboard() {
 }
 V.menu = function menu(anchor, items, options) {
   if (!on()) return plainMenu.call(this, anchor, items, options);
+  // (round 4, the owner's phone: a note's ... menu drawn as a menu inside a menu) One menu at a time: any other open one goes.
+  closeMenus();
+  // A long menu on a phone is a sheet from the bottom (round 4): it never runs past the screen.
+  const asSheet = menuSheet(anchor, items, options || {});
+  if (asSheet) return asSheet;
   const opts = { ...(options || {}) };
   const keyed = byKeyboard();
   const active = document.activeElement;
@@ -214,6 +220,105 @@ V.menu = function menu(anchor, items, options) {
   return handle;
 };
 
+/* ---- round 4 (the owner's Samsung: a note's ... menu of 13 items covered the whole screen, already scrolled, its first items
+   out of sight with nothing saying so). On a phone, a menu of more than 7 items, or one that can't fit between the screen's top
+   bar and its bottom bar, opens as a sheet from the bottom instead: a grab handle, what it's for at the top (a note's title),
+   its items in small groups (things to do; sending and copying; studying; the reading switches; the Trash last), each on/off
+   item a real switch, scrolling inside with soft fades. It follows the finger and closes by a pull down, a tap beside it or
+   Back; an item tapped acts as the sheet starts to go (a switch acts at once and the sheet stays). A menu with a piece of its
+   own (+ More's tiles, the picture's head, a drop-down's list) is never made a sheet. */
+const SHEET_AFTER = 7;
+const GROUPS = [
+  [/^(send|export|copy|share|ask chat|ask about|save to|save a copy|download|open in)/i, 1],
+  [/(flash cards|test me|study|learn|quiz|review)/i, 2],
+];
+function groupOf(item) {
+  if (item.danger) return 9;
+  if (typeof item.checked === 'boolean') return 3;
+  const found = GROUPS.find(([words]) => words.test(item.label || ''));
+  return found ? found[1] : 0;
+}
+function menuTitle(anchor, options) {
+  const editor = anchor && anchor.closest && anchor.closest('.editor');
+  const title = editor && editor.querySelector('.note-title');
+  if (title && (title.value || '').trim()) return title.value.trim();
+  if (editor) return 'This note';
+  return String(options.label || '').replace(/:\s*(more )?options$/i, '').trim() || 'Options';
+}
+function menuSheet(anchor, items, options) {
+  if (!phone() || !window.matchMedia('(pointer: coarse)').matches) return null;
+  const list = (items || []).filter(Boolean);
+  if (list.some((item) => item.node)) return null;
+  const real = list.filter((item) => !item.sep);
+  const room = window.innerHeight - 170;  // (the screen less its top bar and its bottom bar)
+  if (real.length <= SHEET_AFTER && real.length * 48 + 24 <= room) return null;
+  let done = false;
+  let sheet = null;
+  let stepped = false;
+  // (`after`: what the item does, once the sheet has begun to go and its Back step is gone, so a step the item makes
+  // itself, a note opened say, is never the one taken back)
+  const closeWith = (how, after = null) => {
+    if (done) return;
+    done = true;
+    window.removeEventListener('popstate', back);
+    if (sheet) sheet.close();
+    const then = () => {
+      if (options.onClose) { try { options.onClose(how); } catch (error) { console.error(error); } }
+      if (after) { try { after(); } catch (error) { V.problem(error); } }
+    };
+    if (stepped && history.state && history.state.vault === 'menu-sheet') {
+      stepped = false;
+      let ran = false;
+      const once = () => { if (ran) return; ran = true; window.removeEventListener('popstate', once); then(); };
+      window.addEventListener('popstate', once);
+      setTimeout(once, 400);
+      history.back();
+    } else then();
+  };
+  const back = () => { stepped = false; closeWith('escape'); };
+  // groups: the menu's own (by its lines), else by kind; the Trash (and other danger) always last
+  const ordered = [];
+  if (list.some((item) => item.sep)) {
+    let group = 0;
+    for (const item of list) { if (item.sep) group++; else ordered.push([item.danger ? 99 : group, item]); }
+  } else for (const item of real) ordered.push([groupOf(item), item]);
+  ordered.sort((a, b) => a[0] - b[0]);
+  const rows = [];
+  let last = null;
+  for (const [group, item] of ordered) {
+    if (last !== null && group !== last) rows.push(V.h('div.g-msheet-gap', { 'aria-hidden': 'true' }));
+    last = group;
+    const icon = !item.icon ? null : typeof item.icon === 'string' ? V.icon(item.icon) : item.icon.cloneNode(true);
+    if (typeof item.checked === 'boolean') {
+      const box = V.h('input.switch', { type: 'checkbox', checked: item.checked, disabled: item.disabled ? true : null,
+        'aria-label': item.label, onchange: () => { try { item.onClick(); } catch (error) { V.problem(error); } } });
+      rows.push(V.h('label.menu-item.g-msheet-item.g-msheet-switch', { role: 'menuitemcheckbox', 'aria-checked': String(item.checked) },
+        icon, V.h('span.g-msheet-label', { text: item.label }), box));
+      box.addEventListener('change', () => { box.closest('[role=menuitemcheckbox]').setAttribute('aria-checked', String(box.checked)); });
+    } else {
+      rows.push(V.h('button.menu-item.g-msheet-item' + (item.danger ? '.danger' : ''), { type: 'button', role: 'menuitem', disabled: item.disabled ? true : null,
+        onclick: () => closeWith('item', () => item.onClick()) },
+      icon, V.h('span.g-msheet-label', { text: item.label })));
+    }
+  }
+  const body = V.h('div.g-msheet-list', { role: 'menu', 'aria-label': options.label || null }, rows);
+  sheet = V.sheet({ title: menuTitle(anchor, options), content: body, onClose: () => closeWith('outside') });
+  sheet.el.classList.add('g-msheet');
+  // (the menu's own class on the sheet itself, `cls`: what looks for that menu finds this one, the whole of it on the screen)
+  if (options.cls) sheet.el.classList.add(...String(options.cls).split(/\s+/).filter(Boolean));
+  // (the browser's own menu never comes up over this one, or beside it, as over any menu: js/util.js. A finger still down
+  // after the hold that opened it is on the sheet by then, and the phone's own long press, coming later, found a thing
+  // that didn't turn it down.)
+  sheet.el.addEventListener('contextmenu', (event) => event.preventDefault());
+  const scrim = sheet.el.parentElement;
+  if (scrim) scrim.addEventListener('contextmenu', (event) => { if (event.target === scrim) event.preventDefault(); });
+  try { history.pushState({ ...(history.state || {}), vault: 'menu-sheet' }, ''); stepped = true; } catch (error) { /* no Back step */ }
+  window.addEventListener('popstate', back);
+  // (the keyboard: on its first item, as a menu's)
+  requestAnimationFrame(() => { const first = body.querySelector('button:not([disabled]), input:not([disabled])'); if (first && byKeyboard()) first.focus(); });
+  return { close: () => closeWith('item'), el: sheet.el };
+}
+
 /* Where a menu goes in glass. The editor's + More comes out of its button just above the floating tools strip (the note's
    words stay in sight over it), as wide as the strip (a tray of two rows of tiles, glass/editor.css), never over the strip.
    Any other menu stays where util.js put it; `placed` says how to put it back by its button after the screen changes size. */
@@ -229,12 +334,68 @@ function place(list, anchor, opts) {
     list.style.width = `${width / zoom}px`;
     list.style.maxWidth = 'none';
     list.style.left = `${left / zoom}px`;
-    // (a short screen, the keyboard up and bigger text: the tray keeps above the strip and its tiles scroll)
-    const room = (s.top - 8) / zoom - 8;
-    list.style.maxHeight = `${Math.max(120, room)}px`;
+    // Above the strip when the whole tray fits there (a phone's strip at the foot of the screen); else below it (a wide
+    // screen's strip at the top of the note: the owner's Chromebook had the tray's first row cut off above it); else on
+    // the side with more room, its tiles scrolling, never past the screen's edge.
+    list.style.maxHeight = 'none';
     list.style.overflowY = 'auto';
-    list.style.top = `${Math.max(8, (s.top - 8) / zoom - list.offsetHeight)}px`;
+    const tall = list.offsetHeight;
+    const screenH = window.innerHeight / zoom;
+    const above = (s.top - 8) / zoom - 8;
+    const below = screenH - (s.bottom + 8) / zoom - 8;
+    const under = tall > above && (tall <= below || below > above);
+    const room = under ? below : above;
+    list.style.maxHeight = `${Math.max(120, Math.min(tall, room))}px`;
+    const height = list.offsetHeight;
+    list.style.top = `${under ? Math.min((s.bottom + 8) / zoom, screenH - height - 8) : Math.max(8, (s.top - 8) / zoom - height)}px`;
+    list.dataset.gUnder = under ? '1' : '';
     return 'strip';
+  }
+  // (round 4, the owner's phone: an answer's ... menu climbed over Chat's top bar) A menu opened from inside a chat stays
+  // between the chat's top bar and its typing box: below its button when it fits there, else above, else on the side
+  // with more room, scrolling inside itself.
+  const chat = anchor.closest && anchor.closest('.chat-scroll');
+  if (chat) {
+    const b = chat.getBoundingClientRect();
+    const a = anchor.getBoundingClientRect();
+    list.style.maxHeight = 'none';
+    list.style.overflowY = 'auto';
+    const tall = list.offsetHeight;
+    // (the typing box floats over the scroller's foot, glass/chat.css: the menu stays above it)
+    const composer = chat.parentNode && chat.parentNode.querySelector(':scope > .chat-composer');
+    const over = composer ? [...composer.children].filter((el) => !el.hidden && el.getClientRects().length) : [];
+    const floor = over.length ? Math.min(b.bottom, ...over.map((el) => el.getBoundingClientRect().top)) : b.bottom;
+    const lo = b.top / zoom + 8;
+    const hi = floor / zoom - 8;
+    const below = hi - (a.bottom / zoom + 4);
+    const above = a.top / zoom - 4 - lo;
+    const under = tall <= below || (tall > above && below >= above);
+    const room = Math.max(120, under ? below : above);
+    list.style.maxHeight = `${Math.min(tall, room)}px`;
+    const height = list.offsetHeight;
+    const top = under ? a.bottom / zoom + 4 : a.top / zoom - 4 - height;
+    list.style.top = `${Math.max(lo, Math.min(top, hi - height))}px`;
+    return under ? 'below' : 'above';
+  }
+  // (round 4) On a phone a menu stays between the screen's top bar and its bottom bar (the tab bar, a note's tools): moved
+  // in, and scrolling inside itself when it can't fit (one that can't is a sheet: menuSheet).
+  if (phone()) {
+    const a = anchor.getBoundingClientRect();
+    const screen = anchor.closest && (anchor.closest('.editor') || anchor.closest('main.view'));
+    const head = screen && screen.querySelector('.editor-bar, .app-head, .chat-head');
+    const foot = (screen && screen.querySelector('.editor-tools')) || document.querySelector('#app > nav.tabs');
+    const inHead = head && head.contains(anchor);
+    const hb = head && head.getClientRects().length ? head.getBoundingClientRect() : null;
+    const fb = foot && foot.getClientRects().length ? foot.getBoundingClientRect() : null;
+    const lo = (hb && !inHead && a.top >= hb.bottom - 1 ? hb.bottom + 4 : 8) / zoom;
+    const hi = (fb && fb.top > a.bottom ? fb.top - 6 : window.innerHeight - 8) / zoom;
+    if (hi - lo > 80) {
+      const tall = list.offsetHeight;
+      if (tall > hi - lo) { list.style.maxHeight = `${hi - lo}px`; list.style.overflowY = 'auto'; }
+      const height = list.offsetHeight;
+      const top = parseFloat(list.style.top) || list.getBoundingClientRect().top / zoom;
+      list.style.top = `${Math.max(lo, Math.min(top, hi - height))}px`;
+    }
   }
   const r = list.getBoundingClientRect();
   const a = anchor.getBoundingClientRect();
@@ -557,6 +718,154 @@ function segmented(seg) {
   place(true);
 }
 V.overlays = { segmented, messageCard };
+
+/* ================================================================== drop-downs: Wefty's own list (round 4)
+
+   The owner's Chromebook: the note's folder picker opened the browser's own list, a black box with a thin white edge and a
+   pale blue row ("it doesn't look like Wefty"). In glass a drop-down (a <select>: the note's folder, the note-taker's, Snap a
+   page's, a reminder's repeat, a subscription's...) opens Wefty's own list instead: on a wide screen a glass menu that pops
+   out of the field (V.menu, so the same motion as every menu) and scrolls when long; on a phone a sheet that follows the
+   finger. It is a listbox of options: the one in use ticked, folders inside folders indented with their emoji on a small
+   glass square, "New folder..." last under a line; the arrow keys, Home, End, Page Up and Down move, letters typed find,
+   Enter or Space (or a tap) picks, Esc or a press beside it closes. Picking sets the select's value and tells it as the
+   browser would (input, then change), so the app's own code is untouched; the select itself stays what a screen reader and
+   the keyboard know. A select with `multiple` or a size, or one that's disabled, is left as it is. */
+const PICK_SPACE = /^[\s  -  ]+/;
+const PICK_EMOJI = /^((?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:️|‍|\p{Emoji_Modifier}|\p{Extended_Pictographic}|\p{Regional_Indicator})*)\s+/u;
+const pickable = (sel) => !!sel && sel.tagName === 'SELECT' && !sel.multiple && !(sel.size > 1) && !sel.disabled && sel.options.length > 0
+  && !!sel.closest('#app, #layers') && on();
+function pickOptions(sel) {
+  return [...sel.options].map((option) => {
+    const raw = option.textContent || '';
+    const lead = (raw.match(PICK_SPACE) || [''])[0].length;
+    let text = raw.slice(lead).trim();
+    const emoji = text.match(PICK_EMOJI);
+    if (emoji) text = text.slice(emoji[0].length);
+    const fresh = option.value === 'new-folder' || /^new folder/i.test(text);
+    return { option, value: option.value, text, emoji: emoji ? emoji[1] : '', depth: Math.min(6, lead), disabled: option.disabled, fresh };
+  });
+}
+function labelOf(sel) {
+  const named = sel.getAttribute('aria-label');
+  if (named) return named;
+  const label = sel.closest('label') || (sel.id && document.querySelector(`label[for="${CSS.escape(sel.id)}"]`));
+  return label ? (label.textContent || '').replace(sel.textContent || '', '').trim() || 'Choose' : 'Choose';
+}
+let picking = null;  // the drop-down open now: { sel, close }
+function openPick(sel, keyed) {
+  if (picking) { const same = picking.sel === sel; picking.close(); if (same) return null; }
+  const items = pickOptions(sel);
+  const current = sel.selectedIndex;
+  const label = labelOf(sel);
+  const asSheet = phone() && root.matches('[data-look="glass"]') && window.matchMedia('(pointer: coarse)').matches;
+  let handle = null;
+  let done = false;
+  const finish = (item) => {
+    if (done) return;
+    done = true;
+    picking = null;
+    if (handle) handle.close();
+    if (item && !item.disabled) {
+      if (keyed || asSheet) { try { sel.focus({ preventScroll: true }); } catch (error) { /* gone */ } }
+      if (sel.value !== item.value) {
+        sel.value = item.value;
+        sel.dispatchEvent(new Event('input', { bubbles: true }));
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  };
+  const row = (item, i) => {
+    const on_ = i === current;
+    const button = V.h('button.menu-item.g-pick-option' + (on_ ? '.on' : '') + (item.fresh ? '.fresh' : ''), {
+      type: 'button', role: 'option', tabindex: '-1', 'aria-selected': String(on_), disabled: item.disabled ? true : null,
+      dataset: { value: item.value, depth: String(item.depth) }, onclick: () => finish(item),
+    },
+    item.fresh ? V.h('span.g-pick-badge', {}, V.icon('folder-plus')) : item.emoji ? V.h('span.g-pick-badge', { text: item.emoji, 'aria-hidden': 'true' }) : null,
+    V.h('span.g-pick-text', { text: item.text }),
+    on_ ? V.h('span.g-pick-tick', { 'aria-hidden': 'true' }, V.icon('check')) : null);
+    if (item.depth) button.style.setProperty('--g-pick-depth', String(item.depth));
+    return button;
+  };
+  const rows = items.map(row);
+  const list = V.h('div.g-pick-list', { role: 'listbox', 'aria-label': label });
+  items.forEach((item, i) => {
+    if (item.fresh && i > 0) list.append(V.h('div.menu-sep.g-pick-sep', { role: 'separator' }));
+    list.append(rows[i]);
+  });
+  const usable = () => rows.filter((b) => !b.disabled);
+  // The keys (on the list, before V.menu's own)
+  let typed = '';
+  let typedAt = 0;
+  const keys = (event) => {
+    const all = usable();
+    if (!all.length) return;
+    const at = all.indexOf(document.activeElement);
+    const from = at >= 0 ? at : Math.max(0, all.indexOf(rows[current]));
+    const go = (i) => { event.preventDefault(); event.stopPropagation(); const to = all[Math.max(0, Math.min(all.length - 1, i))]; to.focus(); to.scrollIntoView({ block: 'nearest' }); };
+    if (event.key === 'ArrowDown') return go(at < 0 ? from : from + 1);
+    if (event.key === 'ArrowUp') return go(at < 0 ? from : from - 1);
+    if (event.key === 'Home') return go(0);
+    if (event.key === 'End') return go(all.length - 1);
+    if (event.key === 'PageDown') return go(from + 8);
+    if (event.key === 'PageUp') return go(from - 8);
+    if (event.key === 'Tab') { event.preventDefault(); finish(null); try { sel.focus({ preventScroll: true }); } catch (error) { /* gone */ } return undefined; }
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && event.key !== ' ') {
+      const now = performance.now();
+      typed = (now - typedAt > 800 ? '' : typed) + event.key.toLowerCase();
+      typedAt = now;
+      const start = typed.length === 1 ? from + 1 : from;
+      const order = all.slice(start).concat(all.slice(0, start));
+      const found = order.find((b) => (b.querySelector('.g-pick-text').textContent || '').toLowerCase().startsWith(typed))
+        || (typed.length > 1 && typed.split('').every((c) => c === typed[0])
+          ? order.find((b) => (b.querySelector('.g-pick-text').textContent || '').toLowerCase().startsWith(typed[0])) : null);
+      if (found) go(all.indexOf(found));
+      else { event.preventDefault(); event.stopPropagation(); }
+    }
+    return undefined;
+  };
+  if (asSheet) {
+    handle = V.sheet({ title: label, content: list, onClose: () => { if (!done) { done = true; picking = null; } } });
+    handle.el.classList.add('g-pick-sheet');
+  } else {
+    const rect = sel.getBoundingClientRect();
+    const layers = document.getElementById('layers');
+    if (layers) layers.style.setProperty('--g-pick-min', `${Math.round(rect.width)}px`);
+    handle = V.menu(sel, [{ node: list }], { cls: 'g-pick-menu', label, returnFocus: !!keyed,
+      onClose: () => { if (!done) { done = true; picking = null; } } });
+    if (handle && handle.el) handle.el.setAttribute('role', 'presentation');
+  }
+  // (on what has the keyboard: the list's own box, or a row in it)
+  if (handle && handle.el) handle.el.addEventListener('keydown', keys, true);
+  picking = { sel, close: () => finish(null) };
+  // the one in use in sight, and (the keyboard) lit
+  const chosen = rows[current] && !rows[current].disabled ? rows[current] : usable()[0];
+  // (a sheet is a dialog: the keyboard goes into it, on the one in use, as it does for the keyboard's list)
+  const into = keyed || asSheet;
+  requestAnimationFrame(() => {
+    if (!chosen || !chosen.isConnected) return;
+    chosen.scrollIntoView({ block: 'nearest' });
+    if (into) chosen.focus({ preventScroll: true });
+  });
+  if (into && chosen) chosen.focus({ preventScroll: true });
+  return handle;
+}
+document.addEventListener('mousedown', (event) => {
+  if (event.button !== 0) return;
+  const sel = event.target && event.target.closest ? event.target.closest('select') : null;
+  if (!pickable(sel)) return;
+  event.preventDefault();
+  openPick(sel, false);
+}, true);
+document.addEventListener('keydown', (event) => {
+  const sel = event.target;
+  if (!pickable(sel) || event.ctrlKey || event.metaKey) return;
+  const opens = event.key === ' ' || event.key === 'Enter' || event.key === 'F4' || event.key === 'ArrowDown' || event.key === 'ArrowUp';
+  if (!opens) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openPick(sel, true);
+}, true);
+V.glassPick = openPick;
 
 /* ================================================================== ticked boxes pop */
 

@@ -1208,8 +1208,7 @@ V.reminders = (() => {
         const when = at && !note.done ? remindLabel(note, now)
           : part.key === 'later' || part.key === 'overdue' ? dayLabel(dayOf(note), now) : 'Move';
         const repeats = !note.done && !!repeatOf(note);
-        // (its tick and its day pressed with the right button, or held: the note's menu, as its card's: 1.19.1)
-        return V.contextMenu(V.h('div.up-row' + (note.done ? '.done' : '') + (repeats ? '.repeats' : ''), { dataset: { id: note.id } },
+        const row = V.h('div.up-row' + (note.done ? '.done' : '') + (repeats ? '.repeats' : ''), { dataset: { id: note.id } },
           V.h('button.up-tick', { type: 'button', 'aria-pressed': String(!!note.done),
             'aria-label': note.done ? `${V.noteTitle(note)}: not done` : `${V.noteTitle(note)}: mark done`,
             onclick: () => toggleDone(note.id) }, V.icon('check')),
@@ -1217,8 +1216,13 @@ V.reminders = (() => {
           V.h('button.up-when' + (days < 0 && !note.done ? '.late' : ''), { type: 'button', title: 'Move it, or change its reminder',
             'aria-label': `When: ${when}${repeats ? `. ${repeatLine(note, now)}` : ''}. Change it`, onclick: () => edit(note.id),
             title: repeats ? repeatLine(note, now) : null },
-          icon(repeats ? 'repeat' : at && !note.done ? 'bell' : 'calendar'), V.h('span', { text: when }))),
-        () => V.notes.noteItems(note.id), { label: `${V.noteTitle(note)}: options` });
+          icon(repeats ? 'repeat' : at && !note.done ? 'bell' : 'calendar'), V.h('span', { text: when })));
+        // (The day's words, for the styles: the 2.0 glass look lays the day over the end of the card's chips, and keeps
+        // that much of their last line clear, glass/notes.css. The classic look, where the day has its own column, never
+        // reads it.)
+        row.style.setProperty('--up-when', JSON.stringify(when));
+        // (its tick and its day pressed with the right button, or held: the note's menu, as its card's: 1.19.1)
+        return V.contextMenu(row, () => V.notes.noteItems(note.id), { label: `${V.noteTitle(note)}: options` });
       }),
     ]);
   }

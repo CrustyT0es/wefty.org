@@ -49,7 +49,12 @@ html[data-look="glass"] .gate-box .error-text:not(:empty) {
   animation: g-ob-shake .42s var(--g-spring) both;
 }
 @keyframes g-ob-shake { 0% { transform: translateX(0); } 25% { transform: translateX(-6px); } 55% { transform: translateX(4px); } 100% { transform: none; } }
-html[data-look="glass"] .gate-box > .doors-note, html[data-look="glass"] .gate-box > .moved-waiting { border-radius: 16px; box-shadow: inset 0 0 0 1px light-dark(rgba(154, 85, 5, .2), rgba(255, 201, 106, .25)); }
+html[data-look="glass"] .gate-box > .doors-note, html[data-look="glass"] .gate-box > .moved-waiting,
+html[data-look="glass"] .gate-box > .cloud-other-slot > .doors-note,
+html[data-look="glass"] .sheet-body > .doors-note { border-radius: 16px; box-shadow: inset 0 0 0 1px light-dark(rgba(154, 85, 5, .2), rgba(255, 201, 106, .25)); }
+/* (1.22.5) "Is this you?" (a sign-in that arrives by a link or a paste, js/doors.js's signInAs): the question is the
+   sheet's own words, never the quieter grey the other lines under its title are. */
+html[data-look="glass"] .sheet-body > .who-ask { color: var(--text); font-size: 16.5px; line-height: 1.4; }
 html[data-look="glass"] .gate-box > .moved-done { border-radius: 16px; }
 html[data-look="glass"] .gate-box > .moved-icon { border-radius: 20px; box-shadow: 0 12px 30px var(--g-glow); }
 

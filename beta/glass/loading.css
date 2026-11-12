@@ -151,8 +151,12 @@ html[data-look="glass"] {
   --ge-hi: 255 255 255;      /* the head of the thread */
 }
 html[data-look="glass"][data-theme="light"] { --ge-rgb: 124 91 224; --ge-hi: 106 69 201; }
-@media (min-width: 900px) { html[data-look="glass"] { --edge-r: 14px; } }  /* a window's corners, not a phone's */
-html[data-look="glass"][data-edge-corners="square"] { --edge-r: 0px; }
+/* (round 4, the owner's Samsung: "The edge light doesn't fit my phone perfectly") The page never reaches a screen's physical
+   corners (an installed app on Android sits between the status bar and the nav bar; a tab, a Chromebook's or a PC's window
+   is a rectangle), and the web can't read a screen's corner radius anyway: the light follows the page's own square edges.
+   And it's a soft glow coming in from those edges, never a thin rim. */
+html[data-look="glass"] { --edge-r: 0px; --ge-soft: 28px; }
+@media (min-width: 900px) { html[data-look="glass"] { --ge-soft: 34px; } }
 
 html[data-look="glass"] #g-edge {
   position: fixed; inset: 0; z-index: 89; pointer-events: none; border-radius: var(--edge-r); contain: layout paint style;
@@ -164,10 +168,28 @@ html[data-look="glass"][data-theme="light"] #g-edge[data-tone="err"] { --ge-rgb:
 /* The thread: a ring made by a static mask (padding box minus content box), with a disc under it that turns. The disc is
    a conic gradient, bright at its head with about 100 degrees of violet tail fading behind. The glow is a drop-shadow on
    the wrapper (not in lite: there it is the pre-blurred ring below). */
-html[data-look="glass"] #g-edge .ge-run { position: absolute; inset: 0; border-radius: inherit; opacity: 0; filter: drop-shadow(0 0 14px rgb(var(--ge-rgb) / 1)) drop-shadow(0 0 3px rgb(var(--ge-hi) / 1)); }
+html[data-look="glass"] #g-edge .ge-run { position: absolute; inset: 0; border-radius: inherit; opacity: 0; }
+/* (round 4) the band the thread shows in: soft, brightest at the page's very edge and gone --ge-soft inside it (four
+   gradients, one per edge, added together), so what runs round is a glow coming in from the edge, not a line */
 html[data-look="glass"] #g-edge .ge-ring {
-  position: absolute; inset: 0; box-sizing: border-box; padding: var(--ge-w); border-radius: inherit; overflow: hidden;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  position: absolute; inset: 0; box-sizing: border-box; overflow: hidden;
+  -webkit-mask: linear-gradient(to bottom, #000, rgba(0, 0, 0, .35) 35%, transparent) top / 100% var(--ge-soft) no-repeat,
+    linear-gradient(to top, #000, rgba(0, 0, 0, .35) 35%, transparent) bottom / 100% var(--ge-soft) no-repeat,
+    linear-gradient(to right, #000, rgba(0, 0, 0, .35) 35%, transparent) left / var(--ge-soft) 100% no-repeat,
+    linear-gradient(to left, #000, rgba(0, 0, 0, .35) 35%, transparent) right / var(--ge-soft) 100% no-repeat;
+  mask: linear-gradient(to bottom, #000, rgba(0, 0, 0, .35) 35%, transparent) top / 100% var(--ge-soft) no-repeat,
+    linear-gradient(to top, #000, rgba(0, 0, 0, .35) 35%, transparent) bottom / 100% var(--ge-soft) no-repeat,
+    linear-gradient(to right, #000, rgba(0, 0, 0, .35) 35%, transparent) left / var(--ge-soft) 100% no-repeat,
+    linear-gradient(to left, #000, rgba(0, 0, 0, .35) 35%, transparent) right / var(--ge-soft) 100% no-repeat;
+}
+/* A sync: a glow comes down from the top edge and a soft light sweeps along it, then fades (glass/loading.js) */
+html[data-look="glass"] #g-edge .ge-top {
+  position: absolute; left: 0; right: 0; top: 0; height: 110px; opacity: 0; overflow: hidden;
+  background: linear-gradient(to bottom, rgb(var(--ge-rgb) / .5), rgb(var(--ge-rgb) / .18) 38%, rgb(var(--ge-rgb) / 0));
+}
+html[data-look="glass"] #g-edge .ge-sweep {
+  position: absolute; left: 0; top: 0; width: 55%; height: 90px;
+  background: radial-gradient(ellipse 50% 70% at 50% 0%, rgb(var(--ge-hi) / .7), rgb(var(--ge-rgb) / .3) 45%, rgb(var(--ge-rgb) / 0) 72%);
 }
 html[data-look="glass"] #g-edge .ge-disc {
   position: absolute; left: 50%; top: 50%; width: calc(max(100vw, 100vh) * 1.45); height: calc(max(100vw, 100vh) * 1.45);

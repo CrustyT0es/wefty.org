@@ -121,6 +121,9 @@ function segments(root, pageId, move) {
 
 let leaving = null;   // { rect, dir } of the page going, measured before it went
 let ghost = null;     // the picture of it while it slides away
+// (glass/swipeback.js: a swipe back let go part of the way hands over to the carousels here, which then start where the finger
+// left the screen: { x, p } with p its share of the way, else null)
+const swiped = () => { try { return V.swipeBack && V.swipeBack.taken ? V.swipeBack.taken() : null; } catch (error) { return null; } };
 
 function dropGhost() {
   if (ghost) { ghost.remove(); ghost = null; }
@@ -129,7 +132,7 @@ function dropGhost() {
 V.on('settings-leaving', ({ old, page, was, wide }) => {
   leaving = null;
   if (!on() || wide || was === null || was === undefined || page === was || !old) return;
-  leaving = { rect: old.getBoundingClientRect(), dir: page ? 1 : -1 };
+  leaving = { rect: old.getBoundingClientRect(), dir: page ? 1 : -1, from: swiped() };
 });
 
 function push(root, step) {
@@ -176,9 +179,10 @@ function push(root, step) {
     V.motion.enter(page, { selector: ':scope > .set-about, :scope > .set-page > *', delay: 90, stagger: 50 });
   }
   if (!V.motion || !V.motion.tween || !V.motion.bezier) { end(); return; }
+  const left = 1 - (step.from ? step.from.p : 0);  // (the part of the way still to go: all of it, unless a swipe began it)
   const move = V.motion.tween(460, V.motion.bezier(0.22, 1, 0.36, 1), (e) => {
-    root.style.transform = e >= 1 ? '' : `translateX(${dir * dist * (1 - e)}px)`;
-    mine.style.transform = `translateX(${-dir * dist * e}px)`;
+    root.style.transform = e >= 1 ? '' : `translateX(${dir * dist * left * (1 - e)}px)`;
+    mine.style.transform = `translateX(${-dir * dist * left * e}px)`;
   });
   move.finished.then(end, end);
   setTimeout(() => { if (mine.isConnected) end(); }, 2200);   // (never left on the screen)
@@ -277,7 +281,7 @@ V.on('screen-leaving', ({ was, view }) => {
   holder.scrollTop = main.scrollTop;
   ghost.append(holder);
   document.body.append(ghost);
-  carried = { ghost, holder, dir: view === 'settings' ? 1 : -1, width: Math.ceil(r.width / z) };
+  carried = { ghost, holder, dir: view === 'settings' ? 1 : -1, width: Math.ceil(r.width / z), from: swiped() };
 });
 V.on('tab', () => {
   const step = carried;
@@ -286,6 +290,7 @@ V.on('tab', () => {
   const main = document.querySelector('main.view');
   if (!main || !on() || V.wide() || calm() || lite() || !HAS_WAAPI) { step.ghost.remove(); return; }
   const { dir, width, ghost, holder } = step;
+  const left = 1 - (step.from ? step.from.p : 0);  // (a swipe back began it: the rest of the way)
   const ms = 470;
   // (the shell's own fade and 18 px slide for a change of screen is let go: this is the move)
   Promise.resolve().then(() => { for (const child of main.children) for (const a of child.getAnimations()) if (a.id === 'g-slide') a.cancel(); });
@@ -303,8 +308,8 @@ V.on('tab', () => {
   };
   if (!V.motion || !V.motion.tween || !V.motion.bezier) { settle(); return; }
   const move = V.motion.tween(ms, V.motion.bezier(0.22, 1, 0.36, 1), (e) => {
-    main.style.transform = e >= 1 ? '' : `translateX(${dir * width * (1 - e)}px)`;
-    holder.style.transform = `translateX(${-dir * width * e}px)`;
+    main.style.transform = e >= 1 ? '' : `translateX(${dir * width * left * (1 - e)}px)`;
+    holder.style.transform = `translateX(${-dir * width * left * e}px)`;
   });
   move.finished.then(settle, settle);
   setTimeout(settle, ms + 1500);

@@ -26,6 +26,8 @@ html[data-look="glass"] {
   --gn-meta-fill: light-dark(rgba(110, 80, 200, .07), rgba(255, 255, 255, .06));
   --gn-meta-ring: light-dark(rgba(110, 80, 200, .14), rgba(255, 255, 255, .09));
   --gn-tag: light-dark(#5a36c9, #c7bbf5);
+  --gn-folder-least: calc(8ch + 49px);                  /* the least a card's folder chip gives way to on a wide list: 8 letters of its name, the dots (12 px), its badge and sides (37 px) */
+  --gn-day-most: 168px;                                 /* the most Upcoming's day chip is wide: "Tomorrow 12:30 PM" and "Tue Jan 5, 2027" in full */
   --gn-box-line: light-dark(rgba(90, 60, 190, .5), rgba(214, 200, 255, .45));
   --gn-box-fill: light-dark(rgba(255, 255, 255, .85), rgba(255, 255, 255, .04));
   --gn-box-on: linear-gradient(150deg, light-dark(#9672f2, #b9a6ff), light-dark(#6a45c9, #7f5be0));
@@ -233,6 +235,11 @@ html[data-look="glass"] button.card .card-folder > span:last-child { min-width: 
 html[data-look="glass"] button.card .card-folder .emoji { font-size: 12.5px; }
 html[data-look="glass"] .note-tag { color: var(--gn-tag); font-weight: 500; }
 html[data-look="glass"] .note-tag.more { color: var(--muted); }
+/* A card's #tags are each a chip of the row, whole: when the row is full they go on to its next line one by one. (As one
+   box, the classic look's, they were cut where the box ended: "#quadratics #un".) A tag longer than the whole row goes on
+   to a second line of its own. */
+html[data-look="glass"] .card-meta > .note-tags { display: contents; }
+html[data-look="glass"] .card-meta .note-tag { flex: none; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 html[data-look="glass"] .due { height: 24px; border-radius: 8px; font: 600 12px/1 var(--font); background: var(--gn-meta-fill); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--gn-meta-ring); }
 html[data-look="glass"] .due.soon, html[data-look="glass"] .due.later { background: var(--accent-wash); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent-line); }
 html[data-look="glass"] .due.late { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .35)); }
@@ -599,17 +606,33 @@ html[data-look="glass"] .list.upcoming:not(.picking) .up-row { grid-template-col
 html[data-look="glass"] .list.upcoming:not(.picking) .up-row > * { grid-area: card; }
 html[data-look="glass"] .list.upcoming:not(.picking) .up-row > button.card { padding-left: 54px; min-width: 0; }
 html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-tick { position: relative; z-index: 1; justify-self: start; align-self: center; margin-left: 5px; }
+/* (Its bottom margin is its card's bottom padding, in a list and in the grid, so it lies on the chips' last line and its
+   words are level with theirs: it was 3 px lower. It is as wide as its words, up to --gn-day-most and never wider than
+   the card's inside: at 112 px a reminder on another day than the note is due read "Wed 7:00 ..." and "Tomorrow ...".) */
 html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-when {
-  z-index: 1; justify-self: end; align-self: end; margin: 0 12px 11px 0; height: 28px; min-width: 0; max-width: 112px; padding: 0 9px; gap: 4px; font-size: 12px;
+  z-index: 1; justify-self: end; align-self: end; margin: 0 12px 14px 0; height: 28px; min-width: 0; max-width: min(var(--gn-day-most), calc(100% - 68px));
+  padding: 0 9px; gap: 4px; font-size: 12px;
 }
+html[data-look="glass"] .list.upcoming.grid:not(.picking) .up-row > .up-when { margin-bottom: 13px; }
 html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-when::after { inset: -8px -6px; }
-html[data-look="glass"] .list.upcoming:not(.picking) .up-row .card-meta { padding-right: 118px; min-height: 28px; align-items: center; }
+/* (The chips have the card's whole width, each of them whole; only the end of their last line is kept clear for the day chip
+   laid over it. What keeps it clear is the day chip's twin, the chips' last one and never seen: the same words, from
+   js/reminders.js's --up-when, in the same letters with the same sides (9 px, and the 14 px icon and its 4 px gap on the
+   left) and the same most width, so it is as wide as the chip itself and goes on to a line of its own when the chips
+   leave it no room. Without the day's words it is the chip's most width. With that taken off every line instead, a wide
+   list's card had 134 px for its chips and a narrow phone's 100, and a folder read "Biol...".) */
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row .card-meta { align-items: center; }
+html[data-look="glass"] .list.upcoming:not(.picking) .up-row .card-meta::after {
+  content: var(--up-when, "Wednesday Sep 30 12:30 PM"); flex: none; box-sizing: border-box; height: 28px; max-width: min(var(--gn-day-most), 100%);
+  padding: 0 9px 0 27px; font: 600 12px/28px var(--font); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; visibility: hidden;
+}
 html[data-look="glass"] .list.upcoming:not(.picking) .up-row .card-meta .when { display: none; }  /* (the day is the group, the chip says when) */
 @media (min-width: 900px) {
   html[data-look="glass"] .list.upcoming:not(.picking) .up-row { padding-right: 0; }
   html[data-look="glass"] .list.upcoming:not(.picking) .up-row > button.card { padding-left: 50px; }
   html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-tick { margin-left: 7px; }  /* (the card is 4 px in: R2-12) */
-  html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-when { margin-right: 14px; margin-bottom: 9px; }
+  html[data-look="glass"] .list.upcoming:not(.picking) .up-row > .up-when { margin-right: 14px; margin-bottom: 12px; }
+  html[data-look="glass"] .list.upcoming.grid:not(.picking) .up-row > .up-when { margin-bottom: 14px; }
 }
 /* R2-16 and R2-17: the list's section names a step brighter (4.5 to 1 over the aurora's glow too), and closer to the card
    above them (about 22 px, as on the board). */
@@ -618,16 +641,19 @@ html[data-look="glass"] .list-section .count { color: var(--muted); }
 @media (max-width: 899px) { html[data-look="glass"] .list > .list-section:not(:first-child) { margin-top: 8px; } }
 /* R2-12: wide, a note's row, its hover, a picked note's glass and the open note's pill all have one box, on the same edges
    as the search box and New note above the list (4 px in from the column), and the words stay on the same line in all of
-   them; the date stays on the chip row (the folder's name gives way first). */
+   them.
+   The chips under the words (their row is 292 px wide, 344 on a big screen): every chip is whole. They share one line
+   while they fit, the folder's name giving way first, and only down to 8 letters and its dots (--gn-folder-least: the row
+   is broken into lines with the folder at that width, then the folder takes what its line has left, up to its whole
+   name). A crowded card's chips go on to a second line, as on a phone and in the classic look, with the date at the end
+   of the last one. (Kept on one line whatever came, each chip giving way to the others, a crowded card read "B",
+   "In 3 days ...", "#..", and a homework's folder "Fu...".) Only a thing longer than the whole row gives way: a very long
+   folder name at its dots where the row ends; a #tag or a test's countdown takes two lines. */
 @media (min-width: 900px) {
   html[data-look="glass"] .list:not(.grid) button.card { width: auto; margin-left: 4px; margin-right: 4px; padding-left: 10px; padding-right: 10px; }
   html[data-look="glass"] .list:not(.grid) button.card::before { left: 10px; right: 10px; }
-  html[data-look="glass"] .list:not(.grid) .card-meta { flex-wrap: nowrap; overflow: hidden; }
-  html[data-look="glass"] .list:not(.grid) .card-meta > * { flex: none; }
-  html[data-look="glass"] .list:not(.grid) .card-meta > .card-folder { flex: 0 1 auto; min-width: 40px; }
-  html[data-look="glass"] .list:not(.grid) .card-meta > :is(.exam-tag, .note-tags, .found-in) { flex: 0 1 auto; min-width: 0; overflow: hidden; }
-  html[data-look="glass"] .list:not(.grid) .card-meta > .note-tags { display: block; white-space: nowrap; text-overflow: ellipsis; }
-  html[data-look="glass"] .list:not(.grid) .card-meta > .exam-tag > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > * { flex: none; max-width: 100%; }
+  html[data-look="glass"] .list:not(.grid) .card-meta > .card-folder { flex: 1 1 var(--gn-folder-least); min-width: 0; max-width: max-content; }
   html[data-look="glass"] .list:not(.grid) .card-meta > .when { margin-left: auto; padding-left: 4px; }
   /* R2-13: the list head's buttons share one height (40) */
   html[data-look="glass"] .list-head .select-btn, html[data-look="glass"] .list-title .select-btn { min-height: 40px; height: 40px; }
@@ -644,7 +670,12 @@ html[data-look="glass"] :is(.empty-folder .move-here, .loop-line .loop-go, .pick
 }
 html[data-look="glass"] :is(.empty-folder .move-here, .loop-line .loop-go, .pick-bar .pick-all, .pick-bar .pick-export):active:not(:disabled) { transform: scale(.95); transition-duration: var(--d-press); }
 html[data-look="glass"] .pick-bar .pick-export:disabled { opacity: .45; }
-html[data-look="glass"] .pick-bar :is(.pick-all, .pick-export) { min-height: 40px; height: 40px; padding: 0 14px; }
+/* (44 px to a finger, as R2-11 says and every other button is: the two were 40 px on a phone too, under the size a finger
+   needs. 40 px where a mouse points, in line with the list head's buttons.) */
+html[data-look="glass"] .pick-bar :is(.pick-all, .pick-export) { min-height: 44px; height: 44px; padding: 0 14px; }
+@media (hover: hover) and (pointer: fine) {
+  html[data-look="glass"] .pick-bar :is(.pick-all, .pick-export) { min-height: 40px; height: 40px; }
+}
 html[data-look="glass"] .empty-folder > :is(.btn.primary, .btn.tonal, .move-here) { width: min(100%, 300px); }
 html[data-look="glass"] .empty-folder > .move-here { margin-top: 10px; }
 html[data-look="glass"] .empty-folder > .loop-line { margin-top: 14px; }

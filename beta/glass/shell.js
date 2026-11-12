@@ -190,7 +190,7 @@ function decorate() {
     resizer.observe(nav);
   }
   badgeWatch = new MutationObserver(badges);
-  badgeWatch.observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+  badgeWatch.observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
 }
 
 function undecorate() {
@@ -226,7 +226,14 @@ function badges(records) {
   for (const record of records) {
     const badge = record.target && (record.target.nodeType === 1 ? record.target : record.target.parentElement);
     const mark = badge && badge.closest && badge.closest('.badge');
-    if (!mark || mark.hidden || seen.has(mark) || record.attributeName === 'hidden') continue;
+    if (!mark || seen.has(mark)) continue;
+    // (round 4) Gone (its number read): it pops out, a copy of it shrinking away where it was, instead of vanishing.
+    if (record.attributeName === 'hidden') {
+      if (mark.hidden && record.oldValue === null && !calm()) { seen.add(mark); popOut(mark); }
+      continue;
+    }
+    if (mark.hidden) continue;
+    if (mark.textContent) mark.dataset.gLast = mark.textContent;
     seen.add(mark);
     const before = popped.get(mark);
     if (before) before.cancel();
@@ -235,26 +242,60 @@ function badges(records) {
   }
 }
 
+/* The copy is the badge as it looked, and no badge itself: it takes the badge's whole look (as the browser worked it out
+   for a badge in that place) on itself, loses the class, and comes after the real one. js/start.js writes each new count
+   into the first .badge of its tab: while the copy was one, put before the real badge, a count that came as it shrank
+   (something sent here just as the last was seen) went into the copy and was thrown away with it, and the tab showed
+   nothing new until something else changed. */
+function popOut(mark) {
+  const parent = mark.parentElement;
+  if (!parent || !HAS_WAAPI) return;
+  const copy = mark.cloneNode(true);
+  copy.hidden = false;
+  copy.removeAttribute('id');
+  copy.setAttribute('aria-hidden', 'true');
+  copy.textContent = mark.dataset.gLast || '';
+  copy.style.animation = 'none';
+  copy.style.pointerEvents = 'none';
+  parent.insertBefore(copy, mark.nextSibling);
+  // (read while it's still a badge, and set in the same task: nothing is painted in between)
+  const look = getComputedStyle(copy);
+  const kept = [];
+  for (const name of look) kept.push([name, look.getPropertyValue(name)]);
+  copy.className = 'g-badge-out';
+  for (const [name, value] of kept) copy.style.setProperty(name, value);
+  const gone = () => copy.remove();
+  const a = copy.animate([{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(1.12)', opacity: 1, offset: 0.25 }, { transform: 'scale(0)', opacity: 0 }],
+    { duration: lite() ? 140 : 300, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' });
+  a.finished.then(gone, gone);
+  setTimeout(gone, 600);
+}
+
 /* -- the aurora rests when nothing happens: after 8 s without a touch, key or scroll the drift stops (html.g-idle), so a
    page sitting open doesn't recompute the tab bar's blur every frame; any input starts it again. It also stands still
    while a page is scrolling and while a sheet is open (glass.css), the two times the bars behind it are busiest. */
+/* (round 4, a big chat in the preview was slow: a class on <html> going on and off, at every scroll and every focus, made the
+   browser look over every element of the page again, 18,000 of them in a long chat, 400 ms at a time on a slow phone.
+   Only the aurora reads these three, so they go on the aurora itself: g-idle, g-scrolling and g-field.) */
+const NOWHERE = document.createElement('i');
+const aura = () => document.getElementById('g-aurora') || NOWHERE;
 let idleMs = 8000;
 let idleTimer = 0;
 let lastInput = 0;
 const WAKE = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll'];
 function wake() {
   const now = Date.now();
-  if (root.classList.contains('g-idle')) root.classList.remove('g-idle');
+  if (aura().classList.contains('g-idle')) aura().classList.remove('g-idle');
   if (now - lastInput < 1000 && idleTimer) return;  // (one timer a second at most, however many events come)
   lastInput = now;
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => root.classList.add('g-idle'), idleMs);
+  idleTimer = setTimeout(() => aura().classList.add('g-idle'), idleMs);
 }
 let scrollTimer = 0;
 function scrolling() {
-  if (!root.classList.contains('g-scrolling')) root.classList.add('g-scrolling');
+  if (!aura().classList.contains('g-scrolling')) aura().classList.add('g-scrolling');
   clearTimeout(scrollTimer);
-  scrollTimer = setTimeout(() => root.classList.remove('g-scrolling'), 180);
+  scrollTimer = setTimeout(() => aura().classList.remove('g-scrolling'), 180);
 }
 function watchIdle(onOff) {
   for (const type of WAKE) {
@@ -262,12 +303,42 @@ function watchIdle(onOff) {
     else window.removeEventListener(type, wake, { capture: true });
   }
   if (onOff) window.addEventListener('scroll', scrolling, { passive: true, capture: true });
-  else { window.removeEventListener('scroll', scrolling, { capture: true }); clearTimeout(scrollTimer); root.classList.remove('g-scrolling'); }
+  else { window.removeEventListener('scroll', scrolling, { capture: true }); clearTimeout(scrollTimer); aura().classList.remove('g-scrolling'); }
   clearTimeout(idleTimer);
   idleTimer = 0;
-  root.classList.remove('g-idle');
+  aura().classList.remove('g-idle');
   if (onOff) wake();
 }
+
+/* -- what's open over the app, as classes on the few things that change with it (round 4: these were html:has() and
+   body:has() rules, and in a long chat every letter typed had the browser look over the whole page again for them, 18,000
+   elements and 400 ms a letter on a slow phone): the aurora rests under a sheet or a layer (.g-under), toasts come in at
+   the top while a phone's sheet is up (#toasts.g-over-sheet) or a full-screen note asks its question (.g-over-ask), the
+   page under a listening note-taker with the tabs in reach isn't drawn (#app.g-nt-below), and the round + goes while a note
+   grows out of its card (#app.g-ed-window). Set only when one changes. */
+function overState() {
+  const layers = document.getElementById('layers');
+  if (!layers) return;
+  const glassOn = on();
+  const flag = (el, cls, value) => { if (el && el.classList.contains(cls) !== value) el.classList.toggle(cls, value); };
+  flag(aura(), 'g-under', glassOn && !!layers.querySelector(':scope > .layer:not(.menu-layer)'));
+  const toasts = document.getElementById('toasts');
+  flag(toasts, 'g-over-sheet', glassOn && !!layers.querySelector('.sheet'));
+  flag(toasts, 'g-over-ask', glassOn && !!layers.querySelector('.editor-layer .editor-ask .ask-card'));
+  const app = document.getElementById('app');
+  flag(app, 'g-nt-below', glassOn && !!layers.querySelector(':scope > .nt-layer.shown[data-tabs=below]'));
+  flag(app, 'g-ed-window', glassOn && !!layers.querySelector('.editor-layer.g-window'));
+}
+const overSoon = (() => { let queued = false; return () => { if (queued) return; queued = true; queueMicrotask(() => { queued = false; overState(); }); }; })();
+function watchOver() {
+  const layers = document.getElementById('layers');
+  if (!layers || layers.dataset.gOver) return;
+  layers.dataset.gOver = '1';
+  new MutationObserver(overSoon).observe(layers, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-tabs'] });
+  overState();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchOver, { once: true }); else watchOver();
+V.on('look', overSoon);
 
 /* -- the frame-drop monitor starts once Wefty has settled (its first sync done, or a few seconds), not in the cold start's
    busy boot, which would make a quick device look slow and leave it lite for a week. */
@@ -309,8 +380,14 @@ const sync = () => (on() ? enable() : disable());
 
 V.on('look', sync);
 V.on('status', (value) => { if (on() && (value === 'synced' || value === 'offline' || value === 'held')) settle(); });
+/* (round 4, the owner's Today just after a tab switch, with a glass disc left beside the search button) Leaving a screen takes
+   every moving copy of a part of it away at once, in the task that draws the next one: the words flying into a sent message,
+   a menu fading, a tile shrinking away, sparks, a peek, Notes' search capsule. (A copy that carries one screen into the next,
+   Settings' and a swipe's, is that move itself, and stays.) */
+const SCREEN_COPIES = '.g-fly-words, .g-fly-shape, .g-menu-going, .g-tile-gone, .g-spark-host, .g-peek, .gn-morph, .gn-help-ghost, .g-ghost-row';
 V.on('tab', () => {
   if (!on()) return;
+  document.querySelectorAll(SCREEN_COPIES).forEach((el) => { if (!el.closest('main.view')) el.remove(); });
   decorate();
   if (nav) go(tabsOf().findIndex((tab) => tab.classList.contains('on')), false);
 });
@@ -385,8 +462,8 @@ function typingNow() {
 }
 function checkTyping() {
   // (a text box has the focus: the aurora's drift is paused meanwhile, glass.css; the owner's typing lag, 1.22.2)
-  if (on() && typingNow() !== root.classList.contains('g-field')) root.classList.toggle('g-field', typingNow());
-  else if (!on()) root.classList.remove('g-field');
+  if (on() && typingNow() !== aura().classList.contains('g-field')) aura().classList.toggle('g-field', typingNow());
+  else if (!on()) aura().classList.remove('g-field');
   if (!on() || !touchy()) { root.classList.remove('g-typing'); return; }
   const height = screenHeight();
   const width = window.innerWidth;
@@ -506,6 +583,7 @@ function barColour() {
 }
 function paintBars() {
   if (!on()) {
+    root.style.removeProperty('--g-bar-top');
     if (barsOwned) {
       barsOwned = false;
       try { if (V.theme && V.theme.set) V.theme.set(V.theme.choice()); } catch (error) { /* (they stay until the next change) */ }
@@ -515,6 +593,8 @@ function paintBars() {
   const colour = barColour();
   barsOwned = true;
   for (const meta of document.querySelectorAll('meta[name=theme-color]')) if (meta.content !== colour) meta.content = colour;
+  // (round 4: the canvas starts in exactly this colour under the status bar and melts into the aurora: glass.css body::after)
+  if (root.style.getPropertyValue('--g-bar-top') !== colour) root.style.setProperty('--g-bar-top', colour);
 }
 const paintBarsSoon = (() => { let queued = false; return () => { if (queued) return; queued = true; Promise.resolve().then(() => { queued = false; paintBars(); }); }; })();
 if (typeof MutationObserver === 'function') {

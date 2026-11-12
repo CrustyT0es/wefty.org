@@ -64,6 +64,7 @@ let opened = 0;            // when Notes was opened (js/start.js's 'tab'), until
 let openStart = 0;         // when the entrance now running began
 let lastFilter = null;     // the list shown last (its filter, without the search)
 let flipPlan = null;       // { at, rects: Map key -> rect, fresh: Set of keys that come in anew }
+let tidiedFor = null;      // the picked chip the chips row was last tidied for (tidyChips)
 let pullHandle = null;
 let pullHint = null;
 const timers = new Set();
@@ -80,7 +81,7 @@ const filterOf = () => ((column && column.dataset.place) || '').split('|')[0];
 
 /* -- the entrance */
 
-/* What rises when Notes opens, in order: the top row, the chips, then the list's own rows (the first eight wait their
+/* What rises when Notes opens, in order: the chips, then the list's own rows (the first eight wait their
    turn; the rest come with the eighth). Wide: the folder rail and the search row too. */
 function risers(l) {
   const out = [];
@@ -89,7 +90,7 @@ function risers(l) {
   const col = l.querySelector('.list-column');
   if (col) {
     if (wide()) add(col.querySelector(':scope > .list-head'));
-    add(col.querySelector(':scope > .list-title'));
+    // (the top row, with its buttons, is where it belongs from the first frame: round 4)
     add(col.querySelector(':scope > .chips'));
   }
   const rows = l.querySelector('.list');
@@ -809,11 +810,18 @@ function layersChanged(mutations) {
 }
 
 /* -- the chips row never shows a sliver of a chip at its left edge (round-2 fix R2-15): when a chip is cut there, the row
-   is scrolled so the chip before the one picked starts on the 16 px gutter (or the picked one, if both don't fit) */
+   is scrolled so the chip before the one picked starts on the 16 px gutter (or the picked one, if both don't fit).
+   Only as another list is opened (the picked chip changed: js/notes.js has just brought it into sight). The same list
+   drawn again (a sync landing, a note saved) leaves the row where a finger scrolled it, as the classic look does: tidied
+   at every draw, the row sprang back to the picked chip under a finger reaching for a folder further along, and the tap
+   landed on another chip (round 4, found by tests/test_wefty_notes_head.py under this look). */
 function tidyChips() {
   if (!chips || wide() || !chips.offsetParent || chips.offsetParent === document.body) return;
   const on = chips.querySelector(':scope > .chip.on');
   if (!on || getComputedStyle(chips).position !== 'relative') return;
+  const key = on.dataset.id || on.textContent;
+  if (key === tidiedFor) return;
+  tidiedFor = key;
   const at = chips.scrollLeft;
   const cut = [...chips.children].some((c) => c.offsetLeft < at && c.offsetLeft + c.offsetWidth > at + 1);
   if (!cut) return;
@@ -890,7 +898,13 @@ function refresh() {
   if (l === layout) return;
   undecorate();
   decorate(l);
-  if (opened) { opened = 0; entrance(l); }
+  // (round 4: the rows rise in only when Notes is the app's first screen; arriving from another tab it's there in its place,
+  // the New note button too)
+  if (opened) {
+    opened = 0;
+    if (!(V.motion && V.motion.switched && V.motion.switched())) entrance(l);
+    else view.querySelectorAll(':scope > .fab').forEach((fab) => fab.getAnimations().forEach((a) => { try { a.finish(); } catch (error) { /* fine */ } }));
+  }
 }
 function bind() {
   if (viewWatch && view && view.isConnected) return;

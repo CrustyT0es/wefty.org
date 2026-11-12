@@ -496,7 +496,11 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {}, a
     target.style.transition = instant ? 'none' : `transform ${quick() ? '.2s ease' : `.5s ${SLIDE}`}`;
     target.style.transform = y && !calm() ? `translate3d(0,${y.toFixed(1)}px,0)` : '';
     target.style.willChange = instant && y ? 'transform' : '';
-    hint.style.transition = instant ? 'none' : 'opacity .2s ease';
+    // (round 4, the owner's Share: "Synced" faded out over the screen's title and picture as they slid back up under it) A
+    // screen's pill rides just above its content: as the screen goes back up, the pill goes up with it, fading, never over it.
+    const rides = hint.classList.contains('g-pull-pill') && !calm();
+    hint.style.transition = instant ? 'none' : rides ? `opacity .2s ease, transform ${quick() ? '.2s ease' : `.5s ${SLIDE}`}` : 'opacity .2s ease';
+    hint.style.transform = rides && y < 48 ? `translate3d(0,${(y - 48).toFixed(1)}px,0)` : '';
     hint.style.opacity = String(Math.min(1, y / 36));
   };
   // (where the content is now, a pull going back included: a new pull goes on from there, never from the top)
@@ -514,7 +518,7 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {}, a
     clearTimeout(settling);
     settling = setTimeout(() => {
       if (target) { target.style.transition = ''; target.style.transform = ''; }
-      hint.style.opacity = ''; hint.style.transition = '';
+      hint.style.opacity = ''; hint.style.transition = ''; hint.style.transform = '';
       busy = false; phase = ''; status.textContent = '';
       scroller.removeAttribute('data-phase');
     }, quick() ? 220 : 520);
@@ -915,5 +919,21 @@ function tween(duration, ease, step) {
   return { finished, cancel() { stopped = true; end(false); } };
 }
 
-V.motion = { tween, bezier, enter, press, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, spring, current, speed, rubber, springFrames, EASE, SLIDE, SPRING };
+/* ---------------------------------------------------------------- switched */
+
+/* (round 4, the owner's Today caught just after a tab switch: dim, still rising, its number mid-roll) A screen's own entrance
+   (parts rising in from nothing, threads drawing, numbers rolling up from 0) belongs to the app's first screen only. Once a
+   screen has given way to another, every screen arrives in its place (glass/loading.js brightens it in 180 ms): switched()
+   says so. (This file's 'tab' listener is the first there is: the screens' own see the count already moved on.) */
+let firstTab = null;
+let lastTab = null;
+let tabSwitches = 0;
+V.on('tab', (view) => {
+  if (firstTab === null) { firstTab = view; lastTab = view; return; }
+  if (view !== lastTab) tabSwitches++;
+  lastTab = view;
+});
+const switched = () => tabSwitches > 0;
+
+V.motion = { tween, bezier, enter, press, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, spring, current, speed, rubber, springFrames, switched, EASE, SLIDE, SPRING };
 })();

@@ -172,11 +172,16 @@ function look(mutations) {
 /* A phone shows the list of chats or one chat, never both: the one that comes in slides in from its side on the spring (a
    chat from the right, the list from the left), as Settings' pages do, so a tap never changes the screen in one frame.
    Wide shows both: nothing moves. Calm: a short fade. */
+let attachedAt = 0;
+let touchedAt = 0;       // the last press or key (a tap on a chat moves the screens at once, however soon after arriving)
+for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, () => { touchedAt = performance.now(); }, true);
 function swap() {
   if (!on() || !app || !app.isConnected) return;
   const showing = app.classList.contains('showing-chat');
   if (showing === showingNow) return;
   showingNow = showing;
+  // (round 4: Chat arriving from another tab, its list or its chat chosen as it's drawn, is simply there: only a tap moves)
+  if (touchedAt < attachedAt && performance.now() - attachedAt < 600) return;
   const side = app.querySelector(':scope > .chat-side');
   const pane = app.querySelector(':scope > .chat-pane');
   if (!side || !pane) return;
@@ -215,6 +220,110 @@ document.addEventListener('scroll', remember, true);
 window.addEventListener('resize', resizing);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', resizing);
 
+/* (round 4, the owner: "the typing box doesn't float") The box floats over the foot of the conversation (glass/chat.css
+   lays the composer over the scroller). Measured whenever the composer's size changes (a line more, a picture, the notice,
+   the bar of words picked): the thread leaves that much room under its last words, plus FADE, so a chat read to its end
+   shows its last words whole above the box; and the scroller's mask fades the words out over the FADE px before the box,
+   shows them faint through it (blurred by its glass) and hides them in the gap under it. A thread at its end stays at
+   its end. Only inline styles on the thread and the scroller change (neither is inherited): nothing else is restyled. */
+const FADE = 40;
+let floatWatch = null;
+function float() {
+  if (!on() || !app || !app.isConnected) return;
+  const pane = app.querySelector(':scope > .chat-pane');
+  const scroll = pane && pane.querySelector(':scope > .chat-scroll');
+  const thread = scroll && scroll.querySelector(':scope > .chat-thread');
+  const composer = pane && pane.querySelector(':scope > .chat-composer');
+  if (!thread || !composer || !composer.getClientRects().length || getComputedStyle(composer).position !== 'absolute') return;
+  const shown = [...composer.children].filter((el) => !el.hidden && el.getClientRects().length);
+  const box = composer.querySelector(':scope > .chat-box');
+  if (!shown.length || !box) return;
+  // (offsets, never screen rectangles: the same with the page zoomed)
+  const foot = scroll.offsetTop + scroll.offsetHeight;
+  const top = composer.offsetTop + Math.min(...shown.map((el) => el.offsetTop));
+  const under = Math.max(0, Math.round(foot - top));
+  const below = Math.max(0, Math.round(foot - (composer.offsetTop + box.offsetTop + box.offsetHeight)));
+  const room = `${under + FADE}px`;
+  const mask = `linear-gradient(to top, transparent ${below}px, rgba(0, 0, 0, .72) ${under}px, #000 ${under + FADE}px)`;
+  const atEnd = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 2;
+  if (thread.style.paddingBottom !== room) thread.style.paddingBottom = room;
+  if (scroll.dataset.gMask !== mask) {
+    scroll.dataset.gMask = mask;
+    scroll.style.webkitMaskImage = mask;
+    scroll.style.maskImage = mask;
+  }
+  if (atEnd && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight >= 2) scroll.scrollTop = scroll.scrollHeight;
+}
+function unfloat(root) {
+  if (!root) return;
+  const scroll = root.querySelector('.chat-scroll');
+  const thread = root.querySelector('.chat-thread');
+  if (thread) thread.style.paddingBottom = '';
+  if (scroll) { scroll.style.webkitMaskImage = ''; scroll.style.maskImage = ''; delete scroll.dataset.gMask; }
+}
+/* (round 4) The row under the words is never wider than the box: where Attach, the model, Think, Web and Send don't fit
+   on one line (a narrow phone with bigger text), Think and Web leave the row (.g-tight) and are two switches in the model's
+   sheet instead, and a dot on the model's chip says when one of them is on. Nothing changes where they fit. */
+let toolsWatch = null;
+function fitTools() {
+  if (!on() || !app || !app.isConnected) return;
+  const box = app.querySelector('.chat-pane > .chat-composer > .chat-box');
+  const row = box && box.querySelector(':scope > .chat-tools');
+  const model = row && row.querySelector(':scope > .chat-model');
+  if (!row || !model || !row.getClientRects().length) return;
+  const toggles = [...row.querySelectorAll(':scope > .chat-toggle')].filter((t) => !t.hidden);
+  const tight = box.classList.contains('g-tight');
+  let want = false;
+  if (toggles.length) {
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+    const size = parseFloat(getComputedStyle(app).getPropertyValue('--ch-size')) || 36;
+    // (tight, the two are out of the row: what it would need with them back)
+    want = row.scrollWidth + (tight ? toggles.length * (size + gap) : 0) > row.clientWidth + 0.5;
+  }
+  if (want !== tight) box.classList.toggle('g-tight', want);
+  const lit = want ? toggles.filter((t) => t.getAttribute('aria-pressed') === 'true').length : 0;
+  if ((model.dataset.gOn || '0') !== String(lit)) model.dataset.gOn = String(lit);
+}
+function modelSheetSwitches(event) {
+  if (!on() || !app) return;
+  const model = event.target && event.target.closest ? event.target.closest('.chat-app .chat-model') : null;
+  const box = model && model.closest('.chat-box');
+  if (!box || !box.classList.contains('g-tight')) return;
+  const sheets = [...document.querySelectorAll('#layers .sheet')].filter((s) => s.querySelector('.model-choices'));
+  const sheet = sheets[sheets.length - 1];
+  const choices = sheet && sheet.querySelector('.model-choices');
+  if (!choices || sheet.querySelector('.g-model-toggles')) return;
+  const rows = [...box.querySelectorAll('.chat-tools > .chat-toggle')].filter((t) => !t.hidden).map((button) => {
+    const name = (button.querySelector('span:not(.icon)') || {}).textContent || button.title;
+    const input = V.h('input.switch', { type: 'checkbox', checked: button.getAttribute('aria-pressed') === 'true',
+      onchange: () => { button.click(); input.checked = button.getAttribute('aria-pressed') === 'true'; fitTools(); } });
+    return V.h('label.g-model-toggle', {}, V.h('span.g-model-toggle-text', {}, V.h('span.g-model-toggle-name', { text: name }),
+      V.h('span.g-model-toggle-about', { text: button.title })), input);
+  });
+  if (rows.length) choices.after(V.h('div.g-model-toggles', {}, rows));
+}
+document.addEventListener('click', modelSheetSwitches);
+
+function watchFloat() {
+  if (floatWatch) floatWatch.disconnect();
+  if (toolsWatch) toolsWatch.disconnect();
+  floatWatch = null;
+  toolsWatch = null;
+  const composer = app && app.querySelector('.chat-pane > .chat-composer');
+  if (!composer) return;
+  const step = () => { float(); fitTools(); };
+  step();
+  if (typeof ResizeObserver !== 'function') return;
+  floatWatch = new ResizeObserver(step);
+  floatWatch.observe(composer);
+  const model = composer.querySelector('.chat-model');
+  if (model) floatWatch.observe(model);  // (a model's name of another length)
+  if (typeof MutationObserver !== 'function') return;
+  toolsWatch = new MutationObserver(fitTools);  // (Think and Web shown for Claude, pressed or not)
+  const row = composer.querySelector('.chat-tools');
+  if (row) toolsWatch.observe(row, { attributes: true, subtree: true, attributeFilter: ['hidden', 'aria-pressed'] });
+}
+
 function attach() {
   if (!on()) return detach();
   const now = document.querySelector('.chat-app');
@@ -224,7 +333,9 @@ function attach() {
   place = '';
   nameShown = (app.querySelector('.chat-model-name') || {}).textContent || '';
   showingNow = app.classList.contains('showing-chat');
+  attachedAt = performance.now();
   footGap = 0;
+  watchFloat();
   if (typeof MutationObserver !== 'function') return;
   swapWatch = new MutationObserver(swap);
   swapWatch.observe(app, { attributes: true, attributeFilter: ['class'] });
@@ -241,8 +352,17 @@ function attach() {
 function detach() {
   if (observer) observer.disconnect();
   if (swapWatch) swapWatch.disconnect();
+  if (floatWatch) floatWatch.disconnect();
+  if (toolsWatch) toolsWatch.disconnect();
+  toolsWatch = null;
+  if (!on()) {
+    const gone = app || document.querySelector('.chat-app');
+    unfloat(gone);
+    if (gone) gone.querySelectorAll('.chat-box.g-tight').forEach((b) => b.classList.remove('g-tight'));
+  }
   observer = null;
   swapWatch = null;
+  floatWatch = null;
   app = null;
   turns.clear();
 }

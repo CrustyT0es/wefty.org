@@ -259,6 +259,128 @@ html[data-look="glass"] .files-list { border-radius: 20px; background: var(--g-f
 html[data-look="glass"] .files-row { border-bottom-color: var(--g-hair, var(--line-soft)); }
 html[data-look="glass"] .files-roots .chip, html[data-look="glass"] .files-crumb { border-radius: 12px; }
 
+/* ================================================================== Wefty Drive, several at once (1.22.3 in glass)
+
+   Picking (the Select chip and the view button on the tools' end), a round tick on each row that pops in and fills with the
+   gradient, picked rows lit by a soft glow (a layer fading in: only opacity moves), the pick bar (Notes' glass bar, springing
+   up: notes.css), the grid of rounded glass tiles with their previews, a video's play mark, and the big view (its picture
+   grows out of the tile tapped: glass/share.js). */
+html[data-look="glass"] .files-tools-end { gap: 6px; }
+html[data-look="glass"] .select-btn.files-select {
+  border: 0; border-radius: 14px; background: var(--sh-chip); color: var(--text); box-shadow: inset 0 1px 0 var(--sh-chip-edge), inset 0 0 0 1px var(--g-ring);
+  transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .select-btn.files-select:active { transform: scale(.94); transition-duration: var(--d-press); }
+html[data-look="glass"] .files-main.picking .select-btn.files-select { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
+html[data-look="glass"] .files-view-btn {
+  width: 40px; height: 40px; border-radius: 50%; color: var(--text-2); background: var(--sh-chip);
+  box-shadow: inset 0 1px 0 var(--sh-chip-edge), inset 0 0 0 1px var(--g-ring); transition: transform .16s var(--g-spring);
+}
+@media (pointer: coarse) { html[data-look="glass"] .files-view-btn { width: 44px; height: 44px; } }
+html[data-look="glass"] .files-view-btn:active { transform: scale(.9); transition-duration: var(--d-press); }
+html[data-look="glass"] .files-view-btn .icon { transition: transform .3s var(--g-spring); }
+
+/* the rows: rounded, their faces small glass squares; a picked one glows (its ::before) */
+html[data-look="glass"] .files-open { position: relative; isolation: isolate; border-radius: 14px; transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .files-open::before {
+  content: ""; position: absolute; inset: 2px 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: var(--gn-picked-wash); box-shadow: inset 0 0 0 1.5px var(--gn-picked-ring), 0 4px 16px light-dark(rgba(118, 74, 220, .16), rgba(118, 74, 220, .3));
+  transition: opacity .22s var(--g-ease);
+}
+html[data-look="glass"] .files-list.picking .files-row.picked .files-open,
+html[data-look="glass"] .files-list.picking .files-row.picked .files-open:hover { background: transparent; box-shadow: none; }
+html[data-look="glass"] .files-list.picking .files-row.picked .files-open::before { opacity: 1; }
+html[data-look="glass"] .files-open:active { background: transparent; transform: scale(.985); transition-duration: var(--d-press); }
+@media (hover: hover) { html[data-look="glass"] .files-open:hover { background: var(--gn-row-hover); } }
+html[data-look="glass"] .files-open:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; box-shadow: none; }  /* (the keyboard's: round, on the row's own corners) */
+html[data-look="glass"] :is(.files-icon, .files-thumb) { border: 0; border-radius: 12px; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
+html[data-look="glass"] .files-thumb { background: var(--sunken); }
+html[data-look="glass"] .files-thumb img { border-radius: inherit; }
+html[data-look="glass"] .files-icon.dir { background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
+
+/* the round tick: pops in as picking starts, fills with the gradient and its check springs in when picked */
+html[data-look="glass"] .files-list.picking .files-tick {
+  position: relative; border: 0; background: var(--g-box-fill, light-dark(rgba(255, 255, 255, .85), rgba(30, 22, 58, .9)));
+  box-shadow: inset 0 0 0 1.6px var(--g-box-line, light-dark(rgba(90, 60, 190, .5), rgba(214, 200, 255, .5))), 0 2px 6px rgba(4, 2, 14, .25);
+  color: light-dark(#ffffff, #1b0f3d); animation: g-files-tick-in .32s var(--g-spring) backwards;
+}
+html[data-look="glass"] .files-list.picking .files-tick::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; opacity: 0; pointer-events: none;
+  background: linear-gradient(150deg, var(--g-box-on-a, light-dark(#9672f2, #b9a6ff)), var(--g-box-on-b, light-dark(#6a45c9, #7f5be0)));
+  box-shadow: 0 3px 10px var(--g-glow); transition: opacity .2s var(--g-ease);
+}
+html[data-look="glass"] .files-list.picking .files-tick .icon { position: relative; transform: scale(.3); opacity: 0; transition: transform .3s var(--g-spring), opacity .14s var(--g-ease); }
+/* (picked: the theme's own accent under the gradient, as the classic tick's fill, so what the tick says is the same colour in both) */
+html[data-look="glass"] .files-list.picking .files-row.picked .files-tick { background: var(--accent); border: 0; color: light-dark(#ffffff, #1b0f3d); }
+html[data-look="glass"] .files-list.picking .files-row.picked .files-tick::before { opacity: 1; }
+html[data-look="glass"] .files-list.picking .files-row.picked .files-tick .icon { transform: none; opacity: 1; }
+@keyframes g-files-tick-in { from { opacity: 0; transform: scale(.4); } }
+
+/* a video's play mark and its length */
+html[data-look="glass"] .files-play {
+  background: rgba(16, 10, 34, .62); color: #fff; opacity: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), inset 0 0 0 1px rgba(255, 255, 255, .22), 0 3px 10px rgba(4, 2, 14, .35);
+}
+html[data-look="glass"] .files-length { color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* the pick bar (a glass bar from notes.css): its status line and buttons in the same glass */
+html[data-look="glass"] .files-pick-bar { margin-top: 8px; }
+html[data-look="glass"] .files-pick-line { border-radius: 14px; animation: g-fade-in .2s var(--g-ease) backwards; }
+html[data-look="glass"] .files-pick-line .btn { border-radius: 13px; }
+html[data-look="glass"] .pick-size { color: var(--text-2); }
+/* (the bar is drawn afresh at each pick: its count comes in with a small rise instead of changing at once) */
+html[data-look="glass"] .files-pick-bar .pick-count > span { display: inline-block; white-space: pre; animation: g-files-count .22s var(--g-ease) backwards; }  /* (pre: " · 1 KB" keeps its space) */
+@keyframes g-files-count { from { opacity: 0; transform: translateY(5px); } }
+html[data-look="glass"].calm .files-pick-bar .pick-count > span { animation-name: g-fade-in; }
+
+/* the grid: the list is no card of its own, each file is a rounded glass tile */
+html[data-look="glass"] .files-list.drive.grid { padding: 0; background: transparent; box-shadow: none; border-radius: 0; overflow: visible; gap: 10px; }
+html[data-look="glass"] .files-list.drive.grid .files-row {
+  border: 0; border-radius: 20px; background: var(--g-fill);
+  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 8px 22px light-dark(rgba(76, 52, 160, .1), rgba(4, 2, 14, .3));
+  transition: transform .2s var(--g-spring);
+}
+html[data-look="glass"] .files-list.drive.grid .files-row:active { transform: scale(.97); transition-duration: var(--d-press); }
+html[data-look="glass"] .files-list.drive.grid .files-open { padding: 8px 8px 10px; border-radius: inherit; }
+html[data-look="glass"] .files-list.drive.grid .files-open::before { inset: 0; }
+html[data-look="glass"] .files-list.drive.grid :is(.files-icon, .files-thumb) { border-radius: 14px; }
+html[data-look="glass"] .files-list.drive.grid.picking .files-row.picked { border: 0; background: var(--g-fill); }
+html[data-look="glass"] .files-list.drive.grid.picking .files-row.picked .files-open::before {
+  box-shadow: inset 0 0 0 2px var(--gn-picked-ring), 0 8px 24px light-dark(rgba(118, 74, 220, .24), rgba(118, 74, 220, .42));
+}
+html[data-look="glass"] .files-list.drive.grid .files-row > .icon-btn {
+  border-radius: 50%; color: var(--text); background: var(--g-float, var(--raised));
+  box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), 0 4px 10px rgba(4, 2, 14, .25); transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .files-list.drive.grid .files-row > .icon-btn:active { transform: scale(.88); transition-duration: var(--d-press); }
+html[data-look="glass"] .files-list.drive.grid .files-play { width: 40px; height: 40px; }
+
+/* the big view: the picture or video on a rounded sunken glass, the arrows glass circles, the count a quiet pill */
+html[data-look="glass"] .files-viewer { border-radius: 20px; background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line-soft); }
+html[data-look="glass"] .files-viewer :is(img, video) { border-radius: 16px; }
+html[data-look="glass"] .files-view-sheet .viewer-nav {
+  width: 44px; height: 44px; border: 0; background: rgba(16, 10, 34, .55); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 1px rgba(255, 255, 255, .2), 0 6px 16px rgba(4, 2, 14, .35);
+  transition: transform .16s var(--g-spring);
+}
+html[data-look="glass"] .files-view-sheet .viewer-nav:active { transform: translateY(-50%) scale(.9); transition-duration: var(--d-press); }
+html[data-look="glass"] .files-view-sheet .viewer-nav:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus); }
+html[data-look="glass"] .files-view-sheet .viewer-count { width: max-content; margin: 10px auto 0; padding: 3px 10px; border-radius: 10px; background: var(--sh-chip); color: var(--text-2); }
+html[data-look="glass"] .files-view-name { color: var(--text-2); }
+
+/* Move to's folders: the folder picker's rows (a glass square, lit under the pointer, a press springs) */
+html[data-look="glass"] .files-move-list { gap: 4px; }
+html[data-look="glass"] .files-move-to { border-radius: 14px; transition: transform .16s var(--g-spring); }
+html[data-look="glass"] .files-move-to:active { transform: scale(.97); transition-duration: var(--d-press); }
+@media (hover: hover) { html[data-look="glass"] .files-move-to:hover { background: var(--g-lift-soft, var(--gn-row-hover)); } }
+html[data-look="glass"] .files-move-to:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus); }
+html[data-look="glass"] .files-move-to .files-icon { border-radius: 12px; }
+
+html[data-look="glass"].calm :is(.files-open, .files-list.drive.grid .files-row, .files-move-to, .files-view-btn, .select-btn.files-select):active { transform: none; }
+html[data-look="glass"].calm .files-view-sheet .viewer-nav:active { transform: translateY(-50%); }
+html[data-look="glass"].calm .files-list.picking .files-tick { animation-name: g-fade-in; }
+html[data-look="glass"].calm .files-list.picking .files-tick .icon { transform: none; transition: opacity .1s linear; }
+
 /* ================================================================== the 2.0 hotfix: the switch's pill slides (glass/share.js)
 
    The part shown is lit by one pill behind the buttons (the same look the picked button had), so it can slide from the part

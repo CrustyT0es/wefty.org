@@ -74,7 +74,9 @@ V.showMe = (() => {
     await backDone(had);
   }
   function closeMenus() {
-    for (const layer of document.querySelectorAll('#layers > .menu-layer')) {
+    for (const layer of document.querySelectorAll('#layers > .menu-layer, #layers > .layer:not(.leaving)')) {
+      // (the 2.0 glass look's long menu on a phone is a sheet, MORE_MENU: closed the same way; any other sheet stays)
+      if (!layer.classList.contains('menu-layer') && !layer.querySelector(':scope > .sheet.g-msheet')) continue;
       // (as a press beside it: its own onClose runs, setting its button's aria-expanded back)
       layer.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     }
@@ -143,6 +145,9 @@ V.showMe = (() => {
     }
     return menu;
   }
+  // A ⋯ menu (a note's, Today's): a menu, or, in the 2.0 glass look on a phone when it's a long one, a sheet from the
+  // bottom whose rows are the menu's own items (glass/overlays.js menuSheet). Nothing but a menu in the classic look.
+  const MORE_MENU = '.menu:not(.profile-menu), .sheet.g-msheet';
   const itemIn = (menu, words) => (menu ? [...menu.querySelectorAll('.menu-item, .more-tool')]
     .find((el) => shown(el) && (el.dataset.tool === words || (el.textContent || '').trim().startsWith(words))) || null : null);
 
@@ -228,8 +233,8 @@ V.showMe = (() => {
     { id: 'trash', title: 'Trash', where: 'Notes > Trash', go: () => toView('notes'),
       find: () => first(`${view('notes')} .chips [data-id=trash]`, `${view('notes')} nav.folders [data-id=trash]`) },
     { id: 'export-note', title: 'Export', where: 'A note > ⋯ > Export', shown: () => !!V.exporter, go: toNote,
-      find: async () => itemIn(await openMenu(inNote('.editor-bar .icon-btn[aria-label=More]')(), '.menu:not(.profile-menu)'), 'Export'),
-      look: lookIn('.menu:not(.profile-menu)', 'Export') },
+      find: async () => itemIn(await openMenu(inNote('.editor-bar .icon-btn[aria-label=More]')(), MORE_MENU), 'Export'),
+      look: lookIn(MORE_MENU, 'Export') },
     { id: 'lock-note', title: 'Lock this note', where: 'A note > the lock', go: toNote,
       find: inNote('.editor-bar .icon-btn[aria-label="Lock this note"], .editor-bar .icon-btn[aria-label=Locked]') },
     { id: 'pin-note', title: 'Pin to the top', where: 'A note > the pin', go: toNote,
@@ -286,8 +291,8 @@ V.showMe = (() => {
     { id: 'reading', title: 'Reading aids', where: 'Settings > Appearance', shown: () => !!V.reading, ...atSetting('appearance', 'reading') },
     // On, the list lives behind Today's ⋯ (js/subs.js); its switch is setting:subscriptions.
     { id: 'subscriptions', title: 'Subscriptions', where: 'Today > ⋯ > Subscriptions', shown: subsOn, go: () => toView('today'),
-      find: async () => itemIn(await openMenu(first(`${view('today')} .today-more`), '.menu:not(.profile-menu)'), 'Subscriptions'),
-      look: lookIn('.menu:not(.profile-menu)', 'Subscriptions') },
+      find: async () => itemIn(await openMenu(first(`${view('today')} .today-more`), MORE_MENU), 'Subscriptions'),
+      look: lookIn(MORE_MENU, 'Subscriptions') },
     { id: 'streak', title: 'Study streak', where: () => (streakChip() ? 'Today' : 'Settings > Appearance'), shown: () => !!V.streak,
       go: () => (streakChip() ? toView('today') : toSettings('appearance', { row: 'study-streak' })),
       find: () => (streakChip() ? first(`${view('today')} .streak-chip`) : setting('study-streak')()) },

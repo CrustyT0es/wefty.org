@@ -1,0 +1,52 @@
+/* Wefty 2.0 "glass": swipe right to go back (glass/swipeback.js has how it works). Every rule starts with
+   html[data-look="glass"]; the classes here are only there while a finger moves a screen (or it settles). Only transform
+   (the translate property) and opacity move; nothing here blurs. */
+
+html[data-look="glass"] {
+  --g-sb-dim: light-dark(rgba(24, 14, 56, .2), rgba(0, 0, 0, .46));   /* the screen under, at the start of a swipe */
+  --g-sb-edge: light-dark(rgba(24, 14, 56, .16), rgba(0, 0, 0, .42)); /* the soft shadow along the moving screen's left edge */
+}
+html[data-look="glass"][data-black] { --g-sb-dim: light-dark(rgba(24, 14, 56, .2), rgba(0, 0, 0, .6)); --g-sb-edge: light-dark(rgba(24, 14, 56, .16), rgba(0, 0, 0, .7)); }
+
+/* Chrome's own "swipe for history" arrow never shows over ours on a phone's layout (the root doesn't hand a sideways
+   overscroll on to the browser; screens still scroll as before). */
+@media (max-width: 899px) {
+  html[data-look="glass"], html[data-look="glass"] body { overscroll-behavior-x: none; }
+}
+
+/* The dim over what's under, left of the moving screen, and the screen's shadow along its edge (the curtain moves with
+   the screen: its right edge is the screen's left edge). */
+html[data-look="glass"] .g-sb-curtain {
+  position: fixed; left: 0; top: 0; height: 100%; pointer-events: none; margin: 0;
+  background: var(--g-sb-dim); will-change: translate, opacity;
+}
+html[data-look="glass"] .g-sb-curtain::after {
+  content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 22px;
+  background: linear-gradient(90deg, transparent, var(--g-sb-edge));
+}
+html[data-look="glass"].calm .g-sb-curtain::after { display: none; }
+html[data-look="glass"] .g-sb-top, html[data-look="glass"] .g-sb-under { will-change: translate; }
+/* (nothing under the finger is picked or menu'd while it swipes) */
+html[data-look="glass"].g-sb-dragging, html[data-look="glass"].g-sb-dragging body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* Taps wait while a swipe settles (about a third of a second). */
+html[data-look="glass"] .g-sb-block { position: fixed; inset: 0; z-index: 2147483000; background: transparent; touch-action: none; }
+
+/* Chat on a phone: the list is under the chat while it moves (both on the page, one over the other), and the chat is the
+   app's own canvas, never see-through (README: a screen over a screen). */
+html[data-look="glass"] .chat-app.g-sb-chat { position: relative; overflow: hidden; }
+html[data-look="glass"] .chat-app.g-sb-chat > :is(.chat-side, .chat-pane) { display: flex !important; position: absolute; inset: 0; min-height: 0; }
+html[data-look="glass"] .chat-app.g-sb-chat > .chat-side { z-index: 0; }
+html[data-look="glass"] .chat-app.g-sb-chat > .g-sb-curtain { position: absolute; z-index: 1; top: 0; height: 100%; }
+html[data-look="glass"] .chat-app.g-sb-chat > .chat-pane {
+  z-index: 2;
+  background-color: var(--bg); background-image: var(--g-aurora); background-size: 150% 150%; background-position: 50% 50%; background-repeat: no-repeat;
+}
+html[data-look="glass"][data-black] .chat-app.g-sb-chat > .chat-pane { background-image: none; }
+
+/* The note-taker on a phone hides the screen under it while it listens (glass.css, notetaker.css): shown again while it's
+   swiped away, so what it goes back to is there. */
+html[data-look="glass"].g-sb-reveal #app > :not(nav.tabs) { visibility: visible !important; opacity: 1 !important; }
+
+/* A still picture of a list that goes (Notes' inner lists), over the list that comes. */
+html[data-look="glass"] .g-sb-carry { position: fixed; z-index: 1; overflow: hidden; pointer-events: none; margin: 0; will-change: translate; }

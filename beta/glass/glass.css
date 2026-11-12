@@ -176,19 +176,43 @@ html[data-look="glass"].calm #g-aurora .tl { transition-duration: .12s; }
 /* The app sits above it; the page's own background is the aurora's colour. */
 html[data-look="glass"] body { background: var(--bg); }
 html[data-look="glass"] #app { position: relative; z-index: 1; }
+/* (round 4, the owner's Samsung: "make the top part, where my notifications are, match the app perfectly? And the Samsung
+   buttons area at the bottom?") An installed app can't draw behind Android's bars (standalone keeps them; only a fullscreen
+   app may reach into them, behind a flag in 2026), but it can meet them with no line. At the top the canvas starts in
+   exactly the status bar's colour (the theme-color glass/shell.js paints, --g-bar-top) and melts into the aurora; at the
+   foot of an installed app on a phone it ends in the navigation bar's (the preview's manifest theme_color, --g-nav-bar:
+   publish.py's PREVIEW_NAV_BAR), under the floating tab bar. Above the aurora, under the app. */
+html[data-look="glass"] { --g-nav-bar: #0f0d1b; }
+@media (max-width: 899px) {
+  html[data-look="glass"] body::after { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+}
+html[data-look="glass"] body::after {
+  --g-top-band: linear-gradient(to bottom, var(--g-bar-top, transparent) 0, var(--g-bar-top, transparent) var(--notch, 0px),
+    color-mix(in srgb, var(--g-bar-top, transparent) 72%, transparent) calc(var(--notch, 0px) + 26px),
+    color-mix(in srgb, var(--g-bar-top, transparent) 30%, transparent) calc(var(--notch, 0px) + 62px), transparent);
+  background: var(--g-top-band) top / 100% calc(var(--notch, 0px) + 104px) no-repeat;
+}
+@media (max-width: 899px) and (display-mode: standalone) {
+  html[data-look="glass"]:is([data-theme="dark"], [data-black]) body::after {
+    background: var(--g-top-band) top / 100% calc(var(--notch, 0px) + 104px) no-repeat,
+      linear-gradient(to top, var(--g-nav-bar) 0, var(--g-nav-bar) var(--safe-bottom, 0px),
+        color-mix(in srgb, var(--g-nav-bar) 70%, transparent) calc(var(--safe-bottom, 0px) + 20px), transparent) bottom / 100% calc(var(--safe-bottom, 0px) + 64px) no-repeat;
+  }
+}
+
 /* Nothing out of sight is drawn (the PC app keeps its page running in the tray). */
-/* (and when nothing has been touched for a while: shell.js adds html.g-idle) */
-html.away[data-look="glass"] #g-aurora, html.g-idle[data-look="glass"] #g-aurora { animation-play-state: paused; will-change: auto; }
-html.g-scrolling[data-look="glass"] #g-aurora { animation-play-state: paused; }  /* (its layer is kept: dropping and redrawing it would cost more than the drift) */
+/* (and when nothing has been touched for a while: shell.js adds .g-idle to the aurora itself) */
+html.away[data-look="glass"] #g-aurora, html[data-look="glass"] #g-aurora.g-idle { animation-play-state: paused; will-change: auto; }
+html[data-look="glass"] #g-aurora.g-scrolling { animation-play-state: paused; }  /* (its layer is kept: dropping and redrawing it would cost more than the drift) */
 /* (a sheet open: its blur sits on the page, which doesn't need to drift under it) */
-html[data-look="glass"]:has(#layers > .layer:not(.menu-layer)) #g-aurora { animation-play-state: paused; }
+html[data-look="glass"] #g-aurora.g-under { animation-play-state: paused; }  /* (round 4: glass/shell.js sets it; an html:has() here made every letter typed in a long chat look over the whole page again) */
 /* (and while a box has the keyboard: a letter typed needn't have the drift, and the bars' blur over it, drawn again
    every frame; Wefty 1.22.2, the owner: typing in Chat got slow) */
-html.g-field[data-look="glass"] #g-aurora { animation-play-state: paused; }  /* (html.g-field: glass/shell.js, a text box has the focus; a :has(:focus) rule on <html> cost a long frame at every focus) */
+html[data-look="glass"] #g-aurora.g-field { animation-play-state: paused; }  /* (#g-aurora.g-field, round 4: on the aurora itself, never <html>; glass/shell.js, a text box has the focus; a :has(:focus) rule on <html> cost a long frame at every focus) */
 
 /* ================================================================== base: selection, focus, scrollbars, icons */
 
-html[data-look="glass"] ::selection { background: light-dark(rgba(124, 91, 224, .28), rgba(150, 108, 240, .5)); color: var(--text); }
+html[data-look="glass"] ::selection { background: light-dark(rgba(124, 91, 224, .34), rgba(150, 108, 240, .5)); color: var(--text); }  /* (light: .34, at least 1.5 to 1 on the page, 1.19.1's rule for words picked; .28 was 1.46) */
 html[data-look="glass"] :focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
   box-shadow: 0 0 0 5px light-dark(rgba(124, 91, 224, .18), rgba(178, 164, 238, .22));
@@ -197,7 +221,12 @@ html[data-look="glass"] .field:focus-visible, html[data-look="glass"] .block-inp
 @media (hover: hover) and (pointer: fine) {
   html[data-look="glass"] ::-webkit-scrollbar-thumb { background: light-dark(rgba(110, 80, 200, .30), rgba(214, 196, 255, .22)); border: 3px solid transparent; background-clip: padding-box; }
   html[data-look="glass"] ::-webkit-scrollbar-thumb:hover { background-color: light-dark(rgba(110, 80, 200, .5), rgba(214, 196, 255, .4)); }
-  html[data-look="glass"] * { scrollbar-color: light-dark(rgba(110, 80, 200, .3), rgba(214, 196, 255, .22)) transparent; }
+  /* (The standard property only where there's no ::-webkit-scrollbar to style. In Chrome a scrollbar-color takes a bar away
+     from those rules altogether: set on everything, it turned the thin 10 px bars of the PC and a Chromebook (styles.css)
+     into the browser's own 15 px ones, square thumbs and all, in glass's colours.) */
+  @supports not selector(::-webkit-scrollbar) {
+    html[data-look="glass"] * { scrollbar-color: light-dark(rgba(110, 80, 200, .3), rgba(214, 196, 255, .22)) transparent; scrollbar-width: thin; }
+  }
 }
 
 /* ================================================================== glass surfaces */
@@ -280,7 +309,7 @@ html[data-look="glass"] #toasts { bottom: calc(var(--g-bar-space) + 14px + var(-
    covered its Save, so a second try after "that key isn't valid" couldn't be pressed: with a sheet up, toasts come in
    at the top, as they do while folders are arranged) */
 @media (max-width: 899px) {
-  html[data-look="glass"] body:has(.sheet) #toasts { top: calc(10px + var(--safe-top)); bottom: auto; }
+  html[data-look="glass"] #toasts.g-over-sheet { top: calc(10px + var(--safe-top)); bottom: auto; }  /* (glass/shell.js) */
 }
 html[data-look="glass"] .toast {
   border: 0; border-radius: 18px; background: var(--toast);
@@ -395,8 +424,15 @@ html[data-look="glass"] .field {
   box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .08)), inset 0 0 0 1px var(--line);
   transition: none;
 }
-html[data-look="glass"] .field:focus { border: 0; background: light-dark(rgba(255, 255, 255, .92), rgba(255, 255, 255, .09)); box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 5px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .2)); }
+/* (round 4: only the colour changes with the focus, so a drop-down keeps its one chevron: `background` here reset its
+   no-repeat, and the dark chevron put back over it was tiled right across the box, the owner's note-taker Folder) */
+html[data-look="glass"] .field:focus { border: 0; background-color: light-dark(rgba(255, 255, 255, .92), rgba(255, 255, 255, .09)); box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 5px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .2)); }
 html[data-look="glass"] .field:hover:not(:focus) { box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .1)), inset 0 0 0 1px var(--line-strong); }
+
+/* (round 4) Whatever's menu is open (a card, a row, a message: V.contextMenu's .ctx-open) gets no square outline from a tap
+   or a click; with the keyboard a rounded ring that follows the thing's own corners. */
+html[data-look="glass"] .ctx-open { outline: none; }
+html.g-kbd[data-look="glass"] .ctx-open { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* Chips. */
 html[data-look="glass"] .chip {
@@ -442,8 +478,17 @@ html[data-look="glass"] .bar { border-radius: 2px; }
 html[data-look="glass"] .bar i { background: var(--g-grad); }
 
 /* Badges pop in (a number changing is shell.js). */
+/* (round 4, the owner: "I don't like the look of the 6, isn't glassy") A count is a small glass pill: a soft violet gradient,
+   a light rim along its top, a faint glow inside and under it, a crisp white number; never a dark ring round it (it sits on
+   the icon's corner, on whatever is under it). The same pill for the tabs, Share's Send and Today's Flash cards tile.
+   White on its middle is 5.5 to 1, in every theme. */
+html[data-look="glass"] {
+  --g-badge-fill: linear-gradient(165deg, #8c66f0 0%, #7149e0 55%, #5b34c8 100%);
+  --g-badge-depth: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 -2px 5px rgba(48, 18, 140, .35),
+    0 2px 8px light-dark(rgba(106, 69, 201, .35), rgba(118, 74, 220, .5));
+}
 html[data-look="glass"] .badge {
-  background: var(--g-grad); color: #fff; font-weight: 700; box-shadow: 0 0 0 2px var(--bg), 0 4px 12px var(--g-glow);
+  background: var(--g-badge-fill); color: #fff; font-weight: 700; box-shadow: var(--g-badge-depth); text-shadow: 0 1px 1px rgba(40, 16, 110, .45);
 }
 html[data-look="glass"] .badge:not([hidden]) { animation: g-pop .55s var(--g-spring) both; }
 @keyframes g-pop { from { transform: scale(0); } to { transform: scale(1); } }
@@ -532,6 +577,12 @@ html[data-look="glass"] .tab-dot { background: var(--g-grad); box-shadow: 0 0 0 
   html[data-look="glass"] .rail-home { border-radius: 16px; transition: transform .22s var(--g-spring); }
   html[data-look="glass"] .rail-home:active { transform: scale(.92); }
   html[data-look="glass"] .rail-home .mark { filter: drop-shadow(0 6px 14px var(--g-glow)); }
+  /* (round 4, the owner's Chromebook with the note-taker on: the app is padded down for the note-taker's bar (styles.css,
+     nt-strip-on), and the rail began under that band, which showed the aurora's bright corner as a block with a hard edge
+     over the logo) The rail is one glass panel from the window's top: it reaches up into the band, its tabs where they were. */
+  html.nt-strip-on[data-look="glass"] #app.ready:not(.gate) > nav.tabs {
+    margin-top: calc(-36px - var(--notch)); padding-top: calc(16px + 36px + var(--notch));
+  }
 }
 @media (min-width: 900px) and (hover: hover) {
   html[data-look="glass"] .tab:hover, html[data-look="glass"] .rail-home:hover { background: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .05)); }
@@ -594,11 +645,14 @@ html[data-look="glass"] .g-run-b .g-enter { animation-name: g-rise-b; }
 html[data-look="glass"] .g-weft { fill: none; stroke-linecap: round; }
 /* A checkbox that sparks: the four sparks sit in the box and fly out when V.motion.spark() runs. */
 html[data-look="glass"] .g-spark { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 3px; background: light-dark(#8b6fe0, #c9b8ff); opacity: 0; pointer-events: none; }
-/* Rolling numbers: each digit is a column that slides (V.motion.roll sets the offsets). */
-html[data-look="glass"] .g-roll { position: relative; display: inline-flex; height: 1em; line-height: 1; overflow: hidden; font-variant-numeric: tabular-nums; }
-html[data-look="glass"] .g-roll-d { display: block; height: 1em; overflow: hidden; }
+/* Rolling numbers: each digit is a column that slides (V.motion.roll sets the offsets). (round 4, the owner's "1 to do" caught
+   mid-roll: the digit sat low with a scrap of the next one above it) Each digit's cell is one line of the words round it, the
+   same line height and leading, and the number is clipped to that one line, set on the line's top: the digit stands exactly
+   where its words' letters do, and nothing of the column shows above or below. */
+html[data-look="glass"] .g-roll { position: relative; display: inline-flex; height: 1.2em; height: 1lh; vertical-align: top; overflow: hidden; overflow: clip; overflow-clip-margin: 0px; font-variant-numeric: tabular-nums; }
+html[data-look="glass"] .g-roll-d { display: block; height: 1.2em; height: 1lh; overflow: hidden; overflow: clip; }
 html[data-look="glass"] .g-roll-s { display: flex; flex-direction: column; }
-html[data-look="glass"] .g-roll-s span { display: block; height: 1em; line-height: 1em; text-align: center; }
+html[data-look="glass"] .g-roll-s span { display: block; height: 1.2em; height: 1lh; text-align: center; }
 /* A shared element opening (V.motion.flip) and peeking (V.motion.peek) are drawn on a clone, over everything. */
 html[data-look="glass"] .g-flip { position: fixed; z-index: 70; margin: 0; pointer-events: none; transform-origin: 0 0; will-change: transform, opacity; }
 html[data-look="glass"] .g-peek { position: fixed; z-index: 70; transform-origin: 50% 50%; will-change: transform, opacity; }
@@ -656,7 +710,7 @@ html[data-look="glass"][data-black] { --g-aurora: none; --g-solid: light-dark(rg
   /* While the note-taker listens, Wefty's floating tab bar stays in reach under its screen (js/notetaker.js placeLayer): the
      screen under it is put out of sight (it can't be used meanwhile: notetaker.js makes it inert), so the room round the
      floating bar is the canvas, not a strip of the page under the note-taker. */
-  html[data-look="glass"]:has(#layers > .nt-layer.shown[data-tabs=below]) #app > main.view { opacity: 0; }
+  html[data-look="glass"] #app.g-nt-below > main.view { opacity: 0; }  /* (glass/shell.js) */
 }
 /* (the note-taker's own --page is a tint over that page; its foot sits on the same page, not on a second tint) */
 html[data-look="glass"] .nt-foot { background: transparent; }
@@ -680,12 +734,8 @@ html.g-kbd[data-look="glass"] .field:focus-visible { outline: 2px solid var(--fo
 /* a note's title: nothing on a touch screen or a click (the caret says it), a rounded ring for the keyboard */
 html[data-look="glass"] .note-title { border-radius: 12px; }
 html.g-kbd[data-look="glass"] .note-title:focus-visible { box-shadow: 0 0 0 2px var(--focus), 0 0 0 6px light-dark(rgba(124, 91, 224, .16), rgba(178, 164, 238, .2)); }
-/* Chat's box: a soft glow on its own rounded edge while it has the typing, a clear ring with the keyboard */
-html[data-look="glass"] .chat-box:focus-within {
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 4px light-dark(rgba(124, 91, 224, .12), rgba(150, 108, 240, .16)), 0 10px 28px light-dark(rgba(118, 74, 220, .14), rgba(118, 74, 220, .22));
-}
-html.g-kbd[data-look="glass"] .chat-box:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px var(--focus), 0 0 0 6px light-dark(rgba(124, 91, 224, .16), rgba(178, 164, 238, .2)); }
+/* Chat's box: glass/chat.css (round 4: one frame; with the typing it rises a pixel and its edge brightens, with the keyboard
+   one clear ring) */
 /* Notes' search box (notes.css lights it): the keyboard's ring too */
 html.g-kbd[data-look="glass"] .search-box:focus-within { box-shadow: 0 0 0 2px var(--focus); }
 
