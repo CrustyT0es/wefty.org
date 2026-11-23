@@ -68,7 +68,14 @@ let tidiedFor = null;      // the picked chip the chips row was last tidied for 
 let pullHandle = null;
 let pullHint = null;
 const timers = new Set();
-const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; };
+/* A timer that ends a move (a sweep, a ghost, the morph): it keeps step with the motion policy's time scale (js/look.js:
+   0 under the test profile, so what a move leaves behind goes when the move does). `real`: a wait that isn't a move's. */
+const later = (fn, ms, real) => {
+  const scale = real || !(V.look && V.look.timeScale) ? 1 : V.look.timeScale();
+  const id = setTimeout(() => { timers.delete(id); fn(); }, ms * scale);
+  timers.add(id);
+  return id;
+};
 
 function startNow(a) {
   try { if (a && document.timeline && document.timeline.currentTime != null) a.startTime = document.timeline.currentTime; } catch (error) { /* fine */ }
@@ -617,7 +624,7 @@ function swallowClick() {
   const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); drop(); };
   const drop = () => { window.removeEventListener('click', swallow, true); };
   window.addEventListener('click', swallow, true);
-  later(drop, 350);
+  later(drop, 350, true);  // (the click comes after the finger, whatever the moves' speed)
 }
 function swipeEnd(event, cancelled) {
   if (!sw || (event && event.pointerId !== sw.pid)) return;
@@ -903,7 +910,7 @@ function refresh() {
   if (opened) {
     opened = 0;
     if (!(V.motion && V.motion.switched && V.motion.switched())) entrance(l);
-    else view.querySelectorAll(':scope > .fab').forEach((fab) => fab.getAnimations().forEach((a) => { try { a.finish(); } catch (error) { /* fine */ } }));
+    else view.querySelectorAll(':scope > .fab').forEach((fab) => { fab.dataset.gnStill = ''; });  // (getAnimations() forced a restyle)
   }
 }
 function bind() {

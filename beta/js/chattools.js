@@ -340,12 +340,32 @@ V.chatTools = (() => {
   }
 
   const liveNote = (note) => !!note && !note.deleted && !note._purge && !O().isTemplate(note);
-  /* The note as it is now (the editor's copy when it's open there), or a refusal: gone, locked, or being written by
-     the note-taker. */
-  function noteFor(id, { writing = false } = {}) {
+  /* Friends' feedback (1.22.6: vault/feedback.py's notes in the owner's Feedback folder, js/organise.js keptOut) is
+     never found, read, counted, listed, changed, moved, sent, exported or deleted for Chat: their words never go to the
+     AI, and words written in them never steer it. Said without the note's title, which is their words too. */
+  const FEEDBACK_NOTE = 'That note is feedback from their friends, which is kept out of Chat: Wefty doesn\'t read, '
+    + 'change, move, send or delete it for Chat. They can open it themselves in Notes.';
+  const FEEDBACK_FOLDER = 'That folder holds feedback from their friends, which is kept out of Chat: Wefty doesn\'t list, '
+    + 'read, change, move or delete it for Chat. They can open it themselves in Notes.';
+  const FEEDBACK_INSIDE = 'That folder has feedback from their friends in it, which is kept out of Chat, so Chat leaves '
+    + 'the folder alone. They can delete it themselves from its menu in Notes.';
+  const closedNow = () => O().feedbackFolders();
+  /* A folder that is friends' feedback, or whose own notes (in the Trash too) include some: Chat never deletes it, as
+     its notes would go to Inbox or the Trash. */
+  const holdsFeedback = (folder, closed = closedNow()) => closed.has(folder.id)
+    || [...V.data.notes.values()].some((n) => n.folder_id === folder.id && !n._purge && O().keptOut(n, closed));
+  /* js/review.js's look at the cards (`at`) without the cards and tests in friends' feedback: what Chat may count. */
+  function openCards(at, closed = closedNow()) {
+    const open = (id) => !O().keptOut(V.data.notes.get(id), closed);
+    return { ...at, list: at.list.filter((card) => open(card.note)), plans: at.plans.filter((plan) => plan.note && open(plan.note.id)) };
+  }
+  /* The note as it is now (the editor's copy when it's open there), or a refusal: gone, friends' feedback, locked, or
+     being written by the note-taker. */
+  function noteFor(id, { writing = false, closed = null } = {}) {
     const key = text(id, 64);
     const row = key && V.data.notes.get(key);
     if (!liveNote(row)) no(`There's no note with the id "${key}". Find it with find_notes.`);
+    if (O().keptOut(row, closed || closedNow())) no(FEEDBACK_NOTE);
     const open = V.editor && V.editor.openId() === key && V.editor.current() ? V.editor.current() : null;
     if (row.locked || (open && open.locked)) {
       no(`"${V.noteTitle(row)}" is locked: Wefty never reads or changes a locked note for Chat. They can open it and unlock it themselves.`);
@@ -376,16 +396,21 @@ V.chatTools = (() => {
     const words = text(name, 200);
     if (!words) return null;
     const all = V.notes.folders();
+    const closed = closedNow();
     const byId = all.find((f) => f.id === words);
-    if (byId) return byId;
+    if (byId) {
+      if (closed.has(byId.id)) no(FEEDBACK_FOLDER);
+      return byId;
+    }
     const path = words.split(/\s*[/>]\s*/).map(squash).filter(Boolean);
     const want = path[path.length - 1];
     const fits = all.filter((f) => squash(f.name) === want && (path.length < 2
       || O().ancestors(f).map((a) => squash(a.name)).join('/').endsWith(path.slice(0, -1).join('/'))));
     const found = fits.sort((a, b) => O().depthOf(a) - O().depthOf(b))[0];
     if (!found) {
-      no(`There's no folder called "${words}". Their folders: ${all.map(folderName).join(', ') || 'none yet'}.`);
+      no(`There's no folder called "${words}". Their folders: ${all.filter((f) => !closed.has(f.id)).map(folderName).join(', ') || 'none yet'}.`);
     }
+    if (closed.has(found.id)) no(FEEDBACK_FOLDER);
     return found;
   }
 
@@ -428,9 +453,10 @@ V.chatTools = (() => {
     if (wanted.length > MOST_IDS) no(`That's more than ${MOST_IDS} notes at once: do it in parts.`);
     const notes = [];
     const skipped = [];
+    const closed = closedNow();
     for (const id of wanted) {
       try {
-        notes.push(noteFor(id, { writing: true }));
+        notes.push(noteFor(id, { writing: true, closed }));
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
         skipped.push({ id, why: error.message });
@@ -524,13 +550,18 @@ V.chatTools = (() => {
   /* An export_notes file: one note as its own file (as its ⋯ menu's Export: the open copy's words), several notes or
      a folder as one ZIP (js/export.js: locked notes left out). */
   async function exportOf(how) {
+    const closed = closedNow();
     if (how.ids && how.ids.length === 1) {
       const row = V.data.notes.get(how.ids[0]);
       if (!row || row._purge) no('That note isn\'t there any more.');
+      if (O().keptOut(row, closed)) no(FEEDBACK_NOTE);
       if (row.locked) no(`"${V.noteTitle(row)}" is locked: they can export it themselves from its ⋯ menu.`);
       return { ...V.exporter.single({ ...row, body: wordsOf(row) }, how.format), notes: 1, locked: 0 };
     }
-    return V.exporter.zipOf({ ids: how.ids || null, folderId: how.folder || null, type: how.format });
+    if (how.folder && closed.has(how.folder)) no(FEEDBACK_FOLDER);
+    // (friends' feedback, moved into a folder exported here, is left out of Chat's file without a word)
+    return V.exporter.zipOf({ ids: how.ids || null, folderId: how.folder || null, type: how.format,
+      keep: (note) => !O().keptOut(note, closed) });
   }
 
   const noteInfo = (note) => {
@@ -660,7 +691,9 @@ V.chatTools = (() => {
       const q = O().parseQuery([words, tag ? '#' + tag : ''].filter(Boolean).join(' '));
       const test = O().matcher(q);
       const inFolder = folder ? new Set([folder.id, ...O().inside(folder.id)]) : null;
-      const found = [...V.data.notes.values()].filter((n) => liveNote(n) && (!inFolder || inFolder.has(n.folder_id)) && test(n))
+      const closed = closedNow();
+      const found = [...V.data.notes.values()].filter((n) => liveNote(n) && !O().keptOut(n, closed)
+        && (!inFolder || inFolder.has(n.folder_id)) && test(n))
         .sort((a, b) => (V.editedAt(b) || '').localeCompare(V.editedAt(a) || ''));
       const terms = O().terms(q);
       return { result: { count: found.length, notes: found.slice(0, FOUND_MOST).map((n) => ({ ...noteInfo(n),
@@ -928,6 +961,7 @@ V.chatTools = (() => {
       const { name, icon } = folderWordsFrom(args.name, args.emoji);
       const parent = args.inside && !TOP_WORDS.test(text(args.inside, 200)) ? folderNamed(args.inside) : null;
       const twin = twinOf(name, parent);
+      if (twin && closedNow().has(twin.id)) no(FEEDBACK_FOLDER);
       if (twin) return { result: { already_there: folderInfo(twin), note: 'That folder was already there, so no second one was made: use this one.' } };
       if (parent && O().depthOf(parent) >= O().DEPTH) {
         no(`Folders go ${O().DEPTH} levels deep at most, so ${parent.name} can't hold another folder.`);
@@ -1083,6 +1117,7 @@ V.chatTools = (() => {
       const folder = folderNamed(args.folder);
       if (!folder) no('Say which folder.');
       if (isInbox(folder)) no('Inbox is Wefty\'s own folder and can\'t be deleted.');
+      if (holdsFeedback(folder)) no(FEEDBACK_INSIDE);
       const notesToo = args.notes_too === true || args.notes_too === 'true';
       const own = [...V.data.notes.values()].filter((n) => n.folder_id === folder.id && liveNote(n));
       const kids = O().children(folder.id);
@@ -1100,7 +1135,7 @@ V.chatTools = (() => {
     },
 
     async due_cards_summary() {
-      const at = V.review.now();
+      const at = openCards(V.review.now());
       const due = at.list.filter((c) => V.review.isDue(c, at));
       return { result: { today: at.today, due_today: due.length,
         by_folder: V.review.dueByFolder(at).map((d) => ({ folder: d.name, due: d.due })),
@@ -1109,17 +1144,19 @@ V.chatTools = (() => {
 
     async today_summary() {
       const now = new Date();
-      const rows = V.today.dueRows ? V.today.dueRows(now) : [];
-      const at = V.review.now();
+      const closed = closedNow();
+      const open = (r) => !O().keptOut(r.note, closed);
+      const rows = (V.today.dueRows ? V.today.dueRows(now) : []).filter(open);
+      const at = openCards(V.review.now(), closed);
       const notesOf = (list) => [...new Map(list.map((r) => [r.note.id, r.note])).values()];
-      const later = V.today.laterRows ? V.today.laterRows(now) : [];
+      const later = (V.today.laterRows ? V.today.laterRows(now) : []).filter(open);
       return { result: {
         today: V.today(), weekday: now.toLocaleDateString('en-US', { weekday: 'long' }),
         late: notesOf(rows.filter((r) => r.late)).map(noteInfo),
         due_today: notesOf(rows.filter((r) => !r.late)).map(noteInfo),
         to_do_today: rows.filter((r) => r.kind === 'item' && !r.done).map((r) => ({ note: V.noteTitle(r.note), to_do: r.text })),
         later_this_week: later.map((r) => ({ ...noteInfo(r.note), ...(r.item ? { first_to_do: r.item.text } : {}) })),
-        tests: (V.today.testCards ? V.today.testCards(at) : []).map((t) => ({ name: t.plan ? t.plan.name : V.noteTitle(t.note),
+        tests: (V.today.testCards ? V.today.testCards(at) : []).filter(open).map((t) => ({ name: t.plan ? t.plan.name : V.noteTitle(t.note),
           day: t.day, ...(t.plan ? { cards_left: t.plan.left } : {}) })),
         flash_cards_due: at.list.filter((c) => V.review.isDue(c, at)).length,
         ...(subsOn() ? { renewing_soon: V.subs.soon().map(({ sub, days }) => ({ name: sub.name, in_days: days, day: sub.next,
@@ -1128,9 +1165,11 @@ V.chatTools = (() => {
     },
 
     async list_folders() {
-      const live = [...V.data.notes.values()].filter(liveNote);
-      return { result: { folders: O().tree().map(({ folder, depth }) => ({ id: folder.id, name: folder.name,
-        path: folderName(folder), depth, notes: live.filter((n) => n.folder_id === folder.id).length })) } };
+      const closed = closedNow();
+      const live = [...V.data.notes.values()].filter((n) => liveNote(n) && !O().keptOut(n, closed));
+      return { result: { folders: O().tree().filter(({ folder }) => !closed.has(folder.id)).map(({ folder, depth }) => ({
+        id: folder.id, name: folder.name, path: folderName(folder), depth,
+        notes: live.filter((n) => n.folder_id === folder.id).length })) } };
     },
 
     /* -- the guide (1.22): Wefty's own help, and a Show me button. Only the question goes to Help's search (no AI, on
@@ -1303,8 +1342,16 @@ V.chatTools = (() => {
     const when = new Date().toISOString();
     if (!action.asked) action.asked = action.label;  // (what it asked, kept: js/chat.js tells it by those words)
     const listening = V.notetaker && V.notetaker.listeningTo ? V.notetaker.listeningTo() : null;
+    // (friends' feedback is never deleted for Chat: an ask made before 1.22.6, or by an older Wefty, leaves it be, and
+    // says so when that's all it asked)
+    const closed = closedNow();
+    const feedback = (id) => O().keptOut(V.data.notes.get(id), closed);
     if (action.type === 'delete_notes') {
-      const ids = (action.ids || []).filter((id) => { const n = V.data.notes.get(id); return liveNote(n) && !n.locked && id !== listening; });
+      const ids = (action.ids || []).filter((id) => { const n = V.data.notes.get(id); return liveNote(n) && !n.locked && id !== listening && !feedback(id); });
+      if (!ids.length && (action.ids || []).some(feedback)) {
+        decline(action, 'expired');
+        no(FEEDBACK_NOTE);
+      }
       if (!ids.length) {
         Object.assign(action, { state: 'done', confirmed: when, done: { ids: [], at: when }, label: 'Nothing left to delete' });
         return 'They were already gone.';
@@ -1319,6 +1366,10 @@ V.chatTools = (() => {
     if (!folder || folder.deleted) {
       Object.assign(action, { state: 'done', confirmed: when, done: null, label: `${action.name || 'The folder'} was already gone` });
       return 'It was already gone.';
+    }
+    if (holdsFeedback(folder, closed)) {
+      decline(action, 'expired');
+      no(FEEDBACK_INSIDE);
     }
     const up = O().parentId(folder);
     const kids = O().children(folder.id).map((f) => ({ id: f.id, parent: f.extra && typeof f.extra.parent === 'string' ? f.extra.parent : null }));

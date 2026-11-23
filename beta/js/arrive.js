@@ -240,7 +240,7 @@ V.arrive = (() => {
 
   /* A picture as PNG for the clipboard (Chrome copies no other kind), no bigger than MOST_SIDE on its long side. */
   async function pictureOf(t) {
-    const response = await fetch(await V.cloud.link(t.path));
+    const response = await V.cloud.deadlineFetch(await V.cloud.link(t.path));  // (1.22.6: never waits for ever)
     if (!response.ok) throw new Error('Couldn\'t get the picture.');
     const blob = await response.blob();
     if (blob.size > MOST_PICTURE) throw new Error('Too big to copy.');
@@ -353,7 +353,7 @@ V.arrive = (() => {
       saving.add(t.id);
       draw();
       try {
-        const response = await fetch(await V.cloud.link(t.path));
+        const response = await V.cloud.deadlineFetch(await V.cloud.link(t.path));  // (1.22.6: never waits for ever)
         if (!response.ok) throw new Error(`The cloud didn't send it (${response.status}).`);
         const blob = await response.blob();
         const name = await freeName(into.handle, safeName(t.name));

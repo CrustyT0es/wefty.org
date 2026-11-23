@@ -384,7 +384,7 @@ V.learn = (() => {
      never with "AI helps with Test me" off, never more than MOST_CHECKS a session; offline, no key or no answer in
      time, it's as it was without the AI. */
 
-  const AI_CARDS = 60;        // cards in the one request for wrong choices, at most
+  const AI_CARDS = 60;        // cards asked about for wrong choices in one session, at most (in batches: WRONG_BATCH)
   const MOST_CHECKS = 20;     // typed answers sent to the AI in one session, at most
   const NOT_CHOICES = /^(?:all|none|both|neither)\s+(?:of\s+)?(?:the\s+)?(?:above|these|them|those)\b|^(?:i\s+don'?t\s+know|n\/?a|unknown)$/i;
   const waits = { first: 1800, check: 6000 };   // (tests shorten them)
@@ -396,6 +396,11 @@ V.learn = (() => {
   const isObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   const rowOf = (id) => (V.editor && V.editor.openId() === id && V.editor.current() ? V.editor.current() : V.data.notes.get(id));
   const lockedCard = (card) => { const row = rowOf(card.note) || V.data.notes.get(card.note); return !row || !!row.locked; };
+  /* Whether a card's words may go to the AI: never a locked note's, and never friends' feedback's (1.22.6,
+     js/organise.js keptOut: a deck isn't a note picked by hand). The quiz itself still asks them, with the deck's own
+     wrong answers. */
+  const aiMayRead = (card) => !lockedCard(card)
+    && !(V.organise && V.organise.keptOut && V.organise.keptOut(V.data.notes.get(card.note)));
 
   /* Whether the AI may help here now: the switch on, and the brain it would use set up (a look at the keys first,
      when none was made yet). */
@@ -462,7 +467,7 @@ V.learn = (() => {
   /* The wrong answers kept for `card`, or []. */
   const keptWrongs = (card) => entryFor(card) || [];
   /* Whether the AI still has to be asked about `card` (or is being asked now). */
-  const needsWrongs = (card) => !!card.key && !lockedCard(card) && entryFor(card) === null;
+  const needsWrongs = (card) => !!card.key && aiMayRead(card) && entryFor(card) === null;
 
   /* The wrong answers into their notes (one quiet save a note; a note locked or gone meanwhile is left alone). */
   async function keepWrongs(byNote) {
@@ -501,7 +506,7 @@ V.learn = (() => {
     + 'never another card\'s right answer, never "all of the above", "none of the above" or "both". No explanations. '
     + 'Answer with JSON only, like {"cards":[{"n":1,"wrong":["...","...","..."]}]}, one entry per card.';
 
-  /* One request for the wrong choices of `cards` (those with none kept, from notes that aren't locked). Resolves with
+  /* The wrong choices of `cards` asked for (those with none kept, from notes that aren't locked). Resolves with
      how many cards got some (0 when the AI couldn't help). */
   function makeWrongs(cards, allKeys) {
     const needing = cards.filter(needsWrongs);
@@ -515,19 +520,54 @@ V.learn = (() => {
     asking.then(() => { for (const key of keys) if (pending.get(key) === asking) pending.delete(key); });
     return all([asking, ...waiting]);
   }
+  /* The whole entries of an answer that was cut off part-way ({"n": 1, "wrong": [...]} objects, each complete): the
+     answer's length ran out mid-JSON, and what it did finish is still good. */
+  function wholeEntries(text) {
+    const s = String(text || '');
+    const out = [];
+    const open = [];  // where each object still open began
+    let quoted = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (quoted) { if (ch === '\\') i++; else if (ch === '"') quoted = false; continue; }
+      if (ch === '"') quoted = true;
+      else if (ch === '{') open.push(i);
+      else if (ch === '}' && open.length) {
+        const from = open.pop();
+        let one = null;
+        try { one = JSON.parse(s.slice(from, i + 1)); } catch (error) { one = null; }
+        if (isObject(one) && 'n' in one) out.push(one);
+      }
+    }
+    return out;
+  }
+  /* The cards go in batches of WRONG_BATCH, one request after the other (STU-08): one request for a whole deck ran out
+     of answer mid-JSON, nothing of it was kept, and the same request went out at the start of every session. Each
+     batch is kept as it comes, and so is every whole entry of an answer that was cut off; a card with no entry is
+     asked about next time. */
+  const WRONG_BATCH = 20;
   async function askWrongs(want, allKeys) {
     if (!(await aiReady())) return 0;
+    let got = 0;
+    for (let at = 0; at < want.length; at += WRONG_BATCH) {
+      const count = await askBatch(want.slice(at, at + WRONG_BATCH), allKeys);
+      if (count === null) break;  // (offline, no key, busy, refused: the deck's own wrong answers, as before)
+      got += count;
+    }
+    return got;
+  }
+  async function askBatch(want, allKeys) {
     const text = JSON.stringify({ cards: want.map((c, i) => ({ n: i + 1, question: questionOf(c).slice(0, 400),
       answer: face(c.answer).slice(0, 300) })) });
     let answer;
     try {
       answer = await V.ai.ask({ system: WRONG_SYSTEM, text, tallyFree: false, quick: true });
     } catch (error) {
-      return 0;  // (offline, no key, busy: the deck's own wrong answers, as before)
+      return null;
     }
-    if (!answer || answer.stopReason === 'refusal') return 0;
+    if (!answer || answer.stopReason === 'refusal') return null;
     const found = jsonIn(answer.text);
-    const list = Array.isArray(found) ? found : found && Array.isArray(found.cards) ? found.cards : [];
+    const list = Array.isArray(found) ? found : found && Array.isArray(found.cards) ? found.cards : wholeEntries(answer.text);
     const byNote = new Map();
     let got = 0;
     list.forEach((entry, i) => {
@@ -561,7 +601,7 @@ V.learn = (() => {
 
   /* The AI's look at a typed answer the check here turned down: { right, why }, or null (no AI, no answer in time). */
   async function checkTyped(card, typed) {
-    if (lockedCard(card)) return null;
+    if (!aiMayRead(card)) return null;
     const key = `${card.key}|${face(card.answer)}|${fold(typed)}`;
     if (verdicts.has(key)) return verdicts.get(key);
     const ctl = new AbortController();
@@ -806,6 +846,27 @@ V.learn = (() => {
       V.clear(ui.body, head, before, answer, feedback());
       const go = ui.body.querySelector('.learn-feedback .btn.primary, .learn-options .btn.primary');
       if (go) requestAnimationFrame(() => { if (go.isConnected) go.focus({ preventScroll: true }); });
+      if (answered) requestAnimationFrame(choicesInSight);
+    }
+
+    /* After an answer the verdict and its Continue stay pinned at the bottom of a short screen: the question (already
+       read) scrolls up so every choice, the right one lit green, is in sight above the verdict, never under it. */
+    function choicesInSight() {
+      const options = ui.body.querySelector('.learn-options');
+      const said = ui.body.querySelector('.learn-feedback');
+      if (!options || !said || !options.isConnected) return;
+      let stage = options.parentElement;
+      while (stage && !(stage.scrollHeight > stage.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(stage).overflowY))) stage = stage.parentElement;
+      if (!stage) return;
+      // (in layout px, never the boxes on the screen: the choices are still settling in with their own little moves)
+      const abs = (el) => { let y = 0; for (let e = el; e; e = e.offsetParent) y += e.offsetTop; return y; };
+      const top = abs(options) - abs(stage);
+      const need = top + options.offsetHeight - (stage.clientHeight - said.offsetHeight - 6);
+      const to = Math.min(top - 2, Math.max(stage.scrollTop, need));
+      const by = to - stage.scrollTop;
+      if (by <= 0) return;
+      const instant = V.look && V.look.timeScale && V.look.timeScale() === 0;
+      stage.scrollBy({ top: by, behavior: instant || document.documentElement.classList.contains('calm') ? 'auto' : 'smooth' });
     }
 
     function feedback() {
@@ -1217,6 +1278,6 @@ V.learn = (() => {
   }
 
   return { fold, distance, slack, check, wrongOnes, wrongFor, forNote, forDeck, start, GROUP, plain, face, alternatives,
-    tokens, forms, shapeOf, readCard, TYPE_WORDS, testMe, hasCards, goodWrongs, keptWrongs, needsWrongs, waits,
+    tokens, forms, shapeOf, readCard, TYPE_WORDS, testMe, hasCards, goodWrongs, keptWrongs, needsWrongs, aiMayRead, waits,
     forget: () => { made.clear(); pending.clear(); verdicts.clear(); } };
 })();

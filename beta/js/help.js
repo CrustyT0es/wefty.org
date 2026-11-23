@@ -122,8 +122,9 @@ V.help = (() => {
         'microphone', 'mic', 'audio', 'class', 'teacher'] },
     { id: 'ai-listening', group: 'record', q: 'What\'s AI listening?', show: ['ai-listening', 'notetaker'],
       when: () => !!V.notetaker && !V.desktop,
-      a: 'With the free Gemini set up, the note-taker records the room and writes down what the teacher says about every half '
-        + 'minute, leaving out the chat around you. Switch it off on the note-taker\'s start screen or in Settings > AI.',
+      a: 'With your free AI key set up, the note-taker can record the room and send the sound to Google, about half a minute '
+        + 'at a time, to write down what the teacher says, leaving out the chat around you. It\'s off until you say yes on '
+        + 'the note-taker\'s start screen. Turn it on or off there or in Settings > AI.',
       words: ['ai listening', 'noisy', 'noise', 'loud', 'background', 'hear', 'missed words', 'teacher', 'gemini'] },
     { id: 'notetaker-away', group: 'record', q: 'Does the note-taker keep going if I switch tabs or lock my phone?', show: 'notetaker',
       when: () => !!V.notetaker,
@@ -220,22 +221,31 @@ V.help = (() => {
       words: ['home screen', 'homescreen', 'install', 'app', 'icon', 'add to home', 'pwa', 'shortcut', 'download the app', 'download'] },
     { id: 'another-device', group: 'account', q: 'How do I sign in on another device?', show: ['sign-in-another-device', 'add-device'],
       a: () => (V.pair
-        ? 'On the new device, open wefty.org and sign in with your e-mail and password. No password? Tap Use a code from another '
-          + 'device there, then here go to Settings > Devices > Sign in another device and type the code it shows.'
+        ? 'On the new device, open wefty.org and sign in with your e-mail and password. Or tap Use a code from another device '
+          + 'there, then here go to Settings > Devices > Sign in another device, type the code it shows and '
+          + (V.cloud && V.cloud.hasPassword && !V.cloud.hasPassword() ? 'the code we e-mail you (your account has no password). ' : 'your password. ')
+          + 'Forgot your password? Tap Forgot password? on the new device\'s sign-in screen.'
         : 'On the new device, open Wefty and sign in with your e-mail and password. Settings > Devices > Add a phone or '
           + 'computer shows a code to scan that opens it there.'),
       words: ['sign in', 'signin', 'log in', 'login', 'another device', 'other device', 'new phone', 'chromebook', 'laptop', 'second device', 'code',
         'pair', 'connect', 'school computer'] },
     { id: 'forgot-password', group: 'account', q: 'I forgot my password', show: 'change-password',
-      a: () => (doors()
-        ? 'On the sign-in screen, tap Forgot password?, type your e-mail and Wefty sends you a code to pick a new one. Still '
-          + 'signed in on another device? Settings > Account > Change password works there too.'
-        : 'Still signed in on another device? Change it there: Settings > Account > Change password. Otherwise open wefty.org '
-          + 'and tap Forgot password? on its sign-in screen.'),
+      a: () => {
+        const team = V.TEAM || 'Wefty\'s team';
+        const signedIn = !!(V.data && V.data.user && V.data.user.id);
+        const helpers = !signedIn ? `ask the person who invited you to help you sign in (or write to ${team} if you signed up `
+          + 'yourself): they can give you a new one-time code.'
+          : who() === 'invited' ? 'ask the person who invited you to help you sign in: they can give you a new one-time code.'
+            : who() === 'self' ? `write to ${team}: they can give you a new one-time code.`
+              : 'try again in a minute.';
+        return `On the sign-in screen${doors() ? '' : ' at wefty.org'}, tap Forgot password?, type your e-mail and Wefty sends `
+          + `you a code to pick a new one${signedIn ? ' (signed in here? Sign out first: your notes stay in the cloud)' : ''}. `
+          + `Nothing comes? Look in your spam folder, then ${helpers}`;
+      },
       words: ['forgot', 'forgotten', 'password', 'reset', 'cant sign in', 'locked out', 'wrong password', 'lost password', 'pasword'] },
     { id: 'change-password', group: 'account', q: 'How do I change my password?', show: 'change-password',
-      a: 'Settings > Account > Change password. Your other devices stay signed in; use the new one next time you sign in. It isn\'t '
-        + 'your locked notes\' PIN (that\'s in Settings > Notes & files).',
+      a: 'Settings > Account > Change password. Your other devices get signed out and need the new password to sign in again. It '
+        + 'isn\'t your locked notes\' PIN (that\'s in Settings > Notes & files).',
       words: ['change password', 'new password', 'password', 'update password', 'pasword'] },
     { id: 'export-all', group: 'account', q: 'How do I get a copy of everything I have in Wefty?', show: 'export-everything',
       a: 'Settings > Account > Export everything makes one ZIP with every note, folder and chat, to keep or take somewhere '

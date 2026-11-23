@@ -24,6 +24,7 @@ V.pair = (() => {
   const SLUG = 'vault-admin';
   const LETTERS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
   const LIVE = 10 * 60 * 1000;  // how long a code works (the helper's own limit), when the helper's time can't be used
+  const MISSES = 5;  // (1.22.6, N17a) askings in a row with no answer before the code is given up on as "can't do that"
   const waits = { call: 20000, health: 8000, poll: 2000, tick: 1000 };  // (tests shorten them)
   const LABELS = { pc: 'PC', android: 'Android phone', iphone: 'iPhone', ipad: 'iPad', chromebook: 'Chromebook', browser: 'Browser' };
   const WORDS = {
@@ -40,6 +41,11 @@ V.pair = (() => {
     pcOld: () => (V.pc && V.pc.howToUpdate ? `Wefty on this PC can't do that yet. ${V.pc.howToUpdate()}` : 'Wefty on this PC can\'t do that yet.'),
     failed: 'That didn\'t work. Get a new code and try again.',
     ranOut: 'That code ran out.',
+    // (1.22.6, ACC-06: a code someone else said yes to)
+    notMine: 'Only if it\'s your own account. If someone else typed your code, tap No: in their account, they could read '
+      + 'everything you write here.',
+    notSignedIn: (email) => `Nobody was signed in here: the code was for ${email || 'another account'}. Get a new code, `
+      + 'then type it on your own device.',
   };
 
   /* -- the codes */
@@ -88,8 +94,9 @@ V.pair = (() => {
   }
 
   /* The new device's own asking: no sign-in (the helper routes pair-open, pair-wait and pair-cancel before it checks
-     one), only the cloud's public key. */
-  async function openCall(cloud, action, args = {}) {
+     one), only the cloud's public key. `judge` false (1.22.6, N17a): a request that got no answer the page could read
+     is only that ('unread'), not yet looked into (see look). */
+  async function openCall(cloud, action, args = {}, { judge = true } = {}) {
     const control = new AbortController();
     const timer = setTimeout(() => control.abort(), waits.call);
     let response;
@@ -98,6 +105,7 @@ V.pair = (() => {
         headers: { 'Content-Type': 'application/json', apikey: cloud.key }, body: JSON.stringify({ ...args, action }) });
     } catch (error) {
       if (!navigator.onLine) throw fault('offline');
+      if (!judge) throw fault('unread', WORDS.unreachable);
       throw fault(await reaches(cloud) ? 'missing' : 'unreachable');
     } finally {
       clearTimeout(timer);
@@ -128,8 +136,8 @@ V.pair = (() => {
   /* -- the new device: its code, waiting for the other device */
 
   /* `cloud`: { url, key } (a saved vault-config, or wefty.org's own cloud). Resolves 'in' once signed in (the caller
-     reloads), or 'back'. */
-  function signInScreen({ cloud = null } = {}) {
+     reloads), or 'back'. `email`: the one typed on the sign-in screen this was opened from, if any (see whose). */
+  function signInScreen({ cloud = null, email = '' } = {}) {
     return new Promise((resolve) => {
       const target = cloud || V.config || {};
       const viaPc = !!V.desktop;
@@ -153,8 +161,9 @@ V.pair = (() => {
         document.removeEventListener('visibilitychange', seen);
         resolve(how);
       };
-      const call = (action, args) => (viaPc ? V.pc.call(action, args) : openCall(target, action.replace(/^pair([A-Z])/,
-        (m, c) => `pair-${c.toLowerCase()}`), args));
+      const call = (action, args, how) => (viaPc ? V.pc.call(action, args) : openCall(target, action.replace(/^pair([A-Z])/,
+        (m, c) => `pair-${c.toLowerCase()}`), args, how));
+      let misses = 0;  // (1.22.6, N17a) askings in a row that got no answer this page could read
 
       function say(error) {
         const kind = kindOf(error, true);
@@ -246,16 +255,28 @@ V.pair = (() => {
         asking = true;
         const now = pair;
         try {
-          const got = await call('pairWait', { id: now.id });
+          const got = await call('pairWait', { id: now.id }, { judge: false });
           if (done || pair !== now) return;
+          misses = 0;
           const said = got && got.state;
           if (said === 'in') { draw('signing'); finish('in'); return; }  // (the PC: Python has the sign-in)
           if (said === 'approved') { await signIn(got); return; }
           if (said === 'gone') { pair = null; draw('over'); return; }
         } catch (error) {
           if (done || pair !== now) return;
-          const kind = kindOf(error, true);
-          if (kind === 'missing' || kind === 'unknown') { pair = null; say(error); draw('trouble'); return; }
+          let why = error;
+          // (1.22.6, N17a) One asking lost on the way (a wifi that drops a request now and then) keeps the code, and the
+          // next look asks again: only several in a row are looked into, and only a cloud that answers by itself then
+          // means this cloud can't do it.
+          if (error && error.code === 'unread') {
+            misses += 1;
+            why = misses >= MISSES && navigator.onLine && await reaches(target) ? fault('missing') : fault('unreachable');
+            if (done || pair !== now) return;
+          } else {
+            misses = 0;
+          }
+          const kind = kindOf(why, true);
+          if (kind === 'missing' || kind === 'unknown') { pair = null; say(why); draw('trouble'); return; }
           // (offline or out of reach for a moment: the code still shows, and the next look tries again)
           state.textContent = kind === 'offline' ? 'Waiting for the internet...' : 'Waiting for the other device...';
         } finally {
@@ -264,10 +285,31 @@ V.pair = (() => {
         later();
       }
 
+      /* (1.22.6, ACC-06) Whose account this device would be signed in to: the one that said yes to the code, which may
+         not be this device's person's (a classmate who read the code off the screen, typing it on their own phone).
+         Asked first ("Is this you?", as a link's sign-in is), unless it's the e-mail saved here for this cloud or typed
+         on the sign-in screen. True to go on. */
+      async function whose(got) {
+        const address = String((got && got.email) || '').trim().toLowerCase();
+        if (!address || !V.doors || !V.doors.signInAs) return true;
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem('vault-config') || 'null'); } catch (error) { /* nothing saved */ }
+        const known = [String(email || ''), saved && saved.url === target.url ? String(saved.email || '') : '']
+          .map((one) => one.trim().toLowerCase()).filter(Boolean);
+        if (known.includes(address)) return true;
+        return V.doors.signInAs(String(got.email).trim(), { hint: WORDS.notMine });
+      }
+
       /* The other device said yes: the one-time sign-in becomes this page's own session. */
       async function signIn(got) {
         draw('signing');
         clearTimeout(tickTimer);
+        if (!(await whose(got))) {
+          pair = null;  // (its one-time sign-in never used: it runs out by itself)
+          V.clear(problem, V.h('p.error-text', { text: WORDS.notSignedIn(String(got.email || '').trim()) }));
+          draw('trouble');
+          return;
+        }
         try {
           if (!V.cloud.sb) V.cloud.client(target);
           const { error } = await V.cloud.sb.auth.verifyOtp({ token_hash: String(got.token_hash || ''), type: got.type || 'magiclink' });
@@ -315,12 +357,13 @@ V.pair = (() => {
 
   /* -- the signed-in device: typing the other one's code */
 
-  // pair-look / pair-approve, with this person's own sign-in (js/access.js's helperCall), or the PC part's.
+  // pair-look / pair-approve, with this person's own sign-in (js/access.js's helperCall), or the PC part's (only the
+  // code goes to Python: the PC's own sign-in is the fresh one its check made).
   async function askHelper(action, args) {
     if (V.desktop) {
       const name = action === 'pair-look' ? 'pairLook' : 'pairApprove';
       if (!V.pc.can(name)) throw fault('pcOld');
-      return V.pc.call(name, args);
+      return V.pc.call(name, { code: args.code });
     }
     try {
       return await V.invites.helperCall(action, args, waits.call);
@@ -353,6 +396,12 @@ V.pair = (() => {
     let code = '';
     let asking = false;
     let device = null;
+    // (1.22.6, SEC-11) "Is it really you?" before a device is signed in to this account: fifteen seconds with someone's
+    // unlocked phone was a sign-in that never ended. The password (or, without one, a code by e-mail) first, and the
+    // check's own sign-in goes with the yes, so the cloud knows too (the helper's version 7: ACC-01).
+    const youProblem = V.h('p.error-text.pair-you-problem', { role: 'alert' });
+    const proof = V.settings && V.settings.itsYou ? V.settings.itsYou(youProblem, { label: 'Your Wefty password, to show it\'s you',
+      forHelper: true }) : null;
 
     const say = (error) => {
       const kind = kindOf(error, false);
@@ -371,6 +420,8 @@ V.pair = (() => {
       } else if (step === 'confirm') {
         V.clear(body, V.h('p.pair-ask', {}, V.h('strong', { text: `Sign in ${named(device)}?` })),
           V.h('p.pair-when', { text: [`Code ${shown(code)}.`, agoWords(device && device.at)].filter(Boolean).join(' ') }),
+          proof ? V.h('div.pair-you', {}, V.h('p.pair-you-ask', { text: 'Is it really you? Type your password first.' }),
+            proof.el, youProblem) : null,
           warn, problem);
         if (back) back.lastChild.textContent = 'Back';
         if (go) { go.lastChild.textContent = 'Sign it in'; go.disabled = asking; }
@@ -395,21 +446,30 @@ V.pair = (() => {
           return true;
         }
       }
+      if (step === 'confirm' && proof) {
+        youProblem.textContent = '';
+        if (!proof.filled()) { youProblem.textContent = proof.needs ? proof.needs() : 'Type your password first.'; proof.focus(); return true; }
+      }
       asking = true;
       draw();
       try {
-        if (step === 'code') {
+        if (step === 'confirm' && proof && (!(await proof.prove({ keep: true })) || !open)) {
+          // (not them, or no answer: nothing asked of the helper, the sheet stays for another go; a sheet closed
+          // while the password was checked approves nothing either, and its sign-in is ended)
+          if (proof.release) proof.release();
+        } else if (step === 'code') {
           const got = await askHelper('pair-look', { code });
           device = { ...(got && got.device), at: got && got.at };
           step = 'confirm';
         } else {
-          await askHelper('pair-approve', { code });
+          await askHelper('pair-approve', { code, ...(proof && proof.proof ? proof.proof() : {}) });
           step = 'done';
         }
       } catch (error) {
         say(error);
         if (kindOf(error, false) === 'unknown' || kindOf(error, false) === 'taken') step = 'code';
       } finally {
+        if (proof && proof.release) proof.release();  // (the check's sign-in: its one call made)
         asking = false;
       }
       draw();
@@ -422,13 +482,14 @@ V.pair = (() => {
       content: body,
       actions: [{ label: 'Cancel', onClick: () => {
         if (step !== 'confirm' || asking) return false;
-        step = 'code';  // (Back: the code again)
+        step = 'code';  // (Back: the code again, and never a password left in its box: ACC-15)
+        if (proof && proof.clear) proof.clear();
         V.clear(problem);
         draw();
         box.focus();
         return true;
       } }, { label: 'Next', kind: 'primary', onClick: next }],
-      onClose: () => { open = null; },
+      onClose: () => { open = null; if (proof && proof.release) proof.release(); },
     });
     draw();
     return open;

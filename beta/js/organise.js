@@ -47,6 +47,78 @@ V.organise = (() => {
   const isArchived = (note) => !!(note && note.extra && note.extra.archived);
   const isTemplate = (note) => !!(note && note.extra && note.extra.is_template);
 
+  /* -- feedback from friends (1.22.6). On the owner's PC, vault/feedback.py turns everyone's feedback into notes in the
+     owner's Feedback folder: other people's words. Chat's tools (js/chattools.js) and the AI features that read notes
+     by themselves (js/aicards.js for a folder or a test, js/learn.js's help in Test me) leave them out, so a friend's
+     feedback never goes to an AI service, and words written in it never steer Chat. How they're told apart, for
+     certain: every note feedback.py has made carries extra.feedback ({from, kind, file}: every version of it has
+     written that, and nothing else writes it). The folder is the one feedback.py made (its id is the uuid5 of
+     "folder:<owner id>" in feedback.py's NAMESPACE, FEEDBACK_SPACE here), the one it marks since 1.22.6
+     (extra.feedback), or the folder called Feedback that holds the notes it wrote (the one its _folder() took over).
+     Every note in such a folder, and every folder inside one, is kept out too. */
+  const FEEDBACK_SPACE = '6f1d2c1e-9a52-4f0e-9a3c-7b1f0e5d2a41';
+  const isFeedback = (note) => !!(note && note.extra && note.extra.feedback && typeof note.extra.feedback === 'object'
+    && !Array.isArray(note.extra.feedback));
+  let feedbackMade = null;  // { user, id }: the id feedback.py gives the folder it makes for this person
+  function feedbackFolderId() {
+    const user = V.data.user && V.data.user.id;
+    if (!user) return '';
+    if (!feedbackMade || feedbackMade.user !== user) feedbackMade = { user, id: uuid5(FEEDBACK_SPACE, `folder:${user}`) };
+    return feedbackMade.id;
+  }
+  /* The ids of the folders kept out: the Feedback folder(s) and every folder inside them (a Set; work it out once for
+     a run of keptOut). */
+  function feedbackFolders() {
+    const made = feedbackFolderId();
+    const holding = new Set();
+    for (const note of V.data.notes.values()) if (note.folder_id && isFeedback(note)) holding.add(note.folder_id);
+    const closed = new Set();
+    for (const folder of V.data.folders.values()) {
+      const marked = !!(folder.extra && folder.extra.feedback);
+      const named = String(folder.name || '').trim().toLowerCase() === 'feedback' && holding.has(folder.id);
+      if (marked || named || (made && folder.id === made)) closed.add(folder.id);
+    }
+    for (const id of [...closed]) for (const inner of inside(id)) closed.add(inner);
+    return closed;
+  }
+  /* A note that's friends' feedback, or in a folder of it. */
+  const keptOut = (note, closed = feedbackFolders()) => !!note
+    && (isFeedback(note) || (!!note.folder_id && closed.has(note.folder_id)));
+
+  /* RFC 4122's version 5 id of `name` in the id space `space`, as Python's uuid.uuid5 makes it (vault/feedback.py). */
+  function uuid5(space, name) {
+    const bytes = [...space.replace(/-/g, '').match(/../g).map((pair) => parseInt(pair, 16)), ...new TextEncoder().encode(name)];
+    const hash = sha1(bytes).slice(0, 16);
+    hash[6] = (hash[6] & 0x0f) | 0x50;
+    hash[8] = (hash[8] & 0x3f) | 0x80;
+    const hex = hash.map((b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  /* SHA-1 of `bytes` (numbers 0-255) as 20 numbers: only for uuid5's ids above, never for anything secret. */
+  function sha1(bytes) {
+    const data = [...bytes, 0x80];
+    while (data.length % 64 !== 56) data.push(0);
+    const bits = bytes.length * 8;
+    for (let shift = 56; shift >= 0; shift -= 8) data.push(Math.floor(bits / 2 ** shift) % 256);
+    const h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
+    const w = new Array(80);
+    for (let at = 0; at < data.length; at += 64) {
+      for (let t = 0; t < 16; t++) {
+        w[t] = (data[at + 4 * t] << 24) | (data[at + 4 * t + 1] << 16) | (data[at + 4 * t + 2] << 8) | data[at + 4 * t + 3];
+      }
+      for (let t = 16; t < 80; t++) { const x = w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16]; w[t] = (x << 1) | (x >>> 31); }
+      let [a, b, c, d, e] = h;
+      for (let t = 0; t < 80; t++) {
+        const f = t < 20 ? (b & c) | (~b & d) : t < 40 || t >= 60 ? b ^ c ^ d : (b & c) | (b & d) | (c & d);
+        const k = t < 20 ? 0x5a827999 : t < 40 ? 0x6ed9eba1 : t < 60 ? 0x8f1bbcdc : 0xca62c1d6;
+        const next = (((a << 5) | (a >>> 27)) + f + e + k + w[t]) | 0;
+        e = d; d = c; c = (b << 30) | (b >>> 2); b = a; a = next;
+      }
+      h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0; h[3] = (h[3] + d) | 0; h[4] = (h[4] + e) | 0;
+    }
+    return h.flatMap((v) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
+  }
+
   /* `row` with these organise values changed (false or null takes one away), stamped as newer than anything this
      device has seen for the note (so a clock running slow on this device can't make a change look older). */
   function stamped(row, values) {
@@ -957,7 +1029,8 @@ V.organise = (() => {
   }
 
   return {
-    isArchived, isTemplate, stamped, TAG, tagsOf, allTags, parseQuery, foldersFor, matcher, terms, marked, snippet,
+    isArchived, isTemplate, isFeedback, feedbackFolders, keptOut, uuid5,
+    stamped, TAG, tagsOf, allTags, parseQuery, foldersFor, matcher, terms, marked, snippet,
     SORTS, sort, view, setSort: (value) => setPref('vault-sort', value), setView: (value) => setPref('vault-view', value),
     comparator, newFolder, folderSheet, folderMenu, folderItems, chooseFolder, isInbox, move, pin, archive, trash, restore, change,
     DEPTH, TOP, parentId, children, ancestors, pathOf, depthOf, inside, tree, saveFolder, moveFolder, cantMove,

@@ -16,8 +16,8 @@
 
    The helpers:
      enter(container, { stagger = 45, selector, max = 8, delay = 0 })   the .enter rise: children come up one after the other
-     press(el)                         one spring pulse (a tap done with the keyboard, a tile that was chosen)
-     press.follow(el, { scale = .94 })   a pointer press that springs back; returns a function that unbinds it
+     (press, press.follow, later, lift, buzz, D, SPRINGS and the press engine are ui/motion.js's, loaded before this file:
+     these helpers are added to the same V.motion)
      spark(el)                         the four-spark burst from the middle of a ticked box
      roll(el, from, to, { duration })  rolling numbers: the digits turn like an odometer and end on exactly `to`
      weft(svgPath, { duration, delay })  a thread draws itself (a path, or an svg holding one)
@@ -51,7 +51,10 @@ const lite = (on) => {
   return !!on;
 };
 const quick = () => calm() || lite();
-const buzz = (ms) => { try { if (navigator.vibrate && !calm()) navigator.vibrate(ms); } catch (error) { /* not allowed here */ } };
+/* (ui/motion.js keeps the one rule for buzzing, and the one timer: later() ends with the test profile's time scale) */
+const ui = () => V.motion || {};
+const buzz = (ms) => (ui().buzz ? ui().buzz(ms) : false);
+const later = (fn, ms) => (ui().later ? ui().later(fn, ms) : (fn(), { cancel() {} }));  // (without ui/motion.js: at once)
 
 /* -- one handle for every animation: cancel() stops it where it is and finished says when it ended (or was cut short) */
 const NOTHING = () => ({ cancel() {}, finished: Promise.resolve() });
@@ -96,53 +99,6 @@ function enter(container, { stagger = 45, selector = '', max = 8, delay = 0 } = 
   });
   return { cancel() { handles.forEach((h) => h.cancel()); }, finished: Promise.all(handles.map((h) => h.finished)).then(() => undefined) };
 }
-
-/* ---------------------------------------------------------------- press */
-
-/* `scale` as its own property where there is one, so a press never fights an element's own transform. */
-const OWN_SCALE = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('scale', '1');
-const scaled = (n) => (OWN_SCALE ? { scale: String(n) } : { transform: `scale(${n})` });
-
-/* One spring pulse: in to .94 in .12 s, then out past 1 and settle. */
-function press(el, { scale = 0.94 } = {}) {
-  if (!el || calm()) return NOTHING();
-  if (lite()) return play(el, [scaled(1), scaled(scale), scaled(1)], { duration: 160, easing: 'ease-out' }, 'press');
-  return play(el, [{ ...scaled(1), offset: 0 }, { ...scaled(scale), offset: 0.28, easing: EASE }, { ...scaled(1.035), offset: 0.7 }, { ...scaled(1), offset: 1 }],
-    { duration: 420, easing: SPRING }, 'press');
-}
-/* A pointer press that follows the finger: down to `scale` in .12 s, and a spring back when it lets go or leaves. */
-press.follow = (el, { scale = 0.94 } = {}) => {
-  if (!el) return () => {};
-  let down = null;
-  let held = null;  // the press held down (it keeps its end: cancelled when the spring back begins)
-  const grow = () => {
-    if (down === null) return;
-    down = null;
-    if (held) { held.cancel(); held = null; }
-    if (calm()) return;
-    play(el, [scaled(scale), scaled(1.03), scaled(1)], { duration: lite() ? 140 : 380, easing: lite() ? 'ease-out' : SPRING }, 'press');
-  };
-  const start = (event) => {
-    if (event.button > 0) return;
-    down = event.pointerId;
-    if (calm()) return;
-    held = play(el, [scaled(1), scaled(scale)], { duration: 120, easing: EASE, fill: 'forwards' }, 'press');
-  };
-  const end = (event) => { if (down !== null && (event.pointerId === down || event.pointerId === undefined)) grow(); };
-  el.addEventListener('pointerdown', start);
-  el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
-  el.addEventListener('pointerleave', end);
-  return () => {
-    el.removeEventListener('pointerdown', start);
-    el.removeEventListener('pointerup', end);
-    el.removeEventListener('pointercancel', end);
-    el.removeEventListener('pointerleave', end);
-    if (held) { held.cancel(); held = null; }
-    take(el, 'press');
-    live.delete(el);
-  };
-};
 
 /* ---------------------------------------------------------------- spark */
 
@@ -339,8 +295,9 @@ function swipe(el, { left = null, right = null, onCommit, threshold = 80, max = 
   const back = el.querySelector(':scope > .g-swipe-back');
   let flying = false;       // a card is flying off or springing back: a new touch waits until it has landed
   const drops = new Set();  // click swallowers still listening
-  const timers = new Set(); // what is still to happen (so destroy() can drop it)
-  const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; };
+  const timers = new Set(); // what is still to happen (so destroy() can drop it): handles with cancel()
+  // (the card's own moves end through ui/motion.js's later(), so the test profile ends them at once)
+  const after = (fn, ms) => { let h = null; let ran = false; h = later(() => { ran = true; if (h) timers.delete(h); fn(); }, ms); if (!ran) timers.add(h); return h; };
   const reset = () => {
     const c = moving();
     if (c) { c.style.transform = ''; c.style.transition = ''; }
@@ -390,33 +347,38 @@ function swipe(el, { left = null, right = null, onCommit, threshold = 80, max = 
     const fast = b && performance.now() - b[0] <= 90 && a && b[0] > a[0] ? (b[1] - a[1]) / (b[0] - a[0]) : 0;  // (held still: none)
     if (!was.armed && !cancelled && sides[was.dir] && Math.abs(was.dx) >= threshold / 3 && Math.abs(fast) > 0.65 && Math.sign(fast) === Math.sign(was.dx)) was.armed = true;
     // The click that ends a swipe is not a tap. It is swallowed until it has come (a touch's synthesized click arrives a
-    // little after the finger lifts) or 350 ms have gone, whichever is first.
-    const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); drop(); };
-    let dropId = 0;
-    const drop = () => { window.removeEventListener('click', swallow, true); clearTimeout(dropId); timers.delete(dropId); drops.delete(drop); };
+    // little after the finger lifts), or until the next press begins (then no click came: the next tap is a tap). A click
+    // no pointer made (a key's Enter or Space, a control clicked by code: detail 0) is never the swipe's: it goes through.
+    const swallow = (ev) => { if (ev.detail === 0) return; ev.stopPropagation(); ev.preventDefault(); drop(); };
+    const drop = () => { window.removeEventListener('click', swallow, true); window.removeEventListener('pointerdown', drop, true); drops.delete(drop); };
     drops.add(drop);
     window.addEventListener('click', swallow, true);
-    dropId = later(drop, 350);
+    window.addEventListener('pointerdown', drop, true);
     const c = moving();
     if (!c) { reset(); return; }
-    const quickly = calm() || lite();
     flying = true;
+    // (MOT-19: calm only fades, where it was let go: no travel; lite keeps the whole move, shorter: the exit's 160 ms
+    // and its stiffer spring back. Full is as before.)
+    const D = ui().D || { exit: 160, fade: 120 };
     if (was.armed && !cancelled) {
       const side = was.dx > 0 ? 'right' : 'left';
-      c.style.transition = `transform ${quickly ? '.12s' : '.26s'} ${EXIT}, opacity ${quickly ? '.12s' : '.26s'} linear`;
-      c.style.transform = `translateX(${side === 'right' ? 460 : -460}px)`;
+      const ms = calm() ? D.fade : lite() ? D.exit : 260;
+      c.style.transition = calm() ? `opacity ${ms}ms linear` : `transform ${ms}ms ${EXIT}, opacity ${ms}ms linear`;
+      if (!calm()) c.style.transform = `translateX(${side === 'right' ? 460 : -460}px)`;
       c.style.opacity = '0';
-      later(() => {
+      after(() => {
         flying = false;
         c.style.opacity = '';
         reset();
         if (onCommit) onCommit(side, el);
-      }, quickly ? 140 : 270);
+      }, ms + 10);
     } else {
-      c.style.transition = quickly ? 'transform .14s ease-out' : `transform .46s ${SLIDE}`;
+      const springBack = ui().easing ? ui().easing('settle') : null;
+      const ms = calm() ? D.fade : lite() && springBack ? springBack.duration : lite() ? 160 : 460;
+      c.style.transition = calm() ? `transform ${ms}ms ease-out` : lite() && springBack ? `transform ${ms}ms ${springBack.easing}` : `transform .46s ${SLIDE}`;
       c.style.transform = 'translateX(0px)';
-      if (back) { back.style.transition = 'opacity .2s ease'; back.style.opacity = '0'; }
-      later(() => { flying = false; if (back) back.style.transition = ''; reset(); }, quickly ? 160 : 480);
+      if (back) { back.style.transition = `opacity ${calm() ? D.fade : 200}ms ease`; back.style.opacity = '0'; }
+      after(() => { flying = false; if (back) back.style.transition = ''; reset(); }, ms + 20);
     }
   };
   const up = (event) => end(event, false);
@@ -432,7 +394,7 @@ function swipe(el, { left = null, right = null, onCommit, threshold = 80, max = 
       el.removeEventListener('pointerup', up);
       el.removeEventListener('pointercancel', cancel);
       el.style.touchAction = previousAction;
-      for (const id of timers) clearTimeout(id);  // (no commit or spring-back lands after this)
+      for (const h of timers) h.cancel();  // (no commit or spring-back lands after this)
       for (const drop of [...drops]) drop();
       timers.clear();
       flying = false;
@@ -459,6 +421,16 @@ const PULL_TEXT = 'textarea, select, [contenteditable]:not([contenteditable="fal
   + ':not([type=button]):not([type=submit]):not([type=reset]):not([type=range]):not([type=color]):not([type=file]):not([type=image])';
 const PULL_LONG = 420;  // ms a finger held still before it pulls is a long press, not a pull
 const coveredNow = () => !!document.querySelector('#layers > :not(.nt-strip):not(.coach), .editor-layer.shown');
+const afterFrame = (fn) => requestAnimationFrame(() => { const ch = new MessageChannel(); ch.port1.onmessage = () => fn(); ch.port2.postMessage(0); });
+const panHeld = new WeakMap();  // scroller -> { before: its touch-action before any pull, n: the pulls holding it }
+const PAN_TOP = 'pan-x pan-down pinch-zoom';
+/* A screen about to be drawn on `scroller` will have a pull (yes) or none: said now, before it is styled (glass/shell.js). */
+function ahead(scroller, yes, can = false) {
+  try { can = !!scroller && CSS.supports('touch-action', PAN_TOP); } catch (error) { can = false; }
+  const held = can && panHeld.get(scroller), now = can ? scroller.style.touchAction : '';
+  const want = yes ? PAN_TOP : held ? held.before : now === PAN_TOP ? '' : now;
+  if (can && now !== want) scroller.style.touchAction = want;
+}
 function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {}, allow = null } = {}) {
   if (!scroller) return { destroy() {} };
   const words = { pull: 'Pull to sync', ready: 'Let go to sync', syncing: 'Syncing...', synced: 'Synced', offline: 'You\'re offline', error: 'Couldn\'t sync', ...labels };
@@ -594,25 +566,40 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {}, a
     try { scroller.releasePointerCapture(event.pointerId); } catch (error) { /* not held */ }
     release();
   };
-  // ... and a finger (touch events, which can stop the page scrolling while the pull is on)
+  // ... and a finger (touch events). MOT-04: nothing here waits at a scroll's start (the listeners are passive). At the top
+  // the scroller says `touch-action: pan-x pan-down`: a finger going up scrolls as ever, one coming down starts no
+  // scroll of the browser's at all, so the pull follows it with nothing to stop; anywhere else it is as it was.
+  // A browser that can't say pan-down (Safari takes only auto, none, pan-x, pan-y, pinch-zoom and manipulation, and
+  // drops the whole declaration) keeps the old way: the touchmove stops its own scroll (and rubber band) while it pulls.
+  // (2.0 speed: touch-action restyles all under the scroller: said `ahead` of a draw, kept between pulls, read after a frame)
+  const held = panHeld.get(scroller) || { before: scroller.style.touchAction === PAN_TOP ? '' : scroller.style.touchAction, n: 0 };
+  const touchBefore = held.before; held.n += 1; panHeld.set(scroller, held);
+  let panDown = false, gone = false;
+  try { panDown = typeof CSS !== 'undefined' && !!CSS.supports && CSS.supports('touch-action', PAN_TOP); } catch (error) { panDown = false; }
+  const pan = () => {
+    const want = !panDown || gone ? null : scroller.scrollTop <= 0 ? PAN_TOP : touchBefore;
+    if (want !== null && scroller.style.touchAction !== want) scroller.style.touchAction = want;
+  };
   const tstart = (event) => {
     if (event.touches.length === 1) begin(event.touches[0].clientX, event.touches[0].clientY, undefined, event.target);
     else drag = null;  // (a second finger: a pinch, never a pull)
   };
   const tmove = (event) => {
     if (!event.touches.length) return;
-    if (track(event.touches[0].clientX, event.touches[0].clientY) && event.cancelable) event.preventDefault();
+    if (track(event.touches[0].clientX, event.touches[0].clientY) && !panDown && event.cancelable) event.preventDefault();
   };
-  const tend = () => release();
+  const tend = () => { release(); pan(); };
   scroller.addEventListener('pointerdown', pdown);
   scroller.addEventListener('pointermove', pmove);
   scroller.addEventListener('pointerup', pup);
   scroller.addEventListener('pointercancel', pup);
   scroller.addEventListener('lostpointercapture', pup);
   scroller.addEventListener('touchstart', tstart, { passive: true });
-  scroller.addEventListener('touchmove', tmove, { passive: false });
-  scroller.addEventListener('touchend', tend);
-  scroller.addEventListener('touchcancel', tend);
+  scroller.addEventListener('touchmove', tmove, { passive: panDown });
+  scroller.addEventListener('touchend', tend, { passive: true });
+  scroller.addEventListener('touchcancel', tend, { passive: true });
+  scroller.addEventListener('scroll', pan, { passive: true });
+  if (panDown && held.n === 1 && document.getElementById('g-splash') && !scroller.style.touchAction) scroller.style.touchAction = PAN_TOP; else if (panDown) afterFrame(pan);  // (the start's first screen, under the W: said now, nothing read after, which restyled all of it as the W went)
   return {
     /* The screen was drawn again: the pill is put back, and while it syncs the new content is held where the old was. */
     refresh() {
@@ -620,9 +607,13 @@ function pull(scroller, { onRelease, wrap = null, threshold = 64, labels = {}, a
       if (busy && !drag && shownAt) { const target = body(); if (target) { target.style.transition = 'none'; target.style.transform = calm() ? '' : `translate3d(0,${shownAt.toFixed(1)}px,0)`; } }
     },
     destroy() {
-      for (const [type, fn] of [['pointerdown', pdown], ['pointermove', pmove], ['pointerup', pup], ['pointercancel', pup], ['lostpointercapture', pup], ['touchstart', tstart], ['touchmove', tmove], ['touchend', tend], ['touchcancel', tend]]) {
+      for (const [type, fn] of [['pointerdown', pdown], ['pointermove', pmove], ['pointerup', pup], ['pointercancel', pup], ['lostpointercapture', pup], ['touchstart', tstart], ['touchmove', tmove], ['touchend', tend], ['touchcancel', tend], ['scroll', pan]]) {
         scroller.removeEventListener(type, fn);
       }
+      gone = true; held.n -= 1;
+      afterFrame(() => {  // (put back a frame later, unless a new pull holds the scroller by then)
+        if (held.n || panHeld.get(scroller) !== held) return; panHeld.delete(scroller); scroller.style.touchAction = touchBefore; if (!scroller.getAttribute('style')) scroller.removeAttribute('style');
+      });
       const target = body();
       if (target) { target.style.transition = ''; target.style.transform = ''; }
       if (madeHint) hint.remove();
@@ -715,8 +706,10 @@ function peek(el, { onPeek, hold = 450, sticky = false } = {}) {
     shown = null;
     if (!s) return;
     const gone = () => s.remove();
-    if (calm() || !HAS_WAAPI) { gone(); return; }
-    const a = s.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }], { duration: 160, easing: 'ease-out', fill: 'forwards' });
+    if (!HAS_WAAPI) { gone(); return; }
+    // (calm fades, lite and Full leave as themselves: never removed in one frame)
+    const a = s.animate(calm() ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }],
+      { duration: calm() ? 120 : 160, easing: 'ease-out', fill: 'forwards' });
     a.finished.then(gone, gone);
   };
   const show = () => {
@@ -896,6 +889,7 @@ function bezier(x1, y1, x2, y2) {
   };
 }
 function tween(duration, ease, step) {
+  duration *= V.look && V.look.timeScale ? V.look.timeScale() : 1;  // (the time scale: 0 ends it on the next frame)
   let id = 0, timer = 0, stopped = false, over = false, t0 = null, settle = () => {};
   const finished = new Promise((resolve) => { settle = resolve; });
   const end = (arrived) => {
@@ -909,7 +903,7 @@ function tween(duration, ease, step) {
   const frame = (now) => {
     if (stopped || over) return;
     if (t0 === null) t0 = now;
-    const p = Math.min(1, (now - t0) / duration);
+    const p = duration > 0 ? Math.min(1, (now - t0) / duration) : 1;
     try { step(ease(p), p); } catch (error) { console.error(error); }
     if (p < 1) id = requestAnimationFrame(frame); else end(true);
   };
@@ -935,5 +929,6 @@ V.on('tab', (view) => {
 });
 const switched = () => tabSwitches > 0;
 
-V.motion = { tween, bezier, enter, press, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, spring, current, speed, rubber, springFrames, switched, EASE, SLIDE, SPRING };
+pull.ahead = ahead;
+V.motion = Object.assign(V.motion || {}, { tween, bezier, enter, spark, roll, weft, flip, swipe, pull, peek, shrink, lite, calm, watch, spring, current, speed, rubber, springFrames, switched, EASE, SLIDE, SPRING });
 })();

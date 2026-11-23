@@ -8,9 +8,10 @@
    its own pieces of unwritten recordings, away from the real app's (same origin, so same sign-in, but never the same
    notes copy or outbox): a preview that crashes or is half-built can never damage what the real app holds.
 
-   The look (2.0, "glass"): html[data-look="glass"] turns the new look on (vault/web/glass/*), anything else is the
-   classic look, untouched. Kept per device in localStorage 'wefty-look' ('glass' or 'classic'); with nothing kept it
-   is classic on the real site and glass in the preview. V.look.set() changes it live (V.emit('look', value)).
+   The look (2.0, "glass"): on the 2.0 line glass is the only look. html[data-look="glass"] is always set (index.html's own
+   <html> tag carries it, and this file sets it again before the stylesheet), so selectors and scripts that still read it
+   keep working; there is no switch any more, and an old device's localStorage 'wefty-look' is ignored. V.look.get() and
+   isGlass() always answer glass; set() changes nothing (kept so an older caller never throws).
    "Animations" (Settings > Appearance, per device, 'wefty-animations'): auto (the default: lite on weak devices),
    full (never lite) or calm (nothing moves). They become classes on <html>: `lite` (blur off, aurora still, springs
    shortened: prefers-reduced-data, a device with 4 GB of memory or 4 processors or fewer, or the frame-drop monitor in
@@ -53,7 +54,6 @@ if (V.preview) {
 }
 
 V.look = (() => {
-  const LOOK = 'wefty-look';
   const ANIMATIONS = 'wefty-animations';
   const LITE_AUTO = 'wefty-lite-auto';
   const root = document.documentElement;
@@ -69,11 +69,8 @@ V.look = (() => {
   };
   const query = (text) => { try { return window.matchMedia(text).matches; } catch (error) { return false; } };
 
-  /* 'glass' or 'classic'. */
-  const get = () => {
-    const saved = read(LOOK);
-    return saved === 'glass' || saved === 'classic' ? saved : V.preview ? 'glass' : 'classic';
-  };
+  /* Always 'glass' (2.0 has one look; a 'wefty-look' a device kept from before is ignored). */
+  const get = () => 'glass';
   /* 'auto' | 'full' | 'calm'. */
   const animations = () => {
     const saved = read(ANIMATIONS);
@@ -97,6 +94,13 @@ V.look = (() => {
     if (Date.now() - at > LITE_DAYS * 86400000 || at > Date.now() + 86400000) { write(LITE_AUTO, null); return false; }
     return true;
   };
+  /* The motion policy's time scale: 1 (moves take their own time) everywhere Wefty runs. 0 = every move of the look runs
+     its own code (Full's, lite's or calm's) with no length: CSS animations and transitions end at once (html.instant),
+     Web Animations are made with no duration and V.motion.tween ends on the next frame. Only the test profile asks for
+     0 (tests/test_vault_web.py keeps 'wefty-time-scale' = '0' in a test's own browser), so a test that reads the page
+     at once finds what the move ends on; the glass tests, films and the gate kit run at 1. Nothing in the app sets it. */
+  const TIME_SCALE = 'wefty-time-scale';
+  const timeScale = () => (read(TIME_SCALE) === '0' ? 0 : 1);
   const motion = () => {
     const mode = animations();
     const calm = mode === 'calm' || query('(prefers-reduced-motion: reduce)');
@@ -110,6 +114,16 @@ V.look = (() => {
     const { calm, lite } = motion();
     root.classList.toggle('calm', calm);
     root.classList.toggle('lite', lite);
+    root.classList.toggle('instant', timeScale() === 0);
+  }
+  // (time scale 0: a Web Animation is made with no length, whoever makes it; read once, as the page starts)
+  if (timeScale() === 0 && typeof Element !== 'undefined' && typeof Element.prototype.animate === 'function') {
+    const animate = Element.prototype.animate;
+    const instant = (options) => {
+      if (typeof options === 'number') return 0;
+      return { ...(options || {}), duration: 0, delay: 0, endDelay: 0 };
+    };
+    Element.prototype.animate = function animateAtOnce(keyframes, options) { return animate.call(this, keyframes, instant(options)); };
   }
   const tell = (type, detail) => { if (V.emit) V.emit(type, detail); };
 
@@ -120,20 +134,14 @@ V.look = (() => {
   } catch (error) { /* an old browser: the page's first look stays */ }
   // changed in another tab
   window.addEventListener('storage', (event) => {
-    if (event.key === V.storageKey(LOOK)) { apply(); tell('look', get()); }
     if (event.key === V.storageKey(ANIMATIONS) || event.key === V.storageKey(LITE_AUTO)) { apply(); tell('animations', animations()); }
   });
 
   return {
     get,
     isGlass: () => get() === 'glass',
-    set(value) {
-      if (value !== 'glass' && value !== 'classic') return get();
-      write(LOOK, value);
-      apply();
-      tell('look', get());
-      return get();
-    },
+    /* (2.0: one look; nothing to set) */
+    set() { return get(); },
     animations,
     setAnimations(value) {
       write(ANIMATIONS, value === 'full' || value === 'calm' ? value : null);
@@ -144,6 +152,8 @@ V.look = (() => {
     },
     /* What the classes say now: { mode, calm, lite }. */
     motion,
+    /* The time scale: 1, or 0 under the test profile (see TIME_SCALE). */
+    timeScale,
     weak,
     /* The frame-drop monitor (glass/motion.js) found the device too slow for the full look: lite from now on (until
        Animations is set to Full). Remembered per device. */

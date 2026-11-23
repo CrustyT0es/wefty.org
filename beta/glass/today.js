@@ -59,7 +59,14 @@ let lastDay = '';
 const timers = new Set();
 let ringId = 0;
 
-const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, ms); timers.add(id); return id; };
+/* A timer that ends a move (a sweep, a ghost, the morph): it keeps step with the motion policy's time scale (js/look.js:
+   0 under the test profile, so what a move leaves behind goes when the move does). `real`: a wait that isn't a move's. */
+const later = (fn, ms, real) => {
+  const scale = real || !(V.look && V.look.timeScale) ? 1 : V.look.timeScale();
+  const id = setTimeout(() => { timers.delete(id); fn(); }, ms * scale);
+  timers.add(id);
+  return id;
+};
 const edge = (kind) => { try { V.emit('edge', kind); } catch (error) { /* nobody is listening */ } };
 
 /* -- small helpers */

@@ -43,6 +43,8 @@ V.profile = (() => {
     }, () => { /* (no store yet: nothing waits) */ });
   }
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  // (1.22.6, SEC-23) The cloud answers, but turns changes down for now (over its plan's limits, busy, in trouble)
+  const refusing = () => !!(V.cloud && V.cloud.refusing);
   // This device in a few words: "phone", "iPhone", "PC", "Chromebook" or "computer".
   const here = () => (V.device === 'pc' ? 'PC' : V.device === 'phone' ? (V.deviceKind.ios ? V.deviceKind.model : 'phone')
     : V.deviceKind.chromebook ? 'Chromebook' : 'computer');
@@ -62,6 +64,7 @@ V.profile = (() => {
     }
     if (value === 'held') return `You: ${plural(((V.cloud.held || 0) + (V.cloud.waitingPin || 0)) || 1, 'note')} not synced`;
     if (value === 'offline') return 'You: offline, changes wait here';
+    if (value === 'error' && refusing()) return 'You: your cloud is refusing changes';
     if (value === 'error' || value === 'asleep') return 'You: Wefty can\'t reach your cloud';
     if (value === 'signed-out') return 'You: signed out';
     if (value === 'syncing' && ringing) return 'You: syncing';
@@ -144,7 +147,10 @@ V.profile = (() => {
       // (1.22.5) Changed here, and locked on another device meanwhile: they go up sealed once the PIN is typed here.
       const n = V.cloud.waitingPin;
       title = `${plural(n, 'note')} ${n === 1 ? 'waits' : 'wait'} for your PIN`;
-      words = `${n === 1 ? 'It was' : 'They were'} locked on your other device. Your changes are safe on this ${here()}.`;
+      // (1.22.6: or the other way round, locked here and changed on the other device: both versions stay locked)
+      words = V.cloud.waitingPinHere === n
+        ? `${n === 1 ? 'It was' : 'They were'} changed on your other device after you locked ${n === 1 ? 'it' : 'them'} here. Both versions stay locked.`
+        : `${n === 1 ? 'It was' : 'They were'} locked on your other device. Your changes are safe on this ${here()}.`;
       action = ['Type PIN', () => { close(); V.cloud.askPin().catch(V.problem); }];
     } else if (value === 'held') {
       const n = V.cloud.held || 1;
@@ -157,7 +163,8 @@ V.profile = (() => {
       action = ['Try again', () => { close(); V.cloud.sync(); }];
     } else if (value === 'error' || value === 'asleep') {
       kind = 'bad';
-      title = value === 'asleep' ? 'Your cloud is asleep' : 'Wefty can\'t reach your cloud';
+      title = value === 'asleep' ? 'Your cloud is asleep'
+        : refusing() ? 'Your cloud is refusing changes' : 'Wefty can\'t reach your cloud';
       words = `Changes wait on this ${here()}.`;
       action = ['What to do', () => { close(); trouble(); }];
     } else if (value === 'signed-out') {

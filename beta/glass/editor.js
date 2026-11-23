@@ -177,9 +177,16 @@ function opened(id) {
    card's own copy lies over it for the first moments and fades as the note's words are there, so there is never an empty
    box; going back it is the other way round, ending in the card itself (the real card is shown under the layer as it
    goes). Only the layer's transform and a clip-path animate (one element). */
-const hiddenCards = new WeakSet();
+const hiddenCards = new Set();
+let landing = null;  // the card a closing note is shrinking back onto: shown as the note lands on it
 function hideCard(card) { if (card && card.isConnected) { card.style.visibility = 'hidden'; hiddenCards.add(card); } }
-function showCard(card) { if (card && hiddenCards.has(card)) { hiddenCards.delete(card); card.style.visibility = ''; } }
+function showCard(card) { if (card && hiddenCards.delete(card)) card.style.visibility = ''; }
+/* The card shows again on every way out of its note (2.0 "in sight"): only the shrink back onto a card in sight showed it,
+   so a note closed with the keyboard up (its card counts as out of sight), or one another note was opened over, left an
+   empty place in the list until the list happened to be drawn again. Asked right after 'note-left', once the close has
+   said which card it lands on. */
+function showCards() { for (const card of [...hiddenCards]) if (card !== landing) showCard(card); }
+V.on('note-left', () => { if (hiddenCards.size) setTimeout(showCards, 0); });
 
 function windowOf(card) {
   if (!card || !card.isConnected) return null;
@@ -288,7 +295,8 @@ function editorLeaving(layer, id) {
     play(copy, [{ opacity: 0 }, { opacity: 0, offset: 0.3 }, { opacity: 1, offset: 0.72 }, { opacity: 1 }], { duration: T, easing: 'linear', fill: 'forwards' }, 'fade');
     if (editor) play(editor, [{ opacity: 1 }, { opacity: 1, offset: 0.22 }, { opacity: 0, offset: 0.62 }, { opacity: 0 }], { duration: T, easing: 'linear', fill: 'forwards' }, 'in');
     play(layer, [{ opacity: 1 }, { opacity: 1, offset: 0.74 }, { opacity: 0 }], { duration: T, easing: 'linear', fill: 'forwards' }, 'hold');
-    setTimeout(() => showCard(card), Math.round(T * 0.6));
+    landing = card;
+    setTimeout(() => { if (landing === card) landing = null; showCard(card); }, Math.round(T * 0.6));
     return T + 30;
   }
   if (card && M()) {

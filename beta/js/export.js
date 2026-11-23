@@ -179,7 +179,8 @@ V.exporter = (() => {
   /* The notes `ids` (or a folder, `folderId`, with the folders inside it) as a ZIP: { name, blob, type, notes, locked,
      skipped }. `onFile(n, of)` hears each picture or file fetched. Locked notes, templates and the Trash are left out
      (`locked` counts the locked ones); a folder's archived notes go in an "Archived" folder of its own. */
-  async function zipOf({ ids = null, folderId = null, type = 'txt', onFile = null } = {}) {
+  // (`keep`: which notes may go in; Chat's export_notes leaves friends' feedback out, js/chattools.js, 1.22.6)
+  async function zipOf({ ids = null, folderId = null, type = 'txt', onFile = null, keep = null } = {}) {
     let root;
     let notes;
     let dirOf;
@@ -201,6 +202,7 @@ V.exporter = (() => {
       notes = (ids || []).map((id) => V.data.notes.get(id)).filter((n) => n && !n._purge);
       dirOf = () => root;
     }
+    if (keep) notes = notes.filter((n) => keep(n));
     notes.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || '') || String(a.id).localeCompare(String(b.id)));
     const locked = notes.filter((n) => n.locked).length;
     notes = notes.filter((n) => !n.locked);

@@ -48,7 +48,8 @@ function paint() {
     sheet.id = 'g-fly-rules';
     document.head.appendChild(sheet);
   }
-  sheet.textContent = [...rules.values()].join('\n');
+  // (in @layer force, with the stylesheets' own !important rules: an unlayered !important would lose to every layered one)
+  sheet.textContent = rules.size ? `@layer force {\n${[...rules.values()].join('\n')}\n}` : '';
 }
 
 const zoomOf = () => { const b = document.body; return b && b.offsetWidth ? b.getBoundingClientRect().width / b.offsetWidth || 1 : 1; };
@@ -323,7 +324,7 @@ function chatBefore() {
   const key = `chat:${Date.now().toString(36)}`;
   const old = [...had].map((id) => `[data-turn="${CSS.escape(id)}"]`).join(', ');
   // (any turn drawn from now on that wasn't there: the bubble and, under it, "Thinking...", until the words have landed)
-  const flight = prepare({ box, key, hidden: `html[data-look="glass"] .chat-app .chat-thread > .chat-turn${old ? `:not(${old})` : ''} > :is(.chat-you, .chat-claude)`,
+  const flight = prepare({ box, key, hidden: `html .chat-app .chat-thread > .chat-turn${old ? `:not(${old})` : ''} > :is(.chat-you, .chat-claude)`,
     clip: () => box.closest('.chat-box') || box });
   if (!flight) return;
   let turnId = '';
@@ -341,7 +342,7 @@ function chatBefore() {
       if (!turn) return null;
       if (!turnId) {
         turnId = turn.dataset.turn;
-        hide(key, `html[data-look="glass"] .chat-turn[data-turn="${CSS.escape(turnId)}"] > :is(.chat-you, .chat-claude) { opacity: 0 !important; }`);
+        hide(key, `html .chat-turn[data-turn="${CSS.escape(turnId)}"] > :is(.chat-you, .chat-claude) { opacity: 0 !important; }`);
       }
       return turn.querySelector(':scope > .chat-you .chat-you-text');
     }, () => box.value.trim() === text, () => {
@@ -374,7 +375,7 @@ function shareBefore() {
   const key = `share:${Date.now().toString(36)}`;
   const keep = [...had].filter(Boolean).map((id) => `:not([data-id="${CSS.escape(id)}"], [data-group="${CSS.escape(id)}"])`).join('');
   // (only the row's words: the row itself rises in round them, glass/share.js)
-  const flight = prepare({ box, key, hidden: `html[data-look="glass"] .view[data-tab=send] .transfers > .transfer${keep} .t-name` });
+  const flight = prepare({ box, key, hidden: `html .view[data-tab=send] .transfers > .transfer${keep} .t-name` });
   if (!flight) return;
   const rowOf = () => {
     const now = document.querySelector('.view[data-tab=send] .transfers');

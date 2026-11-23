@@ -444,6 +444,9 @@ V.subs = (() => {
     if (!on()) { saysOff(); return; }
     const today = V.today();
     const was = sub ? rolled(sub, today) : null;
+    // (1.22.6, N18) A new one's id is made once, as the sheet opens: Save again after a save whose answer came too late
+    // (the cloud had it) writes that same one, never a second.
+    const id = was ? was.id : V.uuid();
     const lastCurrency = (() => { const all = stored(); return all.length ? all[all.length - 1].currency : 'CAD'; })();
     const input = (attrs) => V.h('input.field.sub-field', { autocomplete: 'off', ...attrs });
     const name = input({ type: 'text', value: was ? was.name : '', placeholder: 'Spotify, Higgsfield...', maxlength: String(NAME_MOST),
@@ -489,7 +492,7 @@ V.subs = (() => {
       if (words.link && !safeLink(words.link)) return 'The link has to start with https://';
       const [n, every] = often.value.split(' ');
       const keepDay = was && was.next === next.value ? was.day : V.parseDate(next.value).getDate();
-      return { ...(was || {}), id: was ? was.id : V.uuid(), name: words.name, price: amount, currency: currency.value,
+      return { ...(was || {}), id, name: words.name, price: amount, currency: currency.value,
         every, n: Number(n), next: next.value, day: keepDay, trial: trial.checked, remind_days: Number(remind.value),
         link: safeLink(words.link) || '', note: words.note.slice(0, NOTE_MOST), paused: paused.checked };
     }
@@ -514,7 +517,10 @@ V.subs = (() => {
       problem.textContent = '';
       const made = read();
       if (typeof made === 'string') { problem.textContent = made; return true; }
-      if (!was && stored().length >= MOST) { problem.textContent = `Wefty keeps up to ${MOST} subscriptions.`; return true; }
+      if (!was && stored().length >= MOST && !stored().some((s) => s.id === id)) {
+        problem.textContent = `Wefty keeps up to ${MOST} subscriptions.`;
+        return true;
+      }
       try {
         await save(made);
         close();

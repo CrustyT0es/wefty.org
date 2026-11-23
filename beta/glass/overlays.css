@@ -1,6 +1,7 @@
+@layer glass {
 /* Wefty 2.0 "glass", area: Overlays. This file belongs to the Overlays builder; nobody else edits it.
    What floats over the app (util.js's V.sheet, V.menu, V.toast, V.confirm, the news pop-ups, the home screen popup): sheets, menus, toasts and dialogs beyond the generic look glass.css gives them.
-   Rules (vault/web/glass/README.md has the rest): every rule starts with html[data-look="glass"]; use the tokens in
+   Rules (vault/web/glass/README.md has the rest): every rule starts at html, in @layer glass; use the tokens in
    glass.css (--g-*, and the app's own names, which glass redefines); only transform and opacity animate; call
    V.motion's helpers instead of writing your own; nothing here changes the classic look.
 
@@ -10,432 +11,344 @@
    announcements, the drag ghost and the drop line, and the form controls inside it all (fields, ticks, switches,
    segmented controls with the sliding highlight, selects, dates and times). Lite and calm are at the end. */
 
-/* ================================================================== the floating surface */
-
-html[data-look="glass"] {
-  /* what menus, message cards, the tour card and the drag ghost are made of: glass with no blur (blur is for bars and
-     sheets), so it is solid (no words from behind show through) */
-  --g-float: light-dark(rgb(252, 250, 255), rgb(35, 27, 66));
-  --g-lift-soft: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .085));
-  --g-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' viewBox='0 0 12 6'%3E%3Cpath d='M0 3Q3 .2 6 3T12 3' fill='none' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E");
-  --g-tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E");
-}
-html[data-look="glass"][data-black] { --g-float: light-dark(rgb(252, 250, 255), rgb(19, 15, 36)); }
-
 /* ================================================================== sheets and dialogs */
 
 /* The scrim fades; the panel is glass (the blur is glass.css's) and springs up. */
-html[data-look="glass"] .layer:not(.menu-layer) { transition: opacity .26s var(--g-ease); }
-html[data-look="glass"] .layer.leaving:not(.menu-layer) { transition-duration: .17s; }
 /* (A sheet on its way out still takes presses for those 180 ms, as in the classic look and as a phone's own sheets do: a
    double tap on one of its buttons never lands on the card or the tab under it.) */
-html[data-look="glass"] .sheet {
-  background: light-dark(rgba(250, 247, 255, .88), rgba(30, 22, 58, .8));
-  box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 -18px 50px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .55));
-}
-html[data-look="glass"][data-black] .sheet { background: light-dark(rgba(250, 247, 255, .9), rgba(14, 11, 26, .9)); }
 /* ---- the 2.0 hotfix (the owner: "for pullouts and stuff they don't feel insanely fluid"). A sheet is opaque glass: nothing of the
    page shows through it (the scrim dims what is behind), and with no backdrop blur there is nothing to work out again in each
    frame while it rises, is dragged or goes. It rises on a real spring (stiffness 520, damping 36: a touch past, then still),
    goes quicker than it came, and a pull on it is taken over from wherever it is (glass/overlays.js, V.motion.spring). On a
    phone a filler of its own colour under it covers the touch past the top. */
-html[data-look="glass"] {
-  --g-sheet: light-dark(rgb(250, 247, 255), rgb(30, 22, 58));
-  --g-sheet-spring: linear(0, 0.0766, 0.2216, 0.3858, 0.5413, 0.6746, 0.7812, 0.8617, 0.9195, 0.9588, 0.984, 0.999, 1.0069, 1.0102, 1.0108, 1.0099, 1.0083, 1.0065, 1.0048, 1.0034, 1.0023, 1.0014, 1.0008, 1.0004, 1.0002, 1, 1);
-}
-html[data-look="glass"][data-black] { --g-sheet: light-dark(rgb(250, 247, 255), rgb(14, 11, 26)); }
-html[data-look="glass"] .sheet { background: var(--g-sheet); -webkit-backdrop-filter: none; backdrop-filter: none; transition: transform .433s var(--g-sheet-spring); }
-html[data-look="glass"][data-black] .sheet { background: var(--g-sheet); }
+html .sheet { transition: transform .433s var(--g-sheet-spring); }
 /* (round 4) With bigger text (the page zoomed), 88dvh is 88 % of the screen times the zoom: a long sheet ran past the top. The
    layer is the screen in the page's own pixels, so a sheet is at most its height less a little room at the top. */
-html[data-look="glass"] .sheet:not(.help-sheet):not(.hs-sheet) { max-height: min(88dvh, calc(100% - 24px - var(--safe-top, 0px))); }  /* (Help is the whole screen; a hint sheet keeps its own) */
-html[data-look="glass"] .layer.leaving .sheet { transition: transform .17s cubic-bezier(.4, 0, .9, .45); }
-@media (max-width: 699px) {
-  html[data-look="glass"] .sheet:not(.help-sheet) {
-    box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 -18px 50px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .55)), 0 48px 0 0 var(--g-sheet);
-  }
-}
-html[data-look="glass"].lite .sheet { background: var(--g-sheet); transition-duration: .2s; transition-timing-function: var(--g-ease); }
-html[data-look="glass"] .sheet::before { width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; }
-html[data-look="glass"] .sheet.g-dragging::before { background: light-dark(rgba(110, 80, 200, .55), rgba(255, 255, 255, .5)); }
-html[data-look="glass"] .sheet-head h2 { font: 700 21px/28px var(--font-display, var(--font)); letter-spacing: -.02em; }
-html[data-look="glass"] .sheet-head .icon-btn { border-radius: 15px; }
-html[data-look="glass"] .sheet-body > p { color: var(--text-2); }
-html[data-look="glass"] .sheet-actions { border-top: 0; position: relative; }
-html[data-look="glass"] .sheet-actions::before {  /* the line above the buttons is a thread that fades out at both ends */
+html.lite .sheet { transition-duration: .2s; transition-timing-function: var(--g-ease); }
+html .sheet.g-dragging::before { background: light-dark(rgba(110, 80, 200, .55), rgba(255, 255, 255, .5)); }
+html .sheet-body > p { color: var(--text-2); }
+html .sheet-actions { border-top: 0; position: relative; }
+html .sheet-actions::before {  /* the line above the buttons is a thread that fades out at both ends */
   content: ""; position: absolute; left: 20px; right: 20px; top: 0; height: 1px; pointer-events: none;
   background: linear-gradient(90deg, transparent, var(--line-strong) 14%, var(--line-strong) 86%, transparent);
 }
-/* A dialog that asks before something is deleted: the light along its edge is red, and its one button is the red one. */
-html[data-look="glass"] .sheet:has(.sheet-actions .btn.danger)::after {
-  background: linear-gradient(140deg, light-dark(rgba(194, 51, 74, .7), rgba(255, 163, 163, .55)), rgba(255, 255, 255, .05) 36%, rgba(255, 255, 255, .03) 64%, light-dark(rgba(194, 51, 74, .4), rgba(255, 120, 140, .4)));
-}
-html[data-look="glass"] .sheet:has(.sheet-actions .btn.danger) { box-shadow: inset 0 1px 0 var(--g-hi), 0 -18px 50px light-dark(rgba(176, 42, 64, .2), rgba(4, 2, 14, .55)); }
 
 /* The handle you pull down (overlays.js adds it): a phone's sheet goes with the finger. Under 700 px only. */
-html[data-look="glass"] .g-grab { display: none; }
+html .g-grab { display: none; }
 @media (max-width: 699px) {
-  html[data-look="glass"] .g-grab { display: block; position: absolute; left: 0; right: 60px; top: 0; height: 26px; z-index: 2; touch-action: none; border-radius: inherit; }
-  html[data-look="glass"] .sheet-head { touch-action: none; }
-  html[data-look="glass"] .sheet.g-dragging { transition: none; will-change: transform; }
-  html[data-look="glass"] .sheet.g-dragging * { -webkit-user-select: none; user-select: none; }
+  html .g-grab { display: block; position: absolute; left: 0; right: 60px; top: 0; height: 26px; z-index: 2; touch-action: none; border-radius: inherit; }
+  html .sheet-head { touch-action: none; }
+  html .sheet.g-dragging { transition: none; will-change: transform; }
+  html .sheet.g-dragging * { -webkit-user-select: none; user-select: none; }
 }
-@media (hover: hover) and (pointer: fine) and (max-width: 699px) { html[data-look="glass"] .g-grab { cursor: grab; } }
+@media (hover: hover) and (pointer: fine) and (max-width: 699px) { html .g-grab { cursor: grab; } }
 /* (the rows inside rise in by V.motion.enter, which is the board's .si) */
 
 /* ================================================================== menus */
 
 /* A menu pops out of the thing that opened it (overlays.js sets where from and plays it: a CSS animation would be in
    the way when util.js measures the menu to place it). */
-html[data-look="glass"] .menu {
-  background: var(--g-float); border-radius: 20px; padding: 6px; animation: none;
-  box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-3);
-}
-html[data-look="glass"] .menu.g-popping { will-change: transform, opacity; }
-html[data-look="glass"] .menu-item {
-  position: relative; isolation: isolate; border-radius: 14px; min-height: 42px;
+html .menu { animation: none; }
+html .menu.g-popping { will-change: transform, opacity; }
+html .menu-item {
+  position: relative; isolation: isolate;
   transition: transform var(--d-press) var(--g-ease);
 }
 /* The light under an item: a layer that fades in (a colour or shadow that changed would repaint). */
-html[data-look="glass"] .menu-item::before {
+html .menu-item::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   background: var(--g-lift-soft); opacity: 0; transition: opacity .16s var(--g-ease);
 }
-html[data-look="glass"] .menu-item:hover, html[data-look="glass"] .menu-item:focus { background: transparent; }
-html[data-look="glass"] .menu-item:hover::before, html[data-look="glass"] .menu-item:focus::before { opacity: 1; }
-html[data-look="glass"] .menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; box-shadow: none; }
-html[data-look="glass"] .menu-item:active { transform: scale(.975); }
-html[data-look="glass"] .menu-item:hover .icon, html[data-look="glass"] .menu-item:focus .icon { color: var(--accent-ink); }
-html[data-look="glass"] .menu-item.danger::before { background: var(--danger-soft); }
-html[data-look="glass"] .menu-item.danger:hover .icon, html[data-look="glass"] .menu-item.danger:focus .icon { color: var(--danger); }
-html[data-look="glass"] .menu-item:disabled::before { display: none; }
-html[data-look="glass"] .menu-switch .menu-state { margin-left: auto; padding-left: 14px; color: var(--muted); font-weight: 500; }
-html[data-look="glass"] .menu-switch[aria-checked="true"] .menu-state { color: var(--accent-ink); font-weight: 600; }
+html .menu-item:focus { background: transparent; }
+@media (hover: hover) and (pointer: fine) { html .menu-item:hover { background: transparent; } }
+html .menu-item:focus::before { opacity: 1; }
+@media (hover: hover) and (pointer: fine) { html .menu-item:hover::before { opacity: 1; } }
+html .menu-item:focus .icon { color: var(--accent-ink); }
+@media (hover: hover) and (pointer: fine) { html .menu-item:hover .icon { color: var(--accent-ink); } }
+html .menu-item.danger:focus .icon { color: var(--danger); }
+@media (hover: hover) and (pointer: fine) { html .menu-item.danger:hover .icon { color: var(--danger); } }
+html .menu-item:disabled::before { display: none; }
 /* The line between groups is a faint thread (a little wave, repeated), not a ruler. */
-html[data-look="glass"] .menu-sep {
+html .menu-sep {
   height: 6px; margin: 4px 10px; background: var(--thread); opacity: .9;
   -webkit-mask: var(--g-wave) repeat-x center / 12px 6px; mask: var(--g-wave) repeat-x center / 12px 6px;
 }
-html[data-look="glass"] .menu-head .av .dot { box-shadow: 0 0 0 2.5px var(--g-float); }
-@media (pointer: coarse) { html[data-look="glass"] .menu-item { min-height: 46px; } }
+html .menu-head .av .dot { box-shadow: 0 0 0 2.5px var(--g-float); }
 
 /* ================================================================== toasts and the message card */
 
-html[data-look="glass"] #toasts { gap: 10px; width: min(calc(100% - 32px), 440px); }  /* (100%, not 100vw: with the page zoomed, vw is the zoomed page's) */
-@media (min-width: 900px) { html[data-look="glass"] #toasts { width: 400px; } }
-/* (round-4 merge: on a phone the full-screen note asks its question (the note-taker's "Set a reminder?" right after "Notes
-   made") just above its tools, where a toast comes in, and the toast hid the question: while one is asked, toasts come in
-   at the top, as they do with a sheet up) */
-@media (max-width: 899px) {
-  html[data-look="glass"] #toasts.g-over-ask { top: calc(10px + var(--safe-top)); bottom: auto; }  /* (glass/shell.js sets it) */
+html #toasts { gap: 10px; width: min(calc(100% - 32px), 440px); }  /* (100%, not 100vw: with the page zoomed, vw is the zoomed page's) */
+@media (min-width: 900px) { html #toasts { width: 400px; } }
+html .toast {
+  padding: 8px 8px 8px 18px; gap: 10px;
 }
-html[data-look="glass"] .toast {
-  min-height: 52px; padding: 8px 8px 8px 18px; border-radius: 22px; gap: 10px;
-  /* (filled backwards: once it has risen, nothing holds its transform, so a swipe and its leaving can move it) */
-  animation: g-toast-in .46s var(--g-slide) backwards;
-}
-html[data-look="glass"] .toast .icon { color: var(--toast-ok); }
-html[data-look="glass"] .toast.err .icon { color: var(--toast-danger); }
-html[data-look="glass"] .toast.leaving { transition: opacity .17s var(--g-in), transform .17s var(--g-in); transform: translateY(10px) scale(.96); }
-html[data-look="glass"] .toast-action {
-  position: relative; isolation: isolate; min-height: 38px; padding: 0 14px; border-radius: 14px; color: var(--toast-action);
-  background: rgba(255, 255, 255, .1); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
+html .toast .icon { color: var(--toast-ok); }
+html .toast.err .icon { color: var(--toast-danger); }
+html .toast-action {
+  position: relative; isolation: isolate;
   transition: transform var(--d-press) var(--g-ease);
 }
-html[data-look="glass"] .toast-action::before {
+html .toast-action::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: rgba(255, 255, 255, .12); opacity: 0;
   transition: opacity .16s var(--g-ease);
 }
-html[data-look="glass"] .toast-action:hover { background: rgba(255, 255, 255, .1); }
-html[data-look="glass"] .toast-action:hover::before { opacity: 1; }
-html[data-look="glass"] .toast-action:active { transform: scale(.94); }
+@media (hover: hover) and (pointer: fine) { html .toast-action:hover::before { opacity: 1; } }
 
 /* The message card (V.messageCard, used for errors that need more than a line): an icon chip, a bold first line, one plain
    sentence, one purple button, a close mark. A toast in #toasts, so a screen reader and every old test still find it. */
-html[data-look="glass"] .toast.msg-card {
+html .toast.msg-card {
   display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: start; gap: 4px 12px;
-  padding: 14px 6px 14px 14px; border-radius: 24px; background: var(--g-float); color: var(--text);
-  box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-3);
+  padding: 14px 6px 14px 14px; border-radius: 24px; color: var(--text);
 }
-html[data-look="glass"] .toast.msg-card::before {  /* the light along its edge */
+html .toast.msg-card::before {  /* the light along its edge */
   content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
 }
-html[data-look="glass"] .toast.msg-card { position: relative; }
-html[data-look="glass"] .mc-chip {
+html .toast.msg-card { position: relative; }
+html .mc-chip {
   display: grid; place-items: center; width: 44px; height: 44px; border-radius: 15px; background: var(--accent-soft); color: var(--accent-ink);
   box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line);
 }
-html[data-look="glass"] .toast.err .mc-chip { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .3)); }
-html[data-look="glass"] .toast.err.warn .mc-chip { background: var(--warn-soft); color: var(--warn); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px light-dark(rgba(154, 85, 5, .3), rgba(255, 201, 106, .32)); }
-html[data-look="glass"] .toast.msg-card .mc-chip .icon { width: 22px; height: 22px; color: inherit; }
-html[data-look="glass"] .toast.msg-card .mc-chip { animation: g-pop .52s var(--g-spring) .12s backwards; }  /* the chip pops in as the card settles */
-html[data-look="glass"] .mc-body { display: grid; gap: 4px; min-width: 0; padding-top: 1px; }
-html[data-look="glass"] .mc-title { font: 700 16px/22px var(--font-display, var(--font)); letter-spacing: -.01em; color: var(--text); overflow-wrap: anywhere; }
-html[data-look="glass"] .toast.msg-card .mc-text { display: block; flex: none; padding: 0; color: var(--text-2); font: 400 14.5px/21px var(--font); overflow-wrap: anywhere; }
-html[data-look="glass"] .mc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
-html[data-look="glass"] .toast.msg-card .toast-action {
-  min-height: 44px; padding: 0 18px; border-radius: 15px; color: var(--text-2); background: transparent; box-shadow: none; font: 600 14.5px/1 var(--font);
+html .toast.err .mc-chip { background: var(--danger-soft); color: var(--danger); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px light-dark(rgba(176, 42, 64, .3), rgba(255, 163, 163, .3)); }
+html .toast.err.warn .mc-chip { background: var(--warn-soft); color: var(--warn); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px light-dark(rgba(154, 85, 5, .3), rgba(255, 201, 106, .32)); }
+html .toast.msg-card .mc-chip .icon { width: 22px; height: 22px; color: inherit; }
+html .toast.msg-card .mc-chip { animation: g-pop .52s var(--g-spring) .12s backwards; }  /* the chip pops in as the card settles */
+html .mc-body { display: grid; gap: 4px; min-width: 0; padding-top: 1px; }
+html .mc-title { font: 700 16px/22px var(--font-display, var(--font)); letter-spacing: -.01em; color: var(--text); overflow-wrap: anywhere; }
+html .toast.msg-card .mc-text { display: block; flex: none; padding: 0; color: var(--text-2); font: 400 14.5px/21px var(--font); overflow-wrap: anywhere; }
+html .mc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+html .toast.msg-card .toast-action {
+  min-height: 44px; padding: 0 18px; border-radius: 15px; color: var(--text-2); font: 600 14.5px/1 var(--font);
 }
-html[data-look="glass"] .toast.msg-card .toast-action::before { background: var(--g-lift-soft); }
-html[data-look="glass"] .toast.msg-card .toast-help.mc-more { padding: 0 12px; margin-left: -6px; }
-html[data-look="glass"] .toast.msg-card .mc-go {  /* the one purple button */
+html .toast.msg-card .toast-action::before { background: var(--g-lift-soft); }
+html .toast.msg-card .toast-help.mc-more { padding: 0 12px; margin-left: -6px; }
+html .toast.msg-card .mc-go {  /* the one purple button */
   color: var(--on-primary); background: var(--g-gloss), var(--g-grad); box-shadow: var(--g-primary-depth);  /* (round-3 merge: glass.css's one primary) */
 }
-html[data-look="glass"] .toast.msg-card .mc-go::before { background: rgba(255, 255, 255, .14); }
-html[data-look="glass"] .toast.msg-card .mc-x { margin: -2px 0 0; width: 44px; height: 44px; color: var(--muted); }
-html[data-look="glass"] .toast.msg-card .mc-x .icon { width: 18px; height: 18px; color: inherit; }
-html[data-look="glass"] .toast.msg-card .mc-x:hover { color: var(--text); }
+html .toast.msg-card .mc-go::before { background: rgba(255, 255, 255, .14); }
+html .toast.msg-card .mc-x { margin: -2px 0 0; width: 44px; height: 44px; color: var(--muted); }
+html .toast.msg-card .mc-x .icon { width: 18px; height: 18px; color: inherit; }
+@media (hover: hover) and (pointer: fine) { html .toast.msg-card .mc-x:hover { color: var(--text); } }
 @media (max-width: 380px) {
-  html[data-look="glass"] .toast.msg-card { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 4px 10px; padding-left: 12px; }
-  html[data-look="glass"] .mc-chip { width: 40px; height: 40px; border-radius: 13px; }
+  html .toast.msg-card { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 4px 10px; padding-left: 12px; }
+  html .mc-chip { width: 40px; height: 40px; border-radius: 13px; }
 }
 /* the card from V.notice (a picture that arrived, a clip that couldn't be copied): the same glass */
-html[data-look="glass"] .notice {
-  background: var(--g-float); border: 0; border-radius: 24px; box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-3);
-  animation: g-toast-in .46s var(--g-slide) backwards;
+html .notice {
+  border-radius: 24px;
 }
-html[data-look="glass"] .notice.leaving { transition: opacity .17s var(--g-in), transform .17s var(--g-in); transform: translateY(10px) scale(.96); }
-html[data-look="glass"] .notice-picture { border-radius: 16px; background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--g-ring); }
+html .notice-picture { border-radius: 16px; background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--g-ring); }
 
 /* ================================================================== Show me */
 
 /* The ring round the real thing: a steady soft glow and a ripple that leaves it, twice a pulse (transform and opacity only;
    the classic ring's breathing shadow is a paint every frame). */
-html[data-look="glass"] .showme-ring {
+html .showme-ring {
   border: 3px solid var(--accent); animation: none; transition: opacity .22s var(--g-ease);
   box-shadow: 0 0 0 1px light-dark(rgba(255, 255, 255, .7), rgba(11, 9, 24, .8)), 0 0 20px 2px var(--g-glow), inset 0 0 16px var(--accent-wash);
 }
-html[data-look="glass"] .showme-ring::before, html[data-look="glass"] .showme-ring::after {
+html .showme-ring::before, html .showme-ring::after {
   content: ""; position: absolute; inset: -6px; border-radius: inherit; border: 2px solid var(--accent); opacity: 0; pointer-events: none;
 }
-html[data-look="glass"] .showme-ring::before { animation: g-ring-ripple 1.7s var(--g-ease) infinite; }
-html[data-look="glass"] .showme-ring::after { animation: g-ring-ripple 1.7s var(--g-ease) .85s infinite; }
+html .showme-ring::before { animation: g-ring-ripple 1.7s var(--g-ease) infinite; }
+html .showme-ring::after { animation: g-ring-ripple 1.7s var(--g-ease) .85s infinite; }
 @keyframes g-ring-ripple { 0% { opacity: .8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.08, 1.22); } }
-html[data-look="glass"].lite .showme-ring::after { display: none; }
-html[data-look="glass"].lite .showme-ring { box-shadow: 0 0 0 1px light-dark(rgba(255, 255, 255, .7), rgba(11, 9, 24, .8)); }
+html.lite .showme-ring::after { display: none; }
+html.lite .showme-ring { box-shadow: 0 0 0 1px light-dark(rgba(255, 255, 255, .7), rgba(11, 9, 24, .8)); }
 
 /* ================================================================== the tour */
 
-html[data-look="glass"] .tour { animation: g-fade-in .26s var(--g-ease) backwards; }
-html[data-look="glass"] .tour-hole {
+html .tour { animation: g-fade-in .26s var(--g-ease) backwards; }
+html .tour-hole {
   box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px light-dark(rgba(124, 91, 224, .22), rgba(178, 164, 238, .22)), 0 0 28px 4px var(--g-glow),
     0 0 0 200vmax light-dark(rgba(14, 8, 38, .52), rgba(3, 2, 10, .74));
 }
-html[data-look="glass"] .tour-card, html[data-look="glass"] .tour-offer {
+html .tour-card, html .tour-offer {
   border: 0; border-radius: 24px; background: var(--g-float); box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-3);
 }
-html[data-look="glass"] .tour-card::before, html[data-look="glass"] .tour-offer::before {
+html .tour-card::before, html .tour-offer::before {
   content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--g-edge); pointer-events: none;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
 }
-html[data-look="glass"] .tour-card { animation: g-card-in .42s var(--g-spring) backwards; }
-html[data-look="glass"] .tour-offer { animation: g-card-in .46s var(--g-slide) backwards; }
-html[data-look="glass"] .tour-title { font: 700 18px/25px var(--font-display, var(--font)); letter-spacing: -.01em; }
-html[data-look="glass"] .tour-count { color: var(--muted); }
-html[data-look="glass"] .tour-offer-ic { border-radius: 13px; background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+html .tour-card { animation: g-card-in .42s var(--g-spring) backwards; }
+html .tour-offer { animation: g-card-in .46s var(--g-slide) backwards; }
+html .tour-title { font: 700 18px/25px var(--font-display, var(--font)); letter-spacing: -.01em; }
+html .tour-count { color: var(--muted); }
+html .tour-offer-ic { border-radius: 13px; background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
 @keyframes g-card-in { from { opacity: 0; transform: translateY(12px) scale(.96); } }
 
 /* ================================================================== announcements (the pop-ups for everyone) and the home screen card */
 
-html[data-look="glass"] .news-option {
+html .news-option {
   border: 0; border-radius: 16px; background: var(--field);
   box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .08)), inset 0 0 0 1px var(--line);
   transition: transform var(--d-press) var(--g-ease);
 }
-html[data-look="glass"] .news-option:hover:not(:disabled) { background: var(--g-lift-soft); }
-html[data-look="glass"] .news-option:active:not(:disabled) { transform: scale(.98); }
-html[data-look="glass"] .news-option.voted { background: var(--accent-wash); box-shadow: inset 0 0 0 1.5px var(--accent); }
-html[data-look="glass"] .news-bar { background: var(--line); }
-html[data-look="glass"] .news-bar i { background: var(--g-grad); }
-html[data-look="glass"] .news-note { border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
-html[data-look="glass"] .news-pick-item:hover { background: var(--g-lift-soft); }
-html[data-look="glass"] .hs-step { border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
-html[data-look="glass"] .hs-pic { border-radius: 14px; box-shadow: inset 0 0 0 1px var(--accent-line); }
-html[data-look="glass"] .hs-phone { border-radius: 22px; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-soft); }
-html[data-look="glass"] .hs-arrow { background: var(--g-float); box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-2); }
+@media (hover: hover) and (pointer: fine) { html .news-option:hover:not(:disabled) { background: var(--g-lift-soft); } }
+html .news-option.voted { background: var(--accent-wash); box-shadow: inset 0 0 0 1.5px var(--accent); }
+html .news-bar { background: var(--line); }
+html .news-bar i { background: var(--g-grad); }
+html .news-note { border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
+@media (hover: hover) and (pointer: fine) { html .news-pick-item:hover { background: var(--g-lift-soft); } }
+html .hs-step { border: 0; border-radius: 18px; background: var(--g-fill); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring); }
+html .hs-pic { border-radius: 14px; box-shadow: inset 0 0 0 1px var(--accent-line); }
+html .hs-phone { border-radius: 22px; box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-soft); }
+html .hs-arrow { background: var(--g-float); box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1px var(--g-ring), var(--shadow-2); }
 
 /* ================================================================== dragging */
 
-html[data-look="glass"] .drag-ghost {
+html .drag-ghost {
   height: 44px; border: 0; border-radius: 18px; background: var(--g-float);
   box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1.5px var(--accent-line), 0 16px 34px light-dark(rgba(76, 52, 160, .3), rgba(4, 2, 14, .6)), 0 0 22px var(--g-glow);
   /* (`scale` is its own property: drag.js moves the ghost with transform, and the two never fight) */
   animation: g-ghost-in .26s var(--g-spring) backwards;
 }
 @keyframes g-ghost-in { from { scale: .84; opacity: 0; } }
-html[data-look="glass"] .drag-ghost.refused { box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1.5px var(--danger), 0 16px 34px rgba(4, 2, 14, .5); }
-html[data-look="glass"] .drag-count { background: var(--g-grad); color: #fff; }
-html[data-look="glass"] .drop-line { background: linear-gradient(90deg, var(--accent), var(--accent-ink)); box-shadow: 0 0 12px var(--g-glow), 0 0 0 1px light-dark(rgba(255, 255, 255, .5), rgba(11, 9, 24, .5)); }
-html[data-look="glass"] .drop-line::before { background: var(--bg); border-color: var(--accent); box-shadow: 0 0 10px var(--g-glow); }
-html[data-look="glass"] :is(.nav-item, .chip, .crumb, .subfolder, .arrange-row, .arrange-end, .nav-heading, .wday).drop-on {
+html .drag-ghost.refused { box-shadow: inset 0 1px 0 var(--g-hi), 0 0 0 1.5px var(--danger), 0 16px 34px rgba(4, 2, 14, .5); }
+html .drag-count { background: var(--g-grad); color: #fff; }
+html .drop-line { background: linear-gradient(90deg, var(--accent), var(--accent-ink)); box-shadow: 0 0 12px var(--g-glow), 0 0 0 1px light-dark(rgba(255, 255, 255, .5), rgba(11, 9, 24, .5)); }
+html .drop-line::before { background: var(--bg); border-color: var(--accent); box-shadow: 0 0 10px var(--g-glow); }
+html :is(.nav-item, .chip, .crumb, .subfolder, .arrange-row, .arrange-end, .nav-heading, .wday).drop-on {
   box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 18px var(--g-glow);
 }
-html[data-look="glass"] :is(.nav-item, .chip, .crumb, .subfolder, .arrange-row, .arrange-end, .wday).drop-no {
+html :is(.nav-item, .chip, .crumb, .subfolder, .arrange-row, .arrange-end, .wday).drop-no {
   box-shadow: inset 0 0 0 1.5px var(--danger);
 }
-html[data-look="glass"] .drag-held { scale: 1.03; transform: none; box-shadow: var(--shadow-3); transition: scale var(--d-press) var(--g-ease); }
-html[data-look="glass"] .drag-source { opacity: .4; }
+html .drag-held { scale: 1.03; transform: none; box-shadow: var(--shadow-3); transition: scale var(--d-press) var(--g-ease); }
+html .drag-source { opacity: .4; }
 
 /* ================================================================== form controls */
 
-html[data-look="glass"] input[type="checkbox"], html[data-look="glass"] input[type="radio"], html[data-look="glass"] input[type="range"] { accent-color: var(--primary); }
-html[data-look="glass"] .label { color: var(--text-2); }
-html[data-look="glass"] .field::placeholder { color: var(--placeholder); opacity: 1; }
-html[data-look="glass"] textarea.field { border-radius: 16px; }
-html[data-look="glass"] .field[type="date"]::-webkit-calendar-picker-indicator, html[data-look="glass"] .field[type="time"]::-webkit-calendar-picker-indicator {
+html input[type="checkbox"], html input[type="radio"], html input[type="range"] { accent-color: var(--primary); }
+html .field[type="date"]::-webkit-calendar-picker-indicator, html .field[type="time"]::-webkit-calendar-picker-indicator {
   opacity: .7; border-radius: 8px; cursor: pointer; padding: 3px; transition: opacity .16s var(--g-ease);
 }
-html[data-look="glass"] .field[type="date"]::-webkit-calendar-picker-indicator:hover, html[data-look="glass"] .field[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
-html[data-look="glass"] .field:disabled { opacity: .5; }
+@media (hover: hover) and (pointer: fine) { html .field[type="date"]::-webkit-calendar-picker-indicator:hover, html .field[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; } }
 /* The date and time boxes: the part being typed is lit in the accent, not the browser's blue, and the box keeps one ring. */
-html[data-look="glass"] .field::-webkit-datetime-edit-fields-wrapper { padding: 0; }
-html[data-look="glass"] .field::-webkit-datetime-edit-month-field:focus, html[data-look="glass"] .field::-webkit-datetime-edit-day-field:focus, html[data-look="glass"] .field::-webkit-datetime-edit-year-field:focus, html[data-look="glass"] .field::-webkit-datetime-edit-hour-field:focus, html[data-look="glass"] .field::-webkit-datetime-edit-minute-field:focus, html[data-look="glass"] .field::-webkit-datetime-edit-second-field:focus, html[data-look="glass"] .field::-webkit-datetime-edit-ampm-field:focus {
+html .field::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+html .field::-webkit-datetime-edit-month-field:focus, html .field::-webkit-datetime-edit-day-field:focus, html .field::-webkit-datetime-edit-year-field:focus, html .field::-webkit-datetime-edit-hour-field:focus, html .field::-webkit-datetime-edit-minute-field:focus, html .field::-webkit-datetime-edit-second-field:focus, html .field::-webkit-datetime-edit-ampm-field:focus {
   background-color: var(--accent-soft); color: var(--text); border-radius: 5px; outline: none;
 }
-html[data-look="glass"] .field[type="date"]:focus-visible, html[data-look="glass"] .field[type="time"]:focus-visible { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 5px light-dark(rgba(124, 91, 224, .16), rgba(150, 108, 240, .2)); outline: none; }
 /* A drop-down (a select): the same glass as a box, its arrow a chevron in the words' colour. */
-html[data-look="glass"] select.field, html[data-look="glass"] .folder-pick {
-  appearance: none; -webkit-appearance: none; padding-right: 40px; cursor: pointer; border: 0; border-radius: 15px;
-  background-color: var(--field); background-repeat: no-repeat; background-position: right 14px center; background-size: 16px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b6490' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6.5 9.5 5.5 5.5 5.5-5.5'/%3E%3C/svg%3E");
-  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .08)), inset 0 0 0 1px var(--line);
-}
-html[data-look="glass"][data-theme="dark"] select.field, html[data-look="glass"][data-theme="dark"] .folder-pick {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c7bff0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6.5 9.5 5.5 5.5 5.5-5.5'/%3E%3C/svg%3E");
-}
-html[data-look="glass"] .folder-pick { padding-right: 34px; background-position: right 10px center; border-radius: 14px; }
-html[data-look="glass"] select.field option, html[data-look="glass"] .folder-pick option { background: var(--surface); color: var(--text); }
+html select.field, html .folder-pick { cursor: pointer; }
 
 /* A long menu on a phone, as a sheet (glass/overlays.js menuSheet, round 4): rows like a menu's, a little room between the
    groups, the on/off ones a real switch, the Trash last in red; the list scrolls inside the sheet with soft edges. */
-html[data-look="glass"] .g-msheet .sheet-body {
+html .g-msheet .sheet-body {
   overflow-y: auto; overscroll-behavior: contain; padding-block: 6px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
 }
-html[data-look="glass"] .g-msheet .g-msheet-list { position: static; display: grid; gap: 2px; margin: 0 -8px; padding: 0; min-width: 0; max-height: none; background: none; box-shadow: none; border: 0; border-radius: 0; animation: none; }
-html[data-look="glass"] .g-msheet-gap { height: 10px; }
-html[data-look="glass"] .g-msheet .g-msheet-item {
+html .g-msheet .g-msheet-list { position: static; display: grid; gap: 2px; margin: 0 -8px; padding: 0; min-width: 0; max-height: none; background: none; box-shadow: none; border: 0; border-radius: 0; animation: none; }
+html .g-msheet-gap { height: 10px; }
+html .g-msheet .g-msheet-item {
   position: relative; isolation: isolate; display: flex; align-items: center; gap: 14px; width: 100%; min-height: 50px; padding: 0 12px;
   border: 0; border-radius: 14px; background: transparent; color: var(--text); font: 500 16px/22px var(--font); text-align: left;
   transition: transform var(--d-press) var(--g-ease);
 }
-html[data-look="glass"] .g-msheet-item::before {
+html .g-msheet-item::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: var(--g-lift-soft); opacity: 0;
   transition: opacity .16s var(--g-ease);
 }
-html[data-look="glass"] .g-msheet-item:active::before, html[data-look="glass"] .g-msheet-item:focus-visible::before { opacity: 1; }
-html[data-look="glass"] .g-msheet-item:active { transform: scale(.98); }
-html[data-look="glass"] .g-msheet-item .icon { flex: none; width: 22px; height: 22px; color: var(--text-2); }
-html[data-look="glass"] .g-msheet-label { flex: 1; min-width: 0; }
-html[data-look="glass"] .g-msheet-item.danger { color: var(--danger); }
-html[data-look="glass"] .g-msheet-item.danger .icon { color: var(--danger); }
-html[data-look="glass"] .g-msheet-item.danger::before { background: var(--danger-soft); }
-html[data-look="glass"] .g-msheet-item:disabled { opacity: .45; }
-html[data-look="glass"] .g-msheet-switch { cursor: pointer; }
-html[data-look="glass"] .g-msheet-switch .switch { flex: none; }
-html[data-look="glass"].calm .g-msheet-item:active { transform: none; }
+html .g-msheet-item:focus-visible::before { opacity: 1; }
+html .g-msheet-item .icon { flex: none; width: 22px; height: 22px; color: var(--text-2); }
+html .g-msheet-label { flex: 1; min-width: 0; }
+html .g-msheet-item.danger { color: var(--danger); }
+html .g-msheet-item.danger .icon { color: var(--danger); }
+html .g-msheet-item.danger::before { background: var(--danger-soft); }
+html .g-msheet-item:disabled { opacity: .45; }
+html .g-msheet-switch { cursor: pointer; }
+html .g-msheet-switch .switch { flex: none; }
+
+/* The Trash stays in sight (2.0 "in sight"). A note's menu is 14 rows: on the owner's 320x610 phone the sheet shows 8 of
+   them and "Move to Trash" was 300 px under its foot with only a soft fade to say so; on their 1366x650 Chromebook the
+   popover cut it in half. A list's last row, when it is the red one, is held at the list's foot while the rest scrolls
+   under it (position: sticky, so a list that fits is exactly as it was): the rows dissolve above it into a cover of the
+   surface's own colour (::after, behind the row's own light), which also fills the padding under it. The list keeps that
+   much room at its foot for a row the keyboard brings into sight. And under a finger on a short screen a menu's rows
+   are 44 px, not 46: the Chromebook's 14 then fit whole, nothing under the Trash. */
+html .g-msheet .g-msheet-list > .g-msheet-item.danger:last-child,
+html .menu > .menu-item.danger:last-child { position: sticky; bottom: 0; z-index: 1; }
+html .g-msheet .g-msheet-list > .g-msheet-item.danger:last-child::after,
+html .menu > .menu-item.danger:last-child::after {
+  content: ""; position: absolute; inset: -28px 0 -6px; z-index: -2; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--g-sheet) 28px);
+}
+html .menu > .menu-item.danger:last-child::after { inset: -22px -6px -6px; background: linear-gradient(to bottom, transparent, var(--g-float) 22px); }
+html .g-msheet .sheet-body:has(.g-msheet-item.danger) {
+  scroll-padding-bottom: 84px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px); mask-image: linear-gradient(to bottom, transparent 0, #000 10px);
+}
+html .menu:has(> .menu-item.danger) { scroll-padding-bottom: 72px; }
 
 /* Wefty's own list for a drop-down (glass/overlays.js, round 4): a glass menu as wide as its field at least, popping out of it
    and scrolling when long (wide), or a sheet (a phone). Each option a rounded row: indented by its depth, its emoji on a small
    glass square, the one in use in the accent with a tick, "New folder..." last under the menus' thread. */
-html[data-look="glass"] .menu.g-pick-menu { min-width: max(180px, var(--g-pick-min, 0px)); max-width: min(420px, calc(100vw - 16px)); padding: 6px; overflow-y: auto; overscroll-behavior: contain; }
-html[data-look="glass"] .g-pick-list { display: grid; gap: 2px; }
-html[data-look="glass"] .g-pick-option {
+html .menu.g-pick-menu { min-width: max(180px, var(--g-pick-min, 0px)); max-width: min(420px, calc(100vw - 16px)); padding: 6px; overflow-y: auto; overscroll-behavior: contain; }
+html .g-pick-list { display: grid; gap: 2px; }
+html .g-pick-option {
   display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 0 12px 0 calc(10px + var(--g-pick-depth, 0) * 18px);
   border: 0; border-radius: 12px; background: transparent; color: var(--text); font: 500 15px/20px var(--font); text-align: left;
   transition: transform .16s var(--g-spring), background-color .16s var(--g-ease);
 }
-@media (pointer: coarse) { html[data-look="glass"] .g-pick-option { min-height: 48px; } }
-html[data-look="glass"] .g-pick-option:active:not(:disabled) { transform: scale(.97); transition-duration: var(--d-press); }
-@media (hover: hover) { html[data-look="glass"] .g-pick-option:hover:not(:disabled) { background: var(--g-lift-soft); } }
-html[data-look="glass"] .g-pick-option:focus { background: var(--g-lift-soft); outline: none; }
-html.g-kbd[data-look="glass"] .g-pick-option:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
-html[data-look="glass"] .g-pick-option.on { color: var(--accent-ink); font-weight: 600; background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
-html[data-look="glass"] .g-pick-option:disabled { opacity: .45; }
-html[data-look="glass"] .g-pick-badge {
+@media (pointer: coarse) { html .g-pick-option { min-height: 48px; } }
+@media (hover: hover) { html .g-pick-option:hover:not(:disabled) { background: var(--g-lift-soft); } }
+html .g-pick-option:focus { background: var(--g-lift-soft); outline: none; }
+html .g-pick-option.on { color: var(--accent-ink); font-weight: 600; background: var(--g-grad-soft); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--accent-line); }
+html .g-pick-option:disabled { opacity: .45; }
+html .g-pick-badge {
   flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; font-size: 15px; line-height: 1;
   background: light-dark(rgba(255, 255, 255, .7), rgba(255, 255, 255, .07)); box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring);
 }
-html[data-look="glass"] .g-pick-badge .icon { width: 17px; height: 17px; color: var(--accent-ink); }
-html[data-look="glass"] .g-pick-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-html[data-look="glass"] .g-pick-tick { flex: none; display: grid; place-items: center; color: var(--accent-ink); animation: g-pick-tick .3s var(--g-spring) backwards; }
-html[data-look="glass"] .g-pick-tick .icon { width: 18px; height: 18px; }
-html[data-look="glass"] .g-pick-option.fresh { color: var(--accent-ink); }
-html[data-look="glass"] .g-pick-sep { margin: 4px 8px; }
+html .g-pick-badge .icon { width: 17px; height: 17px; color: var(--accent-ink); }
+html .g-pick-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html .g-pick-tick { flex: none; display: grid; place-items: center; color: var(--accent-ink); animation: g-pick-tick .3s var(--g-spring) backwards; }
+html .g-pick-tick .icon { width: 18px; height: 18px; }
+html .g-pick-option.fresh { color: var(--accent-ink); }
+html .g-pick-sep { margin: 4px 8px; }
 @keyframes g-pick-tick { from { opacity: 0; transform: scale(.4); } }
-html[data-look="glass"] .g-pick-sheet .g-pick-list { margin: 0 -6px; }
-html[data-look="glass"].calm .g-pick-option:active { transform: none; }
-html[data-look="glass"].calm .g-pick-tick { animation-name: g-fade-in; }
+html .g-pick-sheet .g-pick-list { margin: 0 -6px; }
+html.calm .g-pick-tick { animation-name: g-fade-in; }
 
 /* A tick box: the box lights up with the gradient (a layer fading in), the tick springs into it. A plain box with the
    app's own class (the terms, "never show again") gets the same. `[data-theme]` in the selector: the classic rules for the
    checked state carry the theme in theirs. */
-html[data-look="glass"][data-theme] :is(.covers-tick, .nt-never-box, input[name="terms"]) {
-  appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 22px; height: 22px; margin: 0; padding: 0; cursor: pointer;
-  border: 0; border-radius: 8px; background: var(--field); background-image: none;
-  box-shadow: inset 0 1px 0 light-dark(rgba(255, 255, 255, .8), rgba(255, 255, 255, .08)), inset 0 0 0 1.5px var(--control);
-  transition: transform var(--d-press) var(--g-ease);
-}
-html[data-look="glass"][data-theme] :is(.covers-tick, .nt-never-box, input[name="terms"]):checked { background-image: none; background-color: var(--field); }
-html[data-look="glass"][data-theme][data-black] :is(.covers-tick, .nt-never-box, input[name="terms"]):not(:checked) { background-color: var(--field); }
-html[data-look="glass"] :is(.covers-tick, .nt-never-box, input[name="terms"])::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--g-grad); opacity: 0; pointer-events: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 4px 12px var(--g-glow); transition: opacity .2s var(--g-ease);
-}
-html[data-look="glass"] :is(.covers-tick, .nt-never-box, input[name="terms"])::after {
-  content: ""; position: absolute; inset: 0; background: #fff; pointer-events: none; opacity: 0; transform: scale(.3);
-  -webkit-mask: var(--g-tick) center / 14px no-repeat; mask: var(--g-tick) center / 14px no-repeat;
-  transition: transform .34s var(--g-spring), opacity .12s linear;
-}
-html[data-look="glass"] :is(.covers-tick, .nt-never-box, input[name="terms"]):checked::before { opacity: 1; }
-html[data-look="glass"] :is(.covers-tick, .nt-never-box, input[name="terms"]):checked::after { opacity: 1; transform: none; }
-html[data-look="glass"] :is(.covers-tick, .nt-never-box, input[name="terms"]):active { transform: scale(.9); }
-html[data-look="glass"] :is(.covers-tick, .nt-never-box, input[name="terms"]):disabled { opacity: .45; cursor: default; }
+html[data-theme] :is(.covers-tick, .nt-never-box, input[name="terms"]) { transition: transform var(--d-press) var(--g-ease); }
 
 /* Segmented controls: while the highlight slides (overlays.js adds it) the picked button carries no fill of its own. */
-html[data-look="glass"] .segmented.g-seg { position: relative; }
-html[data-look="glass"] .segmented.g-seg > button { position: relative; z-index: 1; transition: transform var(--d-press) var(--g-ease), color .22s var(--g-ease); }
-html[data-look="glass"] .segmented.g-seg > button:is([aria-checked="true"], [aria-selected="true"], .on) {
-  background: transparent; box-shadow: none; border-color: transparent; color: #fff;
+html .segmented.g-seg { position: relative; }
+html .segmented.g-seg > button { position: relative; z-index: 1; transition: transform var(--d-press) var(--g-ease), color .22s var(--g-ease); }
+html .g-seg-hl { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; transition: transform var(--d-slide) var(--g-slide); }
+html .g-seg-hl i {
+  display: block; width: 100%; height: 100%;
 }
-html[data-look="glass"] .g-seg-hl { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; transition: transform var(--d-slide) var(--g-slide); }
-html[data-look="glass"] .g-seg-hl i {
-  display: block; width: 100%; height: 100%; border-radius: 13px; background: var(--g-pill-fill);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 0 0 1px var(--g-pill-ring), 0 6px 16px light-dark(rgba(110, 70, 220, .3), rgba(98, 66, 200, .35));
-}
-html[data-look="glass"] .g-seg-hl.g-still { transition: none; }
-html[data-look="glass"] .g-seg-hl.g-sa i { animation: g-stretch-a .46s cubic-bezier(.25, .8, .3, 1); }
-html[data-look="glass"] .g-seg-hl.g-sb i { animation: g-stretch-b .46s cubic-bezier(.25, .8, .3, 1); }
+html .g-seg-hl.g-still { transition: none; }
+html .g-seg-hl.g-sa i { animation: g-stretch-a .46s cubic-bezier(.25, .8, .3, 1); }
+html .g-seg-hl.g-sb i { animation: g-stretch-b .46s cubic-bezier(.25, .8, .3, 1); }
 
 /* ================================================================== lite and calm */
 
-html[data-look="glass"].lite .toast, html[data-look="glass"].lite .notice, html[data-look="glass"].lite .tour-card, html[data-look="glass"].lite .tour-offer { animation-duration: .16s; }
-html[data-look="glass"].lite .drag-ghost { animation-duration: .12s; }
-html[data-look="glass"].lite .g-seg-hl i, html[data-look="glass"].lite .toast.msg-card .mc-chip { animation: none; }
-html[data-look="glass"].lite .sheet-actions::before { display: none; }
+html.lite .toast, html.lite .notice, html.lite .tour-card, html.lite .tour-offer { animation-duration: .16s; }
+html.lite .drag-ghost { animation-duration: .12s; }
+html.lite .g-seg-hl i, html.lite .toast.msg-card .mc-chip { animation: none; }
+html.lite .sheet-actions::before { display: none; }
 /* Calm moves nothing: menus, toasts and the cards fade only (glass.css's calm rule shortens every animation to nothing; these
    say what they fade from), and a sheet comes in without travelling. */
-html[data-look="glass"].calm .toast, html[data-look="glass"].calm .notice, html[data-look="glass"].calm .tour-card, html[data-look="glass"].calm .tour-offer {
-  animation-name: g-fade-in; animation-duration: .12s !important;
+html.calm .toast, html.calm .notice, html.calm .tour-card, html.calm .tour-offer {
+  animation-name: g-fade-in;
 }
-html[data-look="glass"].calm .toast.leaving, html[data-look="glass"].calm .notice.leaving { transform: none; }
-html[data-look="glass"].calm .drag-ghost { animation-name: g-fade-in; animation-duration: .12s !important; }
-html[data-look="glass"].calm .g-seg-hl { transition: none; }
-html[data-look="glass"].calm .g-seg-hl i { animation: none; }
-html[data-look="glass"].calm .showme-ring::before, html[data-look="glass"].calm .showme-ring::after { display: none; }
-html[data-look="glass"].calm .menu-item:active, html[data-look="glass"].calm .toast-action:active, html[data-look="glass"].calm .news-option:active { transform: none; }
-html[data-look="glass"].calm :is(.covers-tick, .nt-never-box, input[name="terms"])::after { transform: none; }
-html[data-look="glass"].calm :is(.covers-tick, .nt-never-box, input[name="terms"]):active { transform: none; }
+html.calm .drag-ghost { animation-name: g-fade-in; }
+html.calm .g-seg-hl { transition: none; }
+html.calm .g-seg-hl i { animation: none; }
+html.calm .showme-ring::before, html.calm .showme-ring::after { display: none; }
 @media (prefers-reduced-motion: reduce) {
-  html[data-look="glass"] .showme-ring::before, html[data-look="glass"] .showme-ring::after { display: none; }
-  html[data-look="glass"] .toast, html[data-look="glass"] .notice, html[data-look="glass"] .tour-card, html[data-look="glass"] .tour-offer { animation-name: g-fade-in; }
-  html[data-look="glass"] .drag-ghost { animation-name: g-fade-in; }
+  html .showme-ring::before, html .showme-ring::after { display: none; }
+  html .toast, html .notice, html .tour-card, html .tour-offer { animation-name: g-fade-in; }
+  html .drag-ghost { animation-name: g-fade-in; }
+}
 }
 
-/* ---- the 2.0 hotfix: a ring in a menu or a sheet only for the keyboard (html.g-kbd: Tab or the arrows used). Opened by a
-   finger, nothing in it is ringed, even where the browser would show one (the owner's + More, its first tile in a heavy
-   double ring, right after typing in the note). */
-html[data-look="glass"]:not(.g-kbd) :is(.menu, .sheet, .g-menu-going) :is(button, a, [role=menuitem], [role=menuitemcheckbox], [role=radio], [role=tab], [tabindex]):focus-visible,
-html[data-look="glass"]:not(.g-kbd) .menu:focus-visible { outline: none; box-shadow: none; }
+@layer force {
+html.calm .toast, html.calm .notice, html.calm .tour-card, html.calm .tour-offer { animation-duration: .12s !important; }
+html.calm .drag-ghost { animation-duration: .12s !important; }
+}

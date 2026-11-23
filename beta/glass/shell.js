@@ -1,6 +1,5 @@
 /* Wefty 2.0 "glass": the shell. Owns the frame js/start.js builds (nav.tabs, the tab buttons, the rail), the aurora behind
-   it, and V.glass. Inert unless the glass look is on (V.look.isGlass()); it listens for V.on('look') so the switch in
-   Settings works at once, with no reload, in both directions.
+   it, and V.glass. (2.0: glass is the only look, so nothing here is ever switched off again.)
 
    What it does:
      - the aurora: three tint layers (morning, day, night) behind the app, cross-faded by the local hour (html[data-tod]);
@@ -11,7 +10,7 @@
        timing). It starts the moment a tab is tapped, not when the screen has been drawn;
      - badges that pop when a number appears or changes;
      - V.glass: surface(el) (the board's glass on any element), tod() / setTod(), enabled().
-   Classic is not touched: when the look is switched off everything made here is removed again. */
+   (Its frame-by-frame costs: a tab tapped moves the indicator in the tap's own task and nothing else; js/start.js draws the screen after.) */
 'use strict';
 
 (() => {
@@ -283,13 +282,22 @@ let idleMs = 8000;
 let idleTimer = 0;
 let lastInput = 0;
 const WAKE = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll'];
+/* (2.0 speed) An input only notes its time; the one timer looks when it is due and waits again for what is left, so typing
+   never sets a timer per second, and a page clock held still (a test's) can never make it rest mid-typing. Never while a
+   box has the typing: its drift is already paused there (g-field), and g-idle drops the aurora's layer, which the next
+   letter or tap had to make and paint again (a whole frame's work in Full, and the one layout of the whole page while
+   typing in a long chat, tests/test_wefty_1222_typing.py). */
+const clock = () => performance.now();
+function rest() {
+  const left = idleMs - (clock() - lastInput);
+  const typing = aura().classList.contains('g-field');
+  idleTimer = left > 16 || typing ? setTimeout(rest, Math.max(left, typing ? idleMs : 16)) : 0;
+  if (!idleTimer) aura().classList.add('g-idle');
+}
 function wake() {
-  const now = Date.now();
+  lastInput = clock();
   if (aura().classList.contains('g-idle')) aura().classList.remove('g-idle');
-  if (now - lastInput < 1000 && idleTimer) return;  // (one timer a second at most, however many events come)
-  lastInput = now;
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => aura().classList.add('g-idle'), idleMs);
+  if (!idleTimer) rest();
 }
 let scrollTimer = 0;
 function scrolling() {
@@ -297,24 +305,17 @@ function scrolling() {
   clearTimeout(scrollTimer);
   scrollTimer = setTimeout(() => aura().classList.remove('g-scrolling'), 180);
 }
-function watchIdle(onOff) {
-  for (const type of WAKE) {
-    if (onOff) window.addEventListener(type, wake, { passive: true, capture: true });
-    else window.removeEventListener(type, wake, { capture: true });
-  }
-  if (onOff) window.addEventListener('scroll', scrolling, { passive: true, capture: true });
-  else { window.removeEventListener('scroll', scrolling, { capture: true }); clearTimeout(scrollTimer); aura().classList.remove('g-scrolling'); }
-  clearTimeout(idleTimer);
-  idleTimer = 0;
-  aura().classList.remove('g-idle');
-  if (onOff) wake();
+/* (2.0: the look is never switched off any more, so what used to undo all this, with the look, is gone) */
+function watchIdle() {
+  for (const type of WAKE) window.addEventListener(type, wake, { passive: true, capture: true });
+  window.addEventListener('scroll', scrolling, { passive: true, capture: true });
+  wake();
 }
 
 /* -- what's open over the app, as classes on the few things that change with it (round 4: these were html:has() and
    body:has() rules, and in a long chat every letter typed had the browser look over the whole page again for them, 18,000
-   elements and 400 ms a letter on a slow phone): the aurora rests under a sheet or a layer (.g-under), toasts come in at
-   the top while a phone's sheet is up (#toasts.g-over-sheet) or a full-screen note asks its question (.g-over-ask), the
-   page under a listening note-taker with the tabs in reach isn't drawn (#app.g-nt-below), and the round + goes while a note
+   elements and 400 ms a letter on a slow phone): the aurora rests under a sheet or a layer (.g-under) (the toasts' slot
+   over a sheet or a note's question is ui/overlay.js's since 2.0), the page under a listening note-taker with the tabs in reach isn't drawn (#app.g-nt-below), and the round + goes while a note
    grows out of its card (#app.g-ed-window). Set only when one changes. */
 function overState() {
   const layers = document.getElementById('layers');
@@ -322,9 +323,6 @@ function overState() {
   const glassOn = on();
   const flag = (el, cls, value) => { if (el && el.classList.contains(cls) !== value) el.classList.toggle(cls, value); };
   flag(aura(), 'g-under', glassOn && !!layers.querySelector(':scope > .layer:not(.menu-layer)'));
-  const toasts = document.getElementById('toasts');
-  flag(toasts, 'g-over-sheet', glassOn && !!layers.querySelector('.sheet'));
-  flag(toasts, 'g-over-ask', glassOn && !!layers.querySelector('.editor-layer .editor-ask .ask-card'));
   const app = document.getElementById('app');
   flag(app, 'g-nt-below', glassOn && !!layers.querySelector(':scope > .nt-layer.shown[data-tabs=below]'));
   flag(app, 'g-ed-window', glassOn && !!layers.querySelector('.editor-layer.g-window'));
@@ -338,7 +336,6 @@ function watchOver() {
   overState();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchOver, { once: true }); else watchOver();
-V.on('look', overSoon);
 
 /* -- the frame-drop monitor starts once Wefty has settled (its first sync done, or a few seconds), not in the cold start's
    busy boot, which would make a quick device look slow and leave it lite for a week. */
@@ -365,29 +362,23 @@ function enable() {
       observer.observe(app, { childList: true });
     }
   }
-  watchIdle(true);
+  watchIdle();
   if (!settled && !settleTimer) settleTimer = setTimeout(settle, 12000);  // (the first 'synced' says it sooner)
 }
-function disable() {
-  if (todTimer) { clearInterval(todTimer); todTimer = 0; }
-  if (observer) { observer.disconnect(); observer = null; }
-  undecorate();
-  watchIdle(false);
-  if (aurora) { aurora.remove(); aurora = null; }
-  delete root.dataset.tod;
-}
-const sync = () => (on() ? enable() : disable());
-
-V.on('look', sync);
 V.on('status', (value) => { if (on() && (value === 'synced' || value === 'offline' || value === 'held')) settle(); });
 /* (round 4, the owner's Today just after a tab switch, with a glass disc left beside the search button) Leaving a screen takes
    every moving copy of a part of it away at once, in the task that draws the next one: the words flying into a sent message,
    a menu fading, a tile shrinking away, sparks, a peek, Notes' search capsule. (A copy that carries one screen into the next,
    Settings' and a swipe's, is that move itself, and stays.) */
 const SCREEN_COPIES = '.g-fly-words, .g-fly-shape, .g-menu-going, .g-tile-gone, .g-spark-host, .g-peek, .gn-morph, .gn-help-ghost, .g-ghost-row';
+const dropCopies = () => document.querySelectorAll(SCREEN_COPIES).forEach((el) => { if (!el.closest('main.view')) el.remove(); });
+V.on('screen-leaving', ({ view } = {}) => {  // (2.0 speed: copies go with the old screen; touch-action said ahead)
+  if (!on()) return; dropCopies();
+  if (V.motion && V.motion.pull && V.motion.pull.ahead) V.motion.pull.ahead(document.querySelector('#app > main.view'), view === 'today' ? !(V.wide && V.wide()) : /^(send|files|clips|settings)$/.test(view || '') && finger());
+});
 V.on('tab', () => {
   if (!on()) return;
-  document.querySelectorAll(SCREEN_COPIES).forEach((el) => { if (!el.closest('main.view')) el.remove(); });
+  dropCopies();
   decorate();
   if (nav) go(tabsOf().findIndex((tab) => tab.classList.contains('on')), false);
 });
@@ -477,7 +468,6 @@ document.addEventListener('focusin', checkSoon, true);
 document.addEventListener('focusout', () => setTimeout(checkTyping, 60), true);  // (focus moving to another field: no flicker)
 window.addEventListener('resize', checkTyping);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', checkTyping);
-V.on('look', () => { if (!on()) root.classList.remove('g-typing', 'g-kbd'); else checkTyping(); });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkTyping, { once: true }); else checkTyping();
 
 /* Pull to sync, on every main screen (the owner: "I can sync from any screen"). One behaviour: V.motion.pull on the screen's
@@ -617,15 +607,13 @@ if (typeof MutationObserver === 'function') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchBars, { once: true }); else watchBars();
 }
 V.on('theme', paintBarsSoon);
-V.on('look', paintBarsSoon);
 if (V.onWide) V.onWide(paintBarsSoon);
 
 V.on('tab', () => { if (on()) { requestAnimationFrame(watchPull); repullSoon(); } else unpull(); });
-V.on('look', () => { if (on()) { watchPull(); repullSoon(); } else unpull(); });
 window.addEventListener('resize', repullSoon);
 /* ---- end of the 2.0 hotfix block */
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, { once: true });
-else sync();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enable, { once: true });
+else enable();
 
 V.glass = {
   enabled: on,
@@ -636,7 +624,7 @@ V.glass = {
   tod,
   setTod: tod,
   /* How long the aurora drifts with nothing touched, in ms (8 s; the tests shorten it). */
-  idleAfter(ms) { if (ms > 0) { idleMs = ms; lastInput = 0; if (on()) wake(); } return idleMs; },
+  idleAfter(ms) { if (ms > 0) { idleMs = ms; clearTimeout(idleTimer); idleTimer = 0; if (on()) wake(); } return idleMs; },
   /* The board's glass on any element (rounded, soft fill, the light edge, the drop shadow). */
   surface(el, { sheen = false } = {}) {
     if (el) { el.classList.add('g'); if (sheen) el.classList.add('sheen'); }

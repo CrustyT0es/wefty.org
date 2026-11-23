@@ -4,7 +4,7 @@
 'use strict';
 
 const V = (window.V = window.V || {});
-V.VERSION = '1.22.5';
+V.VERSION = '1.22.6';
 V.desktop = !!window.VAULT_DESKTOP;  // set by the PC app (vault/desktop.py) before any script runs
 /* Sentences from the cloud's helper (vault/functions/vault-admin), which may have been put in before Vault became
    Wefty and still say "Vault ..." (its VERSION didn't change for words alone, so nothing asks the owner to update it):
@@ -465,39 +465,48 @@ V.appHead = ({ title = '', sub = '', back = null, backLabel = 'Back', actions = 
 
 /* ---------------------------------------------------------------- dialogs and toasts */
 
+/* (2.0) Opening, leaving, placing and taking away are ui/overlay.js's (V.overlay): the panel solid from its first frame,
+   the scrim the only part that fades, the real node leaving. Without it (it didn't load) they're as plain as can be. */
 V.sheet = function sheet({ title, content, actions = [], wide = false, onClose, dismissable = true }) {
   const layers = document.getElementById('layers');
   const previous = document.activeElement;
   let closed = false;
-  const close = () => {
+  let moves = null;  // V.overlay's: how it goes
+  const close = (how) => {
     if (closed) return;
     closed = true;
-    wrap.classList.add('leaving');
     document.removeEventListener('keydown', keys, true);
-    setTimeout(() => wrap.remove(), 180);
+    if (moves) moves.leave(typeof how === 'string' ? how : '');
+    else { wrap.classList.add('leaving'); wrap.remove(); }
     if (previous && previous.focus) previous.focus({ preventScroll: true });
     if (onClose) onClose();
   };
   const bar = actions.length ? V.h('div.sheet-actions', {}, actions.map((a) => V.h(
     'button.btn' + (a.kind ? '.' + a.kind : ''), {
       type: 'button',
-      onclick: async () => {
+      onclick: () => {
+        if (closed) return;  // (a second tap on a sheet that's going: nothing runs twice)
         if (!a.onClick) return close();
-        const keep = await a.onClick(close);
+        // (an answer at once closes it in the tap's own task; one on its way, when it comes)
+        const keep = a.onClick(close);
+        if (keep && typeof keep.then === 'function') return keep.then((answer) => { if (answer !== true) close(); });
         if (keep !== true) close();
+        return undefined;
       },
     }, a.icon ? V.icon(a.icon) : null, V.h('span', { text: a.label })))) : null;
   const panel = V.h('div.sheet' + (wide ? '.wide' : ''), { role: 'dialog', 'aria-modal': 'true', 'aria-label': title || '' },
     title ? V.h('div.sheet-head', {}, V.h('h2', { text: title }),
-      dismissable ? V.iconButton('x', 'Close', close, 'quiet') : null) : null,
+      dismissable ? V.iconButton('x', 'Close', () => close(), 'quiet') : null) : null,
     V.h('div.sheet-body', {}, content), bar);
   const wrap = V.h('div.layer', {
-    onmousedown: (event) => { if (dismissable && event.target === wrap) close(); },
+    // (a press beside the panel: on its scrim, or the layer itself)
+    onmousedown: (event) => { if (dismissable && (event.target === wrap || event.target.classList.contains('ui-scrim'))) close('scrim'); },
   }, panel);
   // Enter in a box typed into presses the sheet's main button; never on a tick box or a choice (Make flash cards'
   // ticks: Enter there would add every ticked card before they've all been looked at).
   const keys = (event) => {
-    if (event.key === 'Escape' && dismissable) { event.stopPropagation(); close(); }
+    // (Esc closes only the topmost thing: a menu or a drop-down's list over the sheet goes first)
+    if (event.key === 'Escape' && dismissable && (!V.overlay || V.overlay.isTop(panel))) { event.stopPropagation(); close('escape'); }
     if (event.key === 'Enter' && !event.shiftKey && event.target.tagName === 'INPUT'
       && !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color', 'image'].includes(event.target.type)) {
       const primary = panel.querySelector('.sheet-actions .btn.primary, .sheet-actions .btn.danger');
@@ -506,8 +515,9 @@ V.sheet = function sheet({ title, content, actions = [], wide = false, onClose, 
   };
   document.addEventListener('keydown', keys, true);
   layers.append(wrap);
+  try { if (V.overlay) moves = V.overlay.sheet(wrap, panel, { close, dismissable }); } catch (error) { console.error(error); }
   requestAnimationFrame(() => {
-    wrap.classList.add('shown');
+    if (!closed) wrap.classList.add('shown');
     const first = panel.querySelector('input:not([type=checkbox]), textarea, select');
     // (the 2.0 glass look on a touch screen: a sheet whose first box is a day or a time takes the keyboard itself, so a phone shows no
     // picked day number as it opens; the classic look is as it was)
@@ -554,14 +564,36 @@ V.confirm = (title, text, { ok = 'OK', danger = false } = {}) => new Promise((re
    The arrow keys, Home and End go along its items. Returns { close, el }. */
 V.menu = function menu(anchor, items, { align = '', at = null, cls = '', label = '', onClose = null, returnFocus = false,
   scrollCloses = false, pointer = false } = {}) {
-  const rect = anchor.getBoundingClientRect();
+  const O = V.overlay;
+  if (O) {
+    // (2.0, ui/overlay.js: one menu at a time; on a phone a long menu is one sheet from the foot)
+    O.closeMenus();
+    const asSheet = O.longMenu(anchor, items, { align, at, cls, label, onClose, returnFocus, scrollCloses, pointer });
+    if (asSheet) return asSheet;
+  }
+  // Opened by a finger or the mouse it lights nothing (the menu itself has the keyboard); while a box is being typed in
+  // it doesn't take the keyboard at all (the caret stays, so does a phone's keyboard, and the menu sits above it), and
+  // closing beside it or by Esc gives the typing back.
+  const ENTRY = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=checkbox]):not([type=radio])'
+    + ':not([type=button]):not([type=submit]):not([type=reset]):not([type=range]):not([type=color]):not([type=file])';
+  const keyed = O ? O.byKeyboard() : !pointer;
+  if (!keyed) pointer = true;
+  const active = document.activeElement;
+  const field = !keyed && active && active !== document.body && active.matches && active.matches(ENTRY)
+    && !active.disabled && !active.readOnly && !active.closest('.menu') ? active : null;
+  if (field) returnFocus = false;
   let closed = false;
+  let moves = null;  // V.overlay's: how it goes
   const done = (how = 'item') => {
     if (closed) return;
     closed = true;
-    wrap.remove();
     document.removeEventListener('keydown', esc, true);
+    if (O && moves) O.leaveMenu(moves, how); else wrap.remove();
     if (returnFocus && anchor.isConnected) anchor.focus({ preventScroll: true });
+    if (field && how !== 'item' && field.isConnected) {
+      const now = document.activeElement;
+      if (!now || now === document.body || now === anchor) { try { field.focus({ preventScroll: true }); } catch (error) { /* gone */ } }
+    }
     if (onClose) onClose(how);
   };
   const row = (item) => {
@@ -572,7 +604,7 @@ V.menu = function menu(anchor, items, { align = '', at = null, cls = '', label =
     return V.h('button.menu-item' + (item.danger ? '.danger' : '') + (switches ? '.menu-switch' : ''), {
       type: 'button', role: switches ? 'menuitemcheckbox' : 'menuitem', 'aria-checked': switches ? String(item.checked) : null,
       disabled: item.disabled ? true : null,
-      onclick: () => { done(); item.onClick(); },
+      onclick: () => { if (closed) return; done(); item.onClick(); },  // (a menu that's going acts on nothing)
     }, icon, V.h('span', { text: item.label }),
     switches ? V.h('span.menu-state', { text: item.checked ? 'On' : 'Off' }) : null);
   };
@@ -607,45 +639,20 @@ V.menu = function menu(anchor, items, { align = '', at = null, cls = '', label =
     wrap.addEventListener('wheel', away, { passive: true });
     wrap.addEventListener('touchmove', away, { passive: true });
   }
-  const esc = (event) => { if (event.key === 'Escape') { event.stopPropagation(); done('escape'); } };
+  // (Esc closes only the topmost thing)
+  const esc = (event) => { if (event.key === 'Escape' && (!O || O.isTop(list))) { event.stopPropagation(); done('escape'); } };
   document.addEventListener('keydown', esc, true);
   document.getElementById('layers').append(wrap);
-  // Worked out in the page's own px: with the page zoomed (bigger text) the pointer's and the anchor's places are the
-  // screen's, `zoom` times the page's.
-  const zoom = (list.offsetWidth && list.getBoundingClientRect().width / list.offsetWidth) || 1;
-  const screenW = window.innerWidth / zoom, screenH = window.innerHeight / zoom;
-  list.style.maxHeight = (screenH - 16) + 'px';
-  const width = list.offsetWidth, height = list.offsetHeight;
-  const box = { left: rect.left / zoom, right: rect.right / zoom, top: rect.top / zoom, bottom: rect.bottom / zoom };
-  if (at) {
-    // At a point: from there down and right, else turned to fit (left of it, above it). A finger's: above the finger.
-    const x = at.x / zoom, y = at.y / zoom;
-    const fitsRight = x + width + 8 <= screenW;
-    list.style.left = (at.touch ? Math.max(8, Math.min(screenW - width - 8, x - width / 2))
-      : Math.max(8, fitsRight ? x : Math.min(screenW - width - 8, x - width))) + 'px';
-    let top = y + height + 8 <= screenH ? y : y - height;
-    if (at.touch) {
-      // Above the finger when it fits, else below it; a menu too long for either side scrolls on the bigger one, so
-      // the finger never covers it.
-      const above = y - 16 - 8;
-      const below = screenH - (y + 28) - 8;
-      if (height > above && height > below && Math.max(above, below) >= 160) {
-        list.style.maxHeight = Math.max(above, below) + 'px';
-        top = above >= below ? y - 16 - Math.min(height, above) : y + 28;
-      } else top = height <= above ? y - height - 16 : y + 28;
-    }
-    list.style.top = Math.max(8, top) + 'px';
-  } else if (align === 'up') {
-    list.style.left = Math.max(8, Math.min(screenW - width - 8, box.left)) + 'px';
-    list.style.top = Math.max(8, box.top - height - 8) + 'px';
-  } else {
-    list.style.left = Math.max(8, Math.min(screenW - width - 8, box.right - width)) + 'px';
-    list.style.top = (box.bottom + height + 8 > screenH ? Math.max(8, box.top - height - 4) : box.bottom + 4) + 'px';
+  // Placed (between the screen's head and its foot, by its button or the point it was opened at) and grown from there:
+  // ui/overlay.js. Without it, simply under its button.
+  try { if (O) moves = O.menu(wrap, list, anchor, { align, at }, done); } catch (error) { console.error(error); }
+  if (!moves) {
+    const r = anchor.getBoundingClientRect();
+    list.style.left = Math.max(8, Math.min(window.innerWidth - list.offsetWidth - 8, at ? at.x : r.right - list.offsetWidth)) + 'px';
+    list.style.top = Math.max(8, Math.min(window.innerHeight - list.offsetHeight - 8, at ? at.y : r.bottom + 4)) + 'px';
   }
-  // (Never past the bottom edge: on a short screen the menu, which scrolls past its max-height, sits higher instead.)
-  list.style.top = Math.max(8, Math.min(parseFloat(list.style.top), screenH - list.offsetHeight - 8)) + 'px';
   const first = list.querySelector('.menu-item:not([disabled])') || list.querySelector('button');
-  if (pointer) {
+  if (field) { /* (the field keeps the keyboard) */ } else if (pointer) {
     // (opened by a pointer: the menu itself has the keyboard, nothing lit, so Esc and the arrow keys work at once)
     list.tabIndex = -1;
     list.focus({ preventScroll: true });
@@ -706,7 +713,8 @@ V.contextMenu = (() => {
     const sel = window.getSelection ? window.getSelection() : null;
     return !!sel && !sel.isCollapsed && sel.rangeCount > 0 && String(sel).trim() !== '' && sel.containsNode(el, true);
   }
-  const buzz = () => { try { if (navigator.vibrate) navigator.vibrate(12); } catch (error) { /* no buzz, no matter */ } };
+  // (the one way to buzz, ui/motion.js's: never in calm, nor while a class is being listened to)
+  const buzz = () => { try { if (V.motion && V.motion.buzz) V.motion.buzz(12); else if (navigator.vibrate) navigator.vibrate(12); } catch (error) { /* no buzz, no matter */ } };
 
   /* No line first, last or twice in a row. */
   function tidy(items) {
@@ -916,21 +924,31 @@ V.contextMenu = (() => {
   return attach;
 })();
 
+/* (1.22.6) What a browser or the cloud's library says of a request that didn't get through ("TypeError: Failed to
+   fetch", "Load failed" on an iPhone, "NetworkError when attempting to fetch resource.", a deadline's "Failed to fetch
+   (no answer in time)") is never what reaches the screen: these plain words are said instead. */
+V.UNREACHED = 'Wefty couldn\'t connect. Check you\'re online and try again.';
+V.plainError = ((raw) => (text) => (typeof text === 'string' && raw.test(text) ? V.UNREACHED : text))(
+  /^\s*(?:[A-Za-z]*Error:\s*)?(?:Failed to fetch\b|NetworkError when attempting to fetch|Load failed\b|The network connection was lost|The Internet connection appears to be offline|Network request failed|Request was aborted)/i);
+
 /* `help` (1.22): a Help card's id (js/help.js V.help.forError), for a Help button that opens that answer: a message that
    needs more than one tap to fix is never a dead end. */
 V.toast = function toast(text, { kind = '', action, onAction, ms = 3200, help = '' } = {}) {
+  text = V.plainError(text);  // (1.22.6: never a raw "Failed to fetch")
   const box = document.getElementById('toasts');
   const helps = !!help && !!(V.help && V.help.open);
+  let gone = () => {};
   const item = V.h('div.toast' + (kind ? '.' + kind : ''), { role: 'status' },
     kind === 'err' ? V.icon('alert') : null, V.h('span', { text }),
     action ? V.h('button.toast-action', { type: 'button', text: action, onclick: () => { onAction(); gone(); } }) : null,
     helps ? V.h('button.toast-action.toast-help', { type: 'button', text: 'Help', 'aria-label': `Help: ${text}`,
       onclick: () => { gone(); V.help.open({ card: help }); } }) : null);
-  const gone = () => { item.classList.add('leaving'); setTimeout(() => item.remove(), 200); };
+  const lasting = !!(action || helps);
+  // (2.0, ui/overlay.js: where it sits, how toasts stack and wait their turn, how it goes)
+  if (V.overlay) { gone = V.overlay.toast(item, { ms: lasting ? Math.max(ms, 5000) : ms, lasting, text }); return; }
+  gone = () => item.remove();
   box.append(item);
-  const all = box.querySelectorAll(':scope > .toast');  // (a card from V.notice above them stays)
-  for (let i = 0; i < all.length - 3; i++) all[i].remove();
-  setTimeout(gone, action || helps ? Math.max(ms, 5000) : ms);
+  setTimeout(gone, lasting ? Math.max(ms, 5000) : ms);
 };
 
 /* A small card that comes up for a moment over the corner, for something that just happened (js/arrive.js: what was
@@ -968,8 +986,9 @@ V.notice = (() => {
       closed = true;
       clearTimeout(timer);
       if (current === handle) current = null;
-      if (quick) el.remove();
-      else { el.classList.add('leaving'); setTimeout(() => el.remove(), 200); }
+      // (2.0: it goes as itself, ui/overlay.js; quick: as when another card takes its place)
+      if (V.overlay) V.overlay.leaveCard(el, { quick: !!quick });
+      else el.remove();
       if (state.onClose) state.onClose();
     }
     const setText = (node, text) => {
@@ -1042,6 +1061,7 @@ V.notice = (() => {
     current = handle;
     draw();
     document.getElementById('toasts').prepend(el);
+    if (V.overlay) V.overlay.notice(el);
     wait();
     return handle;
   };
@@ -1177,7 +1197,22 @@ V.RISKY_TYPES = ['exe', 'com', 'scr', 'pif', 'cpl', 'msi', 'msp', 'mst', 'msix',
   'ppam', 'docm', 'xlsm', 'pptm', 'dotm', 'xltm', 'potm', 'ppsm', 'sldm',
   // (1.22.5, SEC-18)
   'pyz', 'pyzw', 'pyc', 'pyo', 'one', 'diagcab', 'theme', 'themepack', 'jnlp', 'website', 'searchconnector-ms', 'accde',
-  'accdr', 'ade', 'mde', 'sct', 'wsc', 'html', 'htm', 'xht', 'xhtml', 'mht', 'mhtml', 'svg'];
+  'accdr', 'ade', 'mde', 'sct', 'wsc', 'html', 'htm', 'xht', 'xhtml', 'mht', 'mhtml', 'svg',
+  // (1.22.6, SEC-18 again: the rest of what a double-click runs or acts on in Windows, macOS, ChromeOS and Linux; each
+  // group's reason is beside it in vault/local.py)
+  'rdp', 'msrcincident', 'wcx', 'ica', 'vnc',  // remote desktop and remote help
+  'ovpn', 'pbk',  // VPN and dial-up connections
+  'iqy', 'dqy', 'oqy', 'rqy', 'odc',  // Office query and data connection files
+  'slk',  // SYLK spreadsheets (old Excel 4 macros)
+  'xla', 'ppa', 'wll', 'xlm', 'xlsb', 'vsto',  // Office add-ins and macro sheets
+  'vsdm', 'vssm', 'vstm', 'onepkg', 'accda', 'adp', 'mda',  // Visio macro files, OneNote packages, Access add-ins
+  'cer', 'crt', 'der', 'p7b', 'p7c', 'p12', 'pfx', 'sst',  // certificates
+  'msu', 'ppkg', 'diagpkg',  // Windows update and provisioning packages, troubleshooters
+  'deskthemepack', 'appcontent-ms', 'printerexport', 'wsb', 'prf',  // settings that act when opened
+  'dmg', 'pkg', 'mpkg', 'command', 'terminal', 'mobileconfig',  // macOS images, installers, scripts, profiles
+  'webloc', 'inetloc', 'fileloc',  // macOS shortcuts
+  'desktop', 'run', 'snap', 'flatpak', 'flatpakref', 'flatpakrepo',  // Linux launchers and installers
+  'bash', 'zsh', 'csh', 'ksh'];  // more shell scripts
 V.CHROMEBOOK_RISKY = ['apk', 'crx', 'deb', 'rpm', 'appimage'];
 V.risky = (name) => {
   const clean = String(name || '').split(/[\\/]/).pop().replace(/[. ]+$/, '');

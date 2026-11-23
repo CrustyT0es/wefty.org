@@ -1,7 +1,7 @@
 /* Wefty 2.0 "glass", area: Loading. This file belongs to the Loading builder; nobody else edits it.
    Loading and waiting: the splash with the 3D logo, the first screen's skeletons, the way one screen gives way to the next,
    the edge light, and the frame-drop check that turns lite on for a device that struggles. Plain script, shares `V`.
-   Inert unless V.look.isGlass() (and it listens to V.on('look') so the switch in Settings works live, both ways); every
+   (2.0: glass is the only look; nothing here is switched off with it any more.) Every
    animation is transform or opacity (a thread's stroke-dashoffset is the one other), through Web Animations, and every
    one can start again at once.
 
@@ -106,22 +106,6 @@ const paintedAt = () => {
   return 0;
 };
 
-/* The first screen rises in as the splash goes: each part of it one after the other (V.motion.enter), but not what already
-   has an animation of its own running (Today's own entrance). Nothing in Calm. */
-function startEntrance() {
-  if (calm() || !V.motion || !V.motion.enter) return;
-  const view = document.querySelector('main.view');
-  const page = view && view.firstElementChild;
-  if (!page || page.classList.contains('g-skel')) return;
-  const items = [...page.children].filter((c) => c.nodeType === 1 && !c.classList.contains('g-skel') && !c.hidden
-    && !c.classList.contains('fab') && !(c.getAnimations && c.getAnimations().length));
-  if (!items.length) return;
-  items.forEach((c) => c.setAttribute('data-g-rise', ''));
-  V.motion.enter(page, { selector: ':scope > [data-g-rise]', stagger: 55, delay: 70 }).finished.then(() => {
-    items.forEach((c) => c.removeAttribute('data-g-rise'));
-  });
-}
-
 function removeSplash() {
   const s = splashState;
   clearTimeout(s.timer);
@@ -135,15 +119,30 @@ function removeSplash() {
   }
 }
 
+/* (2.0, A4: TS-27, F9) The W leaves where it is: it fades out in place, with no breath or lift (a logo that had come to
+   rest and then sprang up read as a stutter), and only once it has gone does the veil fade over the first screen: the
+   header's own small mark is never on the screen with the W. (2.0 speed, the critic's must-fix 2: the first screen is
+   drawn under the W and shown where it is as the veil goes; it no longer rose in part by part after it, from nothing,
+   which kept Today dim.) Script animations, so they win over index.html's gs-out ones; 300 ms in all (lite 240): a 100 ms
+   W, then the veil easing out: the first screen is half in sight about 140 ms in (it was 340; the base about 180). */
+const LEAVE = { full: [100, 200], lite: [80, 160], calm: [60, 120] };
 function exitSplash() {
   const s = splashState;
   if (!s.el || s.exiting) return;
   s.exiting = true;
   edge.loading(false, 'splash');
-  startEntrance();
+  const [w, veil] = LEAVE[calm() ? 'calm' : lite() ? 'lite' : 'full'];
   s.el.classList.add('gs-out');
-  s.el.addEventListener('animationend', (event) => { if (event.target === s.el && event.animationName === 'gs-bye') removeSplash(); });
-  setTimeout(removeSplash, 800);  // (the animation never ran: the page was hidden, or animations are off)
+  const stage = s.el.querySelector('.gs-stage');
+  const fade = (el, ms, delay, still, easing = 'cubic-bezier(.4,0,1,1)') => (el && HAS_WAAPI
+    ? el.animate([{ opacity: 1, ...still }, { opacity: 0, ...still }], { duration: ms, delay, easing, fill: 'both' }) : null);  // (both: held whole through its wait)
+  fade(stage, w, 0, { transform: 'none' });
+  // (visible to the end: index.html's gs-bye hides the splash when its own, shorter, length is up, 120 ms in calm, which
+  // cut this fade off in one frame with the W still showing)
+  const going = fade(s.el, veil, w, { visibility: 'visible' }, 'cubic-bezier(0,0,.2,1)');
+  if (!going || (V.look && V.look.timeScale && V.look.timeScale() === 0)) { removeSplash(); return; }
+  going.finished.then(removeSplash, removeSplash);
+  setTimeout(removeSplash, w + veil + 400);  // (the animation never ran: the page was hidden)
 }
 
 /* The first screen is drawn (or a sign-in screen): the splash settles away. Safe to call any number of times. */
@@ -457,7 +456,10 @@ function slide(was, view) {
   }
 }
 
-V.on('tab', (view) => {
+/* A screen drawn: its skeleton looked at, and a new screen brightens. js/start.js calls it as the last thing a draw does,
+   so it starts in the screen's first frame even when the screen's 'tab' is said after that frame (a tab's draw, 2.0
+   speed); the 'tab' that follows is then the same screen, and only looks at the skeleton again. */
+function arrive(view) {
   const was = lastView;
   lastView = view;
   update();
@@ -465,7 +467,8 @@ V.on('tab', (view) => {
   slide(was, view);
   transitions++;
   if (transitions <= 3) sample('transition', 420);
-});
+}
+V.on('tab', arrive);
 
 /* ================================================================== the edge light */
 
@@ -477,7 +480,7 @@ const edge = (() => {
   const RANK = { error: 5, done: 4, arrived: 3, saved: 2, synced: 1 };
   let el = null;
   let run = null;
-  let disc = null;
+  let comets = [];                                           // the thread's light, one per edge (ui/edge.css)
   let bloom = null;
   let glow = null;
   let top = null;                                            // (round 4) a sync's glow from the top edge, and its sweep
@@ -502,8 +505,8 @@ const edge = (() => {
     el.id = 'g-edge';
     el.hidden = true;
     el.setAttribute('aria-hidden', 'true');
-    disc = box('i', 'ge-disc');
-    run = box('div', 'ge-run', [box('div', 'ge-ring', [disc])]);
+    comets = [0, 1, 2, 3].map(() => box('b', 'ge-comet'));
+    run = box('div', 'ge-run', comets.map((comet, i) => box('i', `ge-strip ge-${'trbl'[i]}`, [comet])));
     glow = box('div', 'ge-glow');
     bloom = box('div', 'ge-bloom');
     sweep = box('i', 'ge-sweep');
@@ -514,8 +517,8 @@ const edge = (() => {
   }
 
   function sheetFading() {
-    // a sheet's scrim coming in (a layer that is not yet shown): its own motion has the screen's attention
-    return !!document.querySelector('#layers > .layer:not(.shown):not(.leaving)');
+    // a sheet's scrim coming in: its layer not yet shown, or (ui/overlay.js, which shows it at once) its sheet still entering
+    return !!document.querySelector('#layers > .layer:not(.shown):not(.leaving)') || (V.overlay && V.overlay.open ? V.overlay.open() : []).some((node) => node.dataset && node.dataset.ui === 'entering' && node.matches('.sheet'));
   }
 
   function clear() {
@@ -557,7 +560,17 @@ const edge = (() => {
     return play(kind, '', anims, ms);
   }
 
-  /* One thread of light round the screen: the head of a conic gradient turns once, with its violet tail fading behind it. */
+  /* The comets slide once round the page (a lap and a bit, the light fading as it ends), or on and on (the loop), each
+     one tile of the way round, so all four keep step: the page's size goes to ui/edge.css first. */
+  function round(options) {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    for (const [name, px] of [['--ge-pw', w], ['--ge-ph', h], ['--ge-pp', 2 * (w + h)]]) el.style.setProperty(name, `${px}px`);
+    const lap = (options.iterations === Infinity ? 1 : 1.15) * 2 * (w + h);
+    return comets.map((comet) => comet.animate([{ transform: `translateX(${-lap}px)` }, { transform: 'translateX(0)' }], options));
+  }
+
+  /* One thread of light round the screen's edges: a bright head with its violet tail fading behind it. */
   function thread(kind) {
     const quick = lite();
     const ms = quick ? 820 : 1150;
@@ -565,8 +578,7 @@ const edge = (() => {
     delete el.dataset.tone;
     el.hidden = false;
     const anims = [
-      disc.animate([{ transform: 'translate(-50%, -50%) rotate(0deg)' }, { transform: 'translate(-50%, -50%) rotate(400deg)' }],
-        { duration: ms, easing: 'cubic-bezier(.45,.1,.35,1)', fill: 'both' }),
+      ...round({ duration: ms, easing: 'cubic-bezier(.45,.1,.35,1)', fill: 'both' }),
       run.animate([{ opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1, offset: 0.62 }, { opacity: 0 }], { duration: ms, easing: 'linear', fill: 'both' }),
     ];
     if (quick) anims.push(glow.animate([{ opacity: 0 }, { opacity: 0.85, offset: 0.3 }, { opacity: 0.85, offset: 0.55 }, { opacity: 0 }], { duration: ms, easing: 'linear', fill: 'both' }));
@@ -604,7 +616,7 @@ const edge = (() => {
     el.hidden = false;
     looping = true;
     const anims = [
-      disc.animate([{ transform: 'translate(-50%, -50%) rotate(0deg)' }, { transform: 'translate(-50%, -50%) rotate(360deg)' }], { duration: 2000, iterations: Infinity, easing: 'linear' }),
+      ...round({ duration: 2000, iterations: Infinity, easing: 'linear' }),
       run.animate([{ opacity: 0 }, { opacity: 0.9 }], { duration: 300, easing: 'linear', fill: 'forwards' }),
     ];
     if (lite()) anims.push(glow.animate([{ opacity: 0.5 }, { opacity: 0.8 }], { duration: 1000, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out', fill: 'both' }));
@@ -658,20 +670,10 @@ const edge = (() => {
     return kind === 'done' || kind === 'error' ? flash(kind) : kind === 'synced' ? fromTop(kind) : thread(kind);
   }
 
-  function remove() {
-    clear();
-    reasons.clear();
-    clearTimeout(loopTimer);
-    loopTimer = 0;
-    if (el) el.remove();
-    el = null;
-    delete root.dataset.edgeCorners;
-  }
-
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clear(); } });
 
   return {
-    run: go, loading, enabled, corners, applyCorners, remove, clear,
+    run: go, loading, enabled, corners, applyCorners, clear,
     setEnabled(onOff) {
       store(KEY, onOff ? null : 'off');
       if (!onOff) { reasons.clear(); clear(); }
@@ -728,13 +730,6 @@ V.on('status', (value) => {
 });
 V.on('data', () => { if (cur) update(); });
 
-/* ================================================================== the look switched, live */
-
-V.on('look', () => {
-  if (!on()) { uncover(true); edge.remove(); return; }
-  edge.applyCorners();
-  update();
-});
 V.on('animations', () => { if (cur) update(); });
 
 edge.applyCorners();
@@ -743,6 +738,7 @@ else startSplash();
 
 V.loading = {
   judge,
+  arrive,
   /* Frame times (ms) for a label ('splash', 'transition'); three screen changes of slow ones turn lite on (a test's way in). */
   feed,
   samples: () => ({ splash: samples.splash.flat(), transition: samples.transition.flat() }),

@@ -659,6 +659,25 @@ V.send = (() => {
     V.pc.notify(copied ? `Copied from ${from}` : t.kind === 'link' ? `A link from ${from}` : `Text from ${from}`, words);
   }
 
+  /* (1.22.6, N8) What this PC saved by itself as it arrived, by transfer id (V.db meta 'pc-saved': id -> path, the
+     newest SAVED_KEPT): the sender's row sent again after its answer was lost comes back marked not received (the last
+     device to send wins), and it's then only marked received again, never saved a second time ("name (2)"), copied or
+     shown on a card again. An older Wefty on this PC doesn't know the key; the PC app's own saveFile remembers too. */
+  const SAVED_KEPT = 300;
+  let savedHere = null;  // Map, once read
+  const readSaved = () => (savedHere ? Promise.resolve(savedHere) : V.db.meta('pc-saved').then((kept) => {
+    savedHere = savedHere || new Map(Object.entries(kept && typeof kept === 'object' ? kept : {}));
+    return savedHere;
+  }, () => (savedHere = savedHere || new Map())));
+  async function rememberSaved(id, path) {
+    const all = await readSaved();
+    all.delete(id);
+    all.set(id, path);
+    while (all.size > SAVED_KEPT) all.delete(all.keys().next().value);
+    await V.db.meta('pc-saved', Object.fromEntries(all)).catch(() => {});
+  }
+  V.on('signed-out', () => { savedHere = null; });
+
   /* The PC saves what's sent to it by itself, into Downloads\Vault. Gives where it went. `auto`: arrived() saving it
      as it came (only those are copied and shown on the card; a Save pressed here gets the notice as before). */
   async function saveOnPc(transfer, { auto = false, live = false } = {}) {
@@ -666,8 +685,14 @@ V.send = (() => {
     saving.add(transfer.id);
     draw();
     try {
+      const before = auto ? (await readSaved()).get(transfer.id) : '';
+      if (before) {  // (saved as it came already: its row came back not received)
+        await received(transfer, { saved: before });
+        return before;
+      }
       const url = await V.cloud.link(transfer.path);
       const answer = await V.pc.call('saveFile', { id: transfer.id, url, name: transfer.name || 'file' });
+      if (answer && answer.path) await rememberSaved(transfer.id, answer.path);
       await received(transfer, { saved: answer.path });
       savedNews.push({ from: transfer.from_device, name: transfer.name, folder: answer.folder || 'Downloads',
         path: answer.path, mime: transfer.mime || '', at: transfer.created_at || '', sent: V.sentAt(transfer),
@@ -722,7 +747,7 @@ V.send = (() => {
   async function openHere(transfer, how) {
     try {
       if (how === 'share' && navigator.share) {
-        const response = await fetch(await V.cloud.link(transfer.path));
+        const response = await V.cloud.deadlineFetch(await V.cloud.link(transfer.path));
         const blob = await response.blob();
         const file = new File([blob], transfer.name || 'file', { type: transfer.mime || blob.type });
         if (navigator.canShare && !navigator.canShare({ files: [file] })) throw new Error('This device can\'t share that kind of file.');
@@ -752,7 +777,7 @@ V.send = (() => {
     try {
       const all = [];
       for (const t of list) {
-        const blob = await (await fetch(await V.cloud.link(t.path))).blob();
+        const blob = await (await V.cloud.deadlineFetch(await V.cloud.link(t.path))).blob();
         all.push(new File([blob], t.name || 'file', { type: t.mime || blob.type }));
       }
       if (navigator.canShare && !navigator.canShare({ files: all })) throw new Error('This device can\'t share those.');
@@ -1335,6 +1360,13 @@ V.send = (() => {
   return {
     render, files, text, sendFiles, unsend, runQueue, takeShared, stage, unseen, deviceSetting,
     targets, preview, videoPreview, THUMB_NAME,
+    // (1.22.6) The box's words, kept across an update's reload (js/update.js), and put back after it.
+    boxWords: () => (parts && parts.area && parts.area.isConnected ? parts.area.value : draft),
+    keepWords: (words) => {
+      if (draft.trim() || !String(words || '').trim()) return;
+      draft = String(words);
+      if (parts && parts.area && parts.area.isConnected && !parts.area.value) parts.area.value = draft;
+    },
     // For js/arrive.js's card: the preview, the big view, opening and marking what came as arrived.
     image, viewer, received, openHere, openLink, kindIcon,
     checkIncoming: () => {

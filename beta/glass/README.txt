@@ -10,7 +10,12 @@ The idea
   html[data-look="glass"]   the glass look is on (js/look.js sets it, in <head>, before the first frame)
   anything else             the classic look, untouched
 
-Every rule in vault/web/glass/*.css starts with html[data-look="glass"]. Every script in vault/web/glass/*.js does
+The stylesheets are cascade layers (styles.css's first line: @layer force, classic, glass, ui). styles.css is all in
+@layer classic; every rule in vault/web/glass/*.css is in that file's @layer glass block and starts at html (no look
+selector: tools/strip_look.py took html[data-look="glass"]'s attribute out; run it again after merging a branch written
+before), and an !important declaration goes in the file's @layer force block at its end (important reverses the order
+of layers). New 2.0 CSS goes in @layer ui. tests/test_wefty_20_rules.py checks all of it, and tests/look_ab.py shows
+what a CSS change does to every screen. Every script in vault/web/glass/*.js does
 nothing unless V.look.isGlass(), and listens to V.on('look') so the switch in Settings > Appearance works live, in both
 directions, with no reload. Never edit an existing rule in styles.css. If a hook is really needed (a class or a
 data-attribute on existing markup) add it in the app's own JS in a way that changes nothing in classic.
@@ -81,15 +86,15 @@ stray element or inline style behind. tests/test_wefty_20_motion.py drives each 
 
 How to add an area (or a screen of one)
 ---------------------------------------
- 1. Put the rules in glass/<area>.css, every one starting with html[data-look="glass"].
+ 1. Put the rules in glass/<area>.css's @layer glass block, every one starting at html (!important ones in its @layer force).
  2. Put the code in glass/<area>.js: `if (!V.look.isGlass()) ...` guards, V.on('look') to start/stop, V.motion for motion.
  3. Add your screens to SCREENS (and your interactions to MOTIONS) in tests/glass_shots.py, then LOOK at the pictures:
         python tests/glass_shots.py <outdir> --screens today --theme dark,light --size phone,wide --motion
     names are <screen>-<look>-<theme>-<size>.png, and filmstrips <interaction>-...-strip.png. Never say a screen looks
     right without having looked at the picture (dark, light, Pure black; 412 px, 360 px at page zoom 1.15, 1280 px).
- 4. Run your area's old tests with WEFTY_LOOK=glass as well as without. Tests that pin the classic look's exact colours
-    or layout get @pytest.mark.classic_only (skipped under glass); nothing else may be skipped.
- 5. Write tests/test_wefty_20_<area>.py: glass on/off both live and by reload, no console errors, no sideways scroll at
+ 4. Run your area's old tests (the suite runs on glass, in Full, by default since 2.0's "one look": there is no classic to
+    compare with, and no WEFTY_LOOK any more; tests/contract_retired.json lists the classic-only tests that went).
+ 5. Write tests/test_wefty_20_<area>.py: a reload keeps it, no console errors, no sideways scroll at
     320/360/412 px (page zoom 1.15 and 1.3) and 1280/1366, text contrast, lite and calm, the interactions still work.
 
 Words: plain and short, "Wefty" never "Vault" in anything shown, no em dashes in what people read.

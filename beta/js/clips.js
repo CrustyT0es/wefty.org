@@ -996,13 +996,20 @@ V.clips = (() => {
     }
   });
 
-  // What the PC copied while the cloud couldn't be reached goes when it's back (only the newest).
-  let unsent = null;
-  async function sendCopied(text) {
-    unsent = text;
+  // What the PC copied while the cloud couldn't be reached goes when it's back (only the newest). (1.22.6, N13) Not
+  // once something copied on another device has come since (`after`: the newest clip known when the PC copied, as a
+  // phone's own words wait, retryMine): that's newer, and the PC's old words would go over it everywhere.
+  let unsent = null;  // { text, after }
+  const newerElsewhere = (after) => {
+    const was = Date.parse(after || '');
+    return V.data.clips.some((c) => c.from_device !== V.device && (!Number.isFinite(was) || Date.parse(c.created_at || '') > was));
+  };
+  async function sendCopied(text, after = newest(V.data.clips.map((c) => c.created_at))) {
+    const entry = { text, after };
+    unsent = entry;
     try {
       const shared = await V.cloud.insertClip(text);
-      if (unsent === text) unsent = null;
+      if (unsent === entry) unsent = null;
       // Copied on the PC: the newest there, so a file sent a moment earlier isn't put over it.
       if (shared && shared.created_at) wrote(text, shared.created_at);
     } catch (error) { /* tried again when the cloud's back */ }
@@ -1010,9 +1017,11 @@ V.clips = (() => {
   V.on('pc:clipboard', ({ text }) => { if (V.prefs && V.prefs.clipboardShare && V.data.user) sendCopied(text); });
   V.on('status', (state) => {
     if (state !== 'synced' && state !== 'held') return;
-    if (unsent) sendCopied(unsent);
+    if (unsent && newerElsewhere(unsent.after)) unsent = null;  // (copied elsewhere since: that one stays the newest)
+    if (unsent) sendCopied(unsent.text, unsent.after);
     retryMine();
   });
+  V.on('signed-out', () => { unsent = null; });
 
   /* Whether this device's clipboard is kept in step (Settings' switch and the Clipboard part's read the same), and
      switching it: on reads the clipboard first, so it's only ever called from a tap. Never on the PC (its two
@@ -1028,6 +1037,13 @@ V.clips = (() => {
     render, share, mayShare, whyNot, saveAsNote, stepRow, pcStepRow, pcDirections, pcStepping: () => pcStepping(), setPcStepping, step, sendNow, shareShared, copyShared, wrote, older, put, tap, copying, copied,
     stepping: () => stepping(), setStepping, canStep: () => canStep(), markNew, offering: () => offering(), fresh: () => fresh(),
     quiet: hush,  // (js/editor.js, while a locked note's words show)
+    // (1.22.6) The box's words, kept across an update's reload (js/update.js), and put back after it.
+    boxWords: () => (parts && parts.paste && parts.paste.isConnected ? parts.paste.value : pasted),
+    keepWords: (words) => {
+      if (pasted.trim() || !String(words || '').trim()) return;
+      pasted = String(words);
+      if (parts && parts.paste && parts.paste.isConnected && !parts.paste.value) parts.paste.value = pasted;
+    },
     // What's been put on this clipboard (and the look at it on coming back) finished first.
     settled: () => Promise.all([busy, writing]).then(() => {}, () => {}),
   };

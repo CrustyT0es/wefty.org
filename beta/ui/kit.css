@@ -1,0 +1,591 @@
+@layer ui {
+/* Wefty 2.0's kit: ONE definition of each part, styling the app's existing (pinned) classes; it adds no class the app
+   must use. The look brief 1.6 and 1.7, at the owner's phone first. Values only from ui/tokens.css.
+
+   It sits in the sublayer ui.kit: every other ui/ file beats it whatever the weight (the kit is the floor), and it beats
+   classic and glass whatever theirs. Every selector is wrapped whole in :where() (no weight), so the kit's own order
+   decides between its rules (a part, then its kinds, then its states), and the block at the end, "given back to their
+   areas", always wins over the kit: there an area that still sizes or colours its own button, field, chip, switch or
+   segment gets those properties back from its own glass or classic rule (revert-layer reaches past ui.kit to them).
+   The rules the kit replaced are deleted from glass/glass.css and glass/overlays.css.
+
+   The overlays' states (vault/web/ui/README.txt, frozen): an overlay's own node carries data-ui="entering" | "open" |
+   "leaving" and its scrim is one .ui-scrim node with the same attribute; the overlays code sets them. Today's markup
+   (no attribute: .layer is the scrim, .shown / .leaving its states) looks the same as before. */
+@layer kit {
+
+/* ================================================================== the one focus ring (brief 1.7) */
+
+/* outline 2 px of --focus, 2 px off, on :focus-visible, nothing else. A field shows its 1.5 px accent edge instead; a
+   row inside a menu or a list draws it inside; nothing ever shows two edges [TS-24, LAY-13]. */
+:where(:focus-visible) { outline: var(--ring-w) solid var(--focus); outline-offset: var(--ring-gap); }
+:where(.menu-item, .g-msheet-item, .g-pick-option, .segmented button):where(:focus-visible) { outline-offset: calc(var(--ring-gap) * -1); }
+/* (boxes typed in: the field's edge or its container says where the typing goes) */
+:where(.field, select, textarea, [contenteditable]:not([contenteditable="false"]),
+  input:not([type=checkbox], [type=radio], [type=button], [type=submit], [type=reset], [type=range], [type=color], [type=file], [type=image])):where(:focus-visible) {
+  outline: none;
+}
+/* (a note's folder drop-down is a chip, not a box typed in: the one ring, as a button's) */
+:where(.folder-pick):where(:focus-visible) { outline: var(--ring-w) solid var(--focus); outline-offset: var(--ring-gap); }
+/* (a note's title has no box of its own: with the keyboard, the one ring) */
+:where(html.g-kbd .note-title:focus-visible) { outline: var(--ring-w) solid var(--focus); outline-offset: var(--ring-gap); }
+/* (opened by a finger, nothing in a menu or a sheet is ringed; with the keyboard (html.g-kbd) the one ring) */
+:where(html:not(.g-kbd)) :where(.menu, .sheet, .g-menu-going)
+  :where(button, a, [role=menuitem], [role=menuitemcheckbox], [role=radio], [role=tab], [tabindex]):where(:focus-visible),
+:where(html:not(.g-kbd) .menu:focus-visible) { outline: none; }
+/* (a thing whose menu is open shows no outline: it lifts, the overlays' work) */
+:where(.ctx-open) { outline: none; }
+
+/* ================================================================== buttons */
+
+/* quiet (the plain .btn): a soft glass fill with its top light and hairline. 44 tall (48 in a sheet's foot), radius 16,
+   the label type, 0 16 padding. */
+:where(.btn) {
+  border: 0; border-radius: var(--r16); min-height: var(--btn-h); padding: 0 var(--s4);
+  font: var(--t-label) var(--font); color: var(--text);
+  background: var(--glass-quiet); box-shadow: var(--e-1);
+}
+/* a phone's sheet of one or two actions: 48 tall, each half the row (a row of three keeps 44: three words to fit). Counted
+   from the first child (at most one after it), never with a :has() on the row: a non-subject :has() is re-checked on every
+   change inside it (README.txt). */
+@media (max-width: 699px) {
+  :where(.sheet-actions > .btn:first-child:nth-last-child(-n+2), .sheet-actions > :first-child:nth-last-child(-n+2) ~ .btn) {
+    min-height: var(--btn-h-sheet);
+  }
+}
+/* primary: the one violet ramp under the gloss, with its depth (one a screen, one in an open sheet) */
+:where(.btn.primary) {
+  color: var(--on-brand); background: var(--grad-gloss), var(--grad-brand); box-shadow: var(--depth-primary);
+}
+@media (hover: hover) and (pointer: fine) {
+  :where(.btn.primary:hover:not(:disabled)) {
+    color: var(--on-brand); background: var(--grad-gloss), var(--grad-brand); box-shadow: var(--depth-primary);
+  }
+}
+/* tonal: a soft wash of the violet (glass: a gradient, the same on hover), a 1 px ring of the accent under a top light, its
+   ink (the second action beside a primary) */
+:where(.btn.tonal) {
+  color: var(--accent-ink); background: var(--grad-tonal); box-shadow: inset 0 1px 0 var(--rim-top), inset 0 0 0 1px var(--rim-accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  :where(.btn.tonal:hover:not(:disabled)) {
+    color: var(--accent-ink); background: var(--grad-tonal); box-shadow: inset 0 1px 0 var(--rim-top), inset 0 0 0 1px var(--rim-accent);
+  }
+}
+/* quiet words: no fill, the second ink */
+:where(.btn.quiet) { color: var(--text-2); background: transparent; box-shadow: none; }
+@media (hover: hover) and (pointer: fine) { :where(.btn.quiet:hover:not(:disabled)) { color: var(--text); } }
+/* text: the accent's words, no fill, no underline (what every underlined link was), a 44 px target */
+:where(.link-btn) {
+  color: var(--accent-ink); font-weight: var(--w-semi); text-decoration: none; min-height: var(--hit);
+}
+/* danger, by weight: the solid red only on a confirm's own button [TS-25, NE-32, SCC-22]; ink alone elsewhere */
+:where(.btn.danger) {
+  color: var(--on-danger-solid); background: var(--grad-gloss), var(--danger-solid); box-shadow: var(--e-danger); filter: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  :where(.btn.danger:hover:not(:disabled)) {
+    color: var(--on-danger-solid); background: var(--grad-gloss), var(--danger-solid); box-shadow: var(--e-danger); filter: none;
+  }
+}
+:where(.btn.danger-quiet) { color: var(--danger); background: transparent; box-shadow: none; }
+/* off: never faded as a whole (words never sit on a see-through panel), a quiet fill and dim words instead */
+:where(.btn:disabled, .btn.primary:disabled, .btn.tonal:disabled, .btn.danger:disabled) {
+  opacity: 1; color: var(--muted); background: var(--glass-quiet); box-shadow: none;
+}
+:where(.btn.quiet:disabled, .btn.danger-quiet:disabled) { background: transparent; }
+/* icon buttons: round-cornered, the accent when on */
+:where(.icon-btn) { border-radius: var(--r16); }
+:where(.icon-btn.on) { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* ================================================================== fields */
+
+/* 48 tall, radius 16, 16/24 words (never under 16 px: a phone zooms in on smaller), the field's glass with its top light
+   and hairline. Focused: a step brighter and a 1.5 px accent edge, and no ring round it [TS-24]. */
+:where(.field) {
+  border: 0; border-radius: var(--r16); min-height: var(--field-h); padding: var(--s3) var(--field-pad);
+  font: var(--t-body) var(--font); color: var(--text);
+  background-color: var(--glass-field); box-shadow: inset 0 1px 0 var(--rim-top), inset 0 0 0 1px var(--line);
+}
+@media (hover: hover) and (pointer: fine) { :where(.field:hover:not(:focus)) { box-shadow: inset 0 1px 0 var(--rim-top), inset 0 0 0 1px var(--line-strong); } }
+:where(.field:focus, .field:focus-visible) {
+  background-color: var(--glass-field-on); box-shadow: inset 0 0 0 var(--edge-field) var(--accent);
+}
+:where(.field)::placeholder { color: var(--placeholder); opacity: 1; }
+:where(.field:disabled) { opacity: 1; color: var(--muted); background-color: var(--glass-sunken); }
+/* a drop-down: the same box, its chevron in the words' colour, room for it */
+:where(select.field, .folder-pick) {
+  appearance: none; -webkit-appearance: none; padding-right: calc(var(--field-pad) + var(--s6));
+  background-image: var(--chevron); background-repeat: no-repeat; background-position: right var(--field-pad) center; background-size: var(--s4);
+}
+:where(select.field option, .folder-pick option) { background: var(--solid-float); color: var(--text); }
+/* (a search box is a field that holds its input: the same edge when its input has the typing, one edge) */
+:where(.search-box:focus-within) { box-shadow: inset 0 0 0 var(--edge-field) var(--accent); }
+/* the label above a field */
+:where(.label) { font: var(--t-sub) var(--font); font-weight: var(--w-semi); color: var(--text-2); }
+
+/* ================================================================== switches, segments, ticks */
+
+/* A switch: 44 x 26, an 18 px thumb. Off: the sunken glass with a 1.5 px control edge; on: the violet ramp, which
+   cross-fades in over 120 ms (opacity) while the thumb slides on the pill spring (transform: glass's rule, only
+   transform and opacity move; a press is the scale property, motion.js's, so the two never fight). Never the words
+   On or Off. */
+:where(.switch) {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
+  width: var(--switch-w); height: var(--switch-h); border: 0; border-radius: var(--r-full);
+  background: var(--glass-sunken); box-shadow: inset 0 0 0 var(--edge-field) var(--control); transition: none;
+}
+:where(.switch)::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: var(--grad-brand); box-shadow: var(--e-switch-on); opacity: 0;
+  transition: opacity var(--d-fade) var(--ease-out);
+}
+:where(.switch)::after {
+  content: ""; position: absolute; top: calc((var(--switch-h) - var(--switch-thumb)) / 2); left: calc((var(--switch-h) - var(--switch-thumb)) / 2);
+  z-index: var(--z-raise); width: var(--switch-thumb); height: var(--switch-thumb); border-radius: var(--r-full);
+  background: var(--control); box-shadow: var(--e-thumb); translate: none; transform: none;
+  transition: transform var(--d-pill) var(--spring-pill);
+}
+:where(.switch:checked) { box-shadow: none; }
+:where(.switch:checked)::before { opacity: 1; }
+:where(.switch:checked)::after { transform: translateX(calc(var(--switch-w) - var(--switch-h))); background: var(--on-brand); }
+:where(.switch:disabled) { cursor: default; opacity: 1; box-shadow: inset 0 0 0 var(--edge-field) var(--line-strong); }
+:where(.switch:disabled)::after { background: var(--line-strong); }
+:where(.switch:checked:disabled)::before { opacity: .45; }
+/* A menu's on/off row (V.menu's checked items: "On" / "Off" in words) shows a real switch in their place. The words stay
+   for a screen reader (the row says aria-checked too). */
+:where(.menu-switch .menu-state) {
+  position: relative; flex: none; width: var(--switch-w); height: var(--switch-h); margin-left: auto; padding: 0;
+  border-radius: var(--r-full); overflow: hidden; color: transparent; font-size: 0;
+  background: var(--glass-sunken); box-shadow: inset 0 0 0 var(--edge-field) var(--control);
+}
+:where(.menu-switch .menu-state)::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--grad-brand); box-shadow: var(--e-switch-on);
+  opacity: 0; transition: opacity var(--d-fade) var(--ease-out);
+}
+:where(.menu-switch .menu-state)::after {
+  content: ""; position: absolute; top: calc((var(--switch-h) - var(--switch-thumb)) / 2); left: calc((var(--switch-h) - var(--switch-thumb)) / 2);
+  width: var(--switch-thumb); height: var(--switch-thumb); border-radius: var(--r-full); background: var(--control); box-shadow: var(--e-thumb);
+  transition: transform var(--d-pill) var(--spring-pill);
+}
+:where(.menu-switch[aria-checked="true"] .menu-state) { box-shadow: none; }
+:where(.menu-switch[aria-checked="true"] .menu-state)::before { opacity: 1; }
+:where(.menu-switch[aria-checked="true"] .menu-state)::after { transform: translateX(calc(var(--switch-w) - var(--switch-h))); background: var(--on-brand); }
+
+/* A segmented choice: one sunken track, the picked one the violet pill with white words (it slides: the overlays'
+   highlight, glass/overlays.js, carries the same pill) [TS-31]. */
+:where(.segmented) { border-radius: var(--r16); background: var(--glass-sunken); box-shadow: inset 0 0 0 1px var(--rim-hair); }
+:where(.segmented button) { border-radius: var(--r12); font: var(--t-sub) var(--font); font-weight: var(--w-medium); color: var(--text-2); }
+:where(.segmented button:is([aria-checked="true"], [aria-selected="true"])) {
+  color: var(--on-brand); font-weight: var(--w-semi); border-color: transparent;
+  background: var(--grad-picked); box-shadow: inset 0 1px 0 var(--picked-edge), inset 0 0 0 1px var(--picked-ring);
+}
+:where(.segmented.g-seg > button:is([aria-checked="true"], [aria-selected="true"], .on)) { background: transparent; box-shadow: none; }
+:where(.g-seg-hl i) {
+  border-radius: var(--r12); background: var(--grad-picked); box-shadow: inset 0 1px 0 var(--picked-edge), inset 0 0 0 1px var(--picked-ring);
+}
+
+/* A tick: a 24 px box, radius 8, in a 44 px target; ticked = the ramp with a white mark. */
+:where(.covers-tick, .nt-never-box, input[name="terms"]) {
+  appearance: none; -webkit-appearance: none; position: relative; flex: none; margin: 0; padding: 0; cursor: pointer;
+  width: var(--tick-box); height: var(--tick-box); border: 0; border-radius: var(--r8);
+  background: var(--glass-field); box-shadow: inset 0 1px 0 var(--rim-top), inset 0 0 0 var(--edge-field) var(--control);
+}
+:where(.covers-tick, .nt-never-box, input[name="terms"])::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: var(--grad-brand); box-shadow: var(--e-switch-on); opacity: 0; transition: opacity var(--d-fade) var(--ease-out);
+}
+:where(.covers-tick, .nt-never-box, input[name="terms"])::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--on-brand); opacity: 0; transform: scale(.3);
+  -webkit-mask: var(--mark-tick) center / var(--tick-mark) no-repeat; mask: var(--mark-tick) center / var(--tick-mark) no-repeat;
+  transition: transform var(--d-tap) var(--spring-tap), opacity var(--d-fade) var(--ease-linear);
+}
+:where(.covers-tick:checked, .nt-never-box:checked, input[name="terms"]:checked)::before { opacity: 1; }
+:where(.covers-tick:checked, .nt-never-box:checked, input[name="terms"]:checked)::after { opacity: 1; transform: none; }
+:where(.covers-tick:disabled, .nt-never-box:disabled, input[name="terms"]:disabled) { opacity: 1; cursor: default; box-shadow: inset 0 0 0 var(--edge-field) var(--line-strong); }
+:where(html.calm) :where(.covers-tick, .nt-never-box, input[name="terms"])::after { transform: none; }
+
+/* ================================================================== chips and badges */
+
+/* A chip (you tap it): 36 tall in a 44 px target, full round, 14/20 500, quiet glass; picked = the violet pill. */
+:where(.chip) {
+  height: var(--chip-h); border: 0; border-radius: var(--r-full); padding: 0 var(--field-pad);
+  font: var(--t-sub) var(--font); font-weight: var(--w-medium); color: var(--text-2);
+  background: var(--glass-quiet); box-shadow: var(--e-1);
+}
+:where(.chip.on) {
+  color: var(--on-brand); font-weight: var(--w-semi);
+  background: var(--grad-picked); box-shadow: inset 0 1px 0 var(--picked-edge), inset 0 0 0 1px var(--picked-ring);
+}
+/* A badge: the badge's own violet with its glassy depth (kept), 12/16 700 white, 20 tall, full round [C38]. */
+:where(.badge) {
+  height: var(--badge-h); min-width: var(--badge-h); padding: 0 var(--badge-pad); border-radius: var(--r-full);
+  font: var(--t-micro) var(--font); font-weight: var(--w-bold); line-height: var(--badge-h); font-variant-numeric: tabular-nums;
+  color: var(--badge-ink); background: var(--grad-badge); box-shadow: var(--depth-badge); text-shadow: var(--badge-ink-shadow);
+}
+
+/* (with the keyboard's ring on it, a control drops its own edge and depth: one edge at a time [TS-24]) */
+:where(.btn, .chip, .switch, .icon-btn, .segmented button, .covers-tick, .nt-never-box, input[name="terms"], .menu-item, .toast-action, .link-btn):where(:focus-visible) {
+  box-shadow: none;
+}
+
+/* ================================================================== what floats: SOLID (law 1: alpha 1) */
+
+/* -- the scrim: the only part of an overlay that fades. Today's .layer is it (glass's), the overlays' own .ui-scrim next. */
+:where(.ui-scrim) {
+  position: fixed; inset: 0; background: var(--scrim); opacity: 0;
+  transition: opacity var(--d-scrim-in) var(--ease-out);
+}
+:where(.ui-scrim[data-ui="open"]) { opacity: 1; }
+:where(.ui-scrim[data-ui="leaving"]) { opacity: 0; transition-duration: var(--d-scrim-out); transition-timing-function: var(--ease-in); }
+/* a panel itself never fades (its node's own data-ui says where it is; how it moves is the overlays') */
+:where(.sheet[data-ui], .menu[data-ui], .notice[data-ui]) { opacity: 1; }
+:where(.sheet[data-ui="leaving"], .menu[data-ui="leaving"], .toast[data-ui="leaving"], .notice[data-ui="leaving"]) { pointer-events: auto; }
+
+/* -- a sheet: the screen's full width, radius 28 28 0 0, the solid sheet with its light (the sheen and the glass light are
+   transparent in "as before"), the grabber, no rim down the screen's own edges [TS-24], never taller than the screen
+   under the head row. */
+:where(.sheet) {
+  border-radius: var(--r28) var(--r28) 0 0; max-height: var(--sheet-most);
+  background: var(--glass-light), var(--sheen), var(--solid-sheet); box-shadow: var(--e-4);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+:where(.sheet)::before {
+  width: var(--grabber-w); height: var(--grabber-h); margin-left: calc(var(--grabber-w) / -2); border-radius: var(--r-full);
+  background: var(--line-strong);
+}
+:where(.sheet-head h2) {
+  font: var(--t-title-2) var(--font-display, var(--font)); letter-spacing: var(--ls-title-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* (Help fills a phone's screen, and a hint sheet keeps its own height) */
+:where(.sheet.help-sheet, .sheet.hs-sheet) { max-height: none; }
+/* (a phone's sheet: a filler of its own colour under it covers the touch past the top of its spring) */
+@media (max-width: 699px) { :where(.sheet:not(.help-sheet)) { box-shadow: var(--e-4), 0 var(--s12) 0 0 var(--solid-sheet); } }
+/* -- a dialog (from 700 px): the sheet's fill, radius 28 all round, the floating depth, never taller than 602 */
+@media (min-width: 700px) {
+  :where(.sheet) { border-radius: var(--r28); box-shadow: var(--e-3); max-height: min(var(--dialog-most), calc(100% - var(--s12))); }
+  :where(.sheet.help-sheet, .sheet.hs-sheet) { max-height: none; }
+  /* (its light edge all round: a dialog stands free; a phone's sheet has none down the screen's own edges) */
+  :where(.sheet)::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; background: var(--rim-edge);
+    -webkit-mask: var(--mask-edge); -webkit-mask-composite: xor; mask: var(--mask-edge); mask-composite: exclude;
+  }
+}
+
+/* -- a menu: the solid float with its light, radius 16, rows of the label type at 500 */
+:where(.menu) {
+  border: 0; border-radius: var(--r16); padding: 6px;
+  background: var(--sheen), var(--solid-float); box-shadow: var(--e-3);
+}
+:where(.menu-item) {
+  min-height: var(--row-h-fine); padding: 0 var(--s3); border-radius: var(--r12);
+  font: var(--t-label) var(--font); font-weight: var(--w-row); color: var(--text);
+}
+:where(.menu-item.danger) { color: var(--danger); }
+/* (under a finger on a phone: 52 px rows, and at most 296 px wide) */
+@media (pointer: coarse) and (max-width: 699px) {
+  :where(.menu-item) { min-height: var(--row-h); }
+  :where(.menu) { max-width: min(var(--menu-most-w), calc(100% - var(--s6))); }
+}
+
+/* -- a toast: SOLID graphite, words #f5f6f8 in the label type, radius 22, one line 52 tall; its action a 44 px text
+   button. (Where it sits and how it stacks are the overlays'.) */
+:where(.toast:not(.msg-card)) {
+  min-height: var(--toast-h); border: 0; border-radius: var(--r22); color: var(--toast-ink); font: var(--t-label) var(--font);
+  background: var(--solid-toast); box-shadow: var(--e-toast);
+}
+:where(.toast-action) {
+  min-height: var(--hit); padding: 0 var(--s3); border: 0; border-radius: var(--r12);
+  color: var(--toast-action); font: var(--t-label) var(--font); background: transparent; box-shadow: none;
+}
+:where(.toast.msg-card .toast-action) { color: var(--text-2); }
+/* -- the card from V.notice and the message card: the floating solid */
+:where(.notice, .toast.msg-card) { border: 0; background: var(--solid-float); box-shadow: var(--e-3); }
+
+/* ---- given back to their areas (generated by tests/kit_giveback.py --write: never edited by hand) */
+.profile-menu .menu-item { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.chip.add { padding: revert-layer; }
+.notice-actions .btn { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.gate-box > .link-btn.moving-other { min-height: revert-layer; }
+.gate-box > .link-btn.doors-forgot { min-height: revert-layer; }
+.doors-new .link-btn { font: revert-layer; font-weight: revert-layer; line-height: revert-layer; }
+.doors-pass .field { padding-right: revert-layer; }
+.gate-box .field.doors-code { font: revert-layer; font-variant-numeric: revert-layer; line-height: revert-layer; }
+@media (min-width: 900px) { .new-note { padding: revert-layer; } }
+.note-meta .chip { height: revert-layer; padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.due-chip.late { color: revert-layer; }
+.due-chip.today { color: revert-layer; }
+.due-chip.soon { color: revert-layer; }
+.due-chip.later { color: revert-layer; }
+.done-chip.on { color: revert-layer; }
+.editor-tools .btn { padding: revert-layer; }
+.t-actions .btn { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.clip-actions .btn { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.segmented.share-switch button { font-size: revert-layer; line-height: revert-layer; }
+.segmented.share-switch button[aria-selected="true"] { font-weight: revert-layer; }
+.share-switch .badge { min-width: revert-layer; height: revert-layer; padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+@media (max-width: 399px) { .segmented.share-switch button { font-size: revert-layer; line-height: revert-layer; } }
+.send-to-choice[aria-checked="true"] { font-weight: revert-layer; }
+.send-row textarea.field { min-height: revert-layer; padding-top: revert-layer; padding-bottom: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.send-row .btn { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.latest .clip-actions .btn { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.set-search-box.field { min-height: revert-layer; padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.ai-gemini-sheet .ai-key-row .field { font-size: revert-layer; min-height: revert-layer; line-height: revert-layer; }
+.empty-folder .btn { padding-inline: revert-layer; }
+.empty-folder .move-here { min-height: revert-layer; font: revert-layer; text-decoration: revert-layer; line-height: revert-layer; }
+.recorder .btn { padding: revert-layer; }
+.chip.add { padding: revert-layer; color: revert-layer; }
+.pick-export { min-height: revert-layer; text-decoration: revert-layer; }
+.select-btn { padding: revert-layer; font: revert-layer; line-height: revert-layer; }
+.notes-menu .menu-item { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.menu-view .segmented button { font-size: revert-layer; line-height: revert-layer; }
+.chip.drop-on { color: revert-layer; }
+:is(.nav-item, .chip, .crumb, .subfolder, .arrange-row, .arrange-end).drop-no { color: revert-layer; }
+.tray-head .btn { padding: revert-layer; }
+.files-status .btn { padding: revert-layer; }
+.files-actions .btn { padding: revert-layer; }
+.files-pick-line .btn { padding: revert-layer; }
+.ink-bar .btn { padding: revert-layer; }
+.note-meta .remind-chip { color: revert-layer; }
+.note-meta .focus-chip.on-now { color: revert-layer; }
+.note-meta .remind-chip.late { color: revert-layer; }
+.remind-row .time-field { min-height: revert-layer; padding: revert-layer; }
+.remind-outside .btn { padding: revert-layer; }
+.repeat-field { appearance: revert-layer; padding-right: revert-layer; }
+.repeat-ends { appearance: revert-layer; padding-right: revert-layer; }
+.study-done { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.btn.study-skip { padding: revert-layer; font: revert-layer; line-height: revert-layer; }
+.btn.study-back { padding: revert-layer; font: revert-layer; line-height: revert-layer; }
+@container (max-width: 299.98px) { .btn.study-btn { padding-inline: revert-layer; } }
+@container (min-width: 300px) { .btn.study-back { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; } }
+.btn.study-btn { padding: revert-layer; font: revert-layer; line-height: revert-layer; }
+.review-go .btn { font-size: revert-layer; line-height: revert-layer; }
+.aic-top .aic-all { min-height: revert-layer; }
+.aic-fields textarea.field { min-height: revert-layer; padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.aic-fields .aic-q { font-weight: revert-layer; }
+.btn.learn-back { padding: revert-layer; }
+.learn-input { font-size: revert-layer; line-height: revert-layer; }
+.learn-input:disabled { color: revert-layer; }
+.note-meta .exam-chip { color: revert-layer; }
+.note-meta .exam-chip.soon { color: revert-layer; }
+.note-meta .exam-chip.ask { color: revert-layer; }
+.exam-banner .btn { padding: revert-layer; }
+.btn.today-quiz { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+@media (max-width: 380px) { .btn.today-quiz { padding: revert-layer; } }
+@media (max-width: 479px) { .today-row.dg-extra:has(.sub-cancel) { padding-bottom: revert-layer; } }
+.btn.sub-cancel.small { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.sub-edit .field.sub-field { font-size: revert-layer; line-height: revert-layer; }
+.nt-folder { appearance: revert-layer; padding-right: revert-layer; }
+.note-meta .nt-chip { color: revert-layer; }
+.chat-side-head .btn { padding: revert-layer; }
+.chat-waiting-actions .btn { padding: revert-layer; font: revert-layer; line-height: revert-layer; }
+.chat-finishing .btn { padding: revert-layer; font: revert-layer; line-height: revert-layer; }
+.chat-cal-btn { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.chat-actions .btn { padding: revert-layer; font: revert-layer; line-height: revert-layer; }
+.chat-trouble .btn { padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+.chat-claude-off .link-btn { font: revert-layer; line-height: revert-layer; }
+.feedback-text { min-height: revert-layer; }
+.pair-box { font: revert-layer; line-height: revert-layer; }
+.gate-box .link-btn.welcome-skip { min-height: revert-layer; }
+.news-message { min-height: revert-layer; }
+@media (pointer: coarse) { .subject-chip { height: revert-layer; } }
+.loop-line .link-btn.loop-go { min-height: revert-layer; }
+.push-time { min-height: revert-layer; padding: revert-layer; }
+@media (pointer: coarse) { .push-time { min-height: revert-layer; } }
+.cap-title.field { font: revert-layer; line-height: revert-layer; }
+.cap-edit.link-btn { min-height: revert-layer; }
+textarea.field.cap-words { min-height: revert-layer; font: revert-layer; line-height: revert-layer; }
+.note-meta .cap-chip { color: revert-layer; }
+.cap-aside .link-btn { font: revert-layer; font-weight: revert-layer; line-height: revert-layer; }
+@media (pointer: coarse) { .cap-aside .link-btn { min-height: revert-layer; } }
+.tour-skip { min-height: revert-layer; color: revert-layer; }
+.help-box.field { min-height: revert-layer; padding: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+@media (pointer: coarse) { .hs-later { min-height: revert-layer; } }
+.fw-go { padding: revert-layer; }
+html .chat-trouble > .btn { min-height: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+@media (min-width: 900px) { html .chat-side-head .btn.primary { background: revert-layer; color: revert-layer; box-shadow: revert-layer; } }
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) { html .chat-side-head .btn.primary:hover:not(:disabled) { background: revert-layer; } }
+html .chat-actions .btn { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; color: revert-layer; }
+html :is(.chat-waiting-actions, .chat-finishing) .btn { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; background: revert-layer; color: revert-layer; box-shadow: revert-layer; }
+html.g-kbd .chat-box:focus-within { outline: revert-layer; outline-offset: revert-layer; }
+html .chat-tools .icon-btn { border-radius: revert-layer; color: revert-layer; }
+html .chat-tools .icon-btn.chat-clip { border-radius: revert-layer; background: revert-layer; color: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .chat-tools .icon-btn.chat-clip:hover:not(:disabled) { background: revert-layer; color: revert-layer; } }
+html :is(.chat-claude, .chat-you).ctx-open { outline: revert-layer; }
+html.g-kbd :is(.chat-claude, .chat-you).ctx-open { outline: revert-layer; outline-offset: revert-layer; }
+html .chat-input:focus-visible { outline: revert-layer; }
+html .editor-bar .icon-btn { border-radius: revert-layer; color: revert-layer; }
+html .editor-bar .icon-btn.on { background: revert-layer; color: revert-layer; }
+html .editor-bar .folder-pick { padding: revert-layer; border-radius: revert-layer; color: revert-layer; background-color: revert-layer; box-shadow: revert-layer; font: revert-layer; line-height: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .editor-bar .folder-pick:hover { background-color: revert-layer; } }
+html .note-meta .chip { height: revert-layer; padding: revert-layer; border: revert-layer; border-radius: revert-layer; font: revert-layer; color: revert-layer; background: revert-layer; box-shadow: revert-layer; line-height: revert-layer; }
+html .note-meta :is(.due-chip.soon, .due-chip.later, .due-chip:not(.late):not(.today), .remind-chip, .exam-chip, .nt-chip, .cap-chip, .focus-chip.on-now) { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .note-meta .due-chip.today { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .note-meta :is(.due-chip.late, .remind-chip.late) { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .note-meta .done-chip.on { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .editor .block-input:focus-visible { outline: revert-layer; }
+html .editor-tools .tool-btn:focus-visible { outline: revert-layer; outline-offset: revert-layer; }
+html .menu.tools-more-menu { padding: revert-layer; border-radius: revert-layer; }
+html .menu.tools-more-menu { padding: revert-layer; border-radius: revert-layer; }
+html .more-tool:focus-visible { outline: revert-layer; }
+html .ink-bar .icon-btn { border-radius: revert-layer; }
+html .ink-swatch.on span { outline: revert-layer; outline-offset: revert-layer; }
+html .sheet.wide .sheet-actions:has(> .btn:nth-child(3)) > .btn { min-height: revert-layer; }
+html .sheet.wide .sheet-actions:has(> .btn:nth-child(3)) > .btn.danger-quiet { background: revert-layer; box-shadow: revert-layer; }
+html .toast.msg-card .mc-go { background: revert-layer; box-shadow: revert-layer; }
+html .app-head > .icon-btn { border-radius: revert-layer; }
+@media (max-width: 699px) { html .layer.help-layer > .help-sheet { background-color: revert-layer; background-image: revert-layer; background-size: revert-layer; background-position: revert-layer; background-repeat: revert-layer; } }
+@media (max-width: 699px) { html .layer.help-layer > .help-sheet { -webkit-backdrop-filter: revert-layer; backdrop-filter: revert-layer; border-radius: revert-layer; } }
+@media (min-width: 700px) { html :is(.nt, .layer.study-layer > .study, .layer.help-layer > .help-sheet) { background: revert-layer; -webkit-backdrop-filter: revert-layer; backdrop-filter: revert-layer; box-shadow: revert-layer; } }
+@media (max-width: 899px) { html .list-title .list-tools .icon-btn { border-radius: revert-layer; color: revert-layer; background: revert-layer; } }
+html .search-box .search:focus-visible { outline: revert-layer; }
+html .chips .chip { height: revert-layer; padding: revert-layer; border: revert-layer; border-radius: revert-layer; background: revert-layer; color: revert-layer; font: revert-layer; box-shadow: revert-layer; line-height: revert-layer; }
+html .chips .chip.on { color: revert-layer; font-weight: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .chips.gn-slid .chip.on { background: revert-layer; box-shadow: revert-layer; }
+html .chips .chip.add { border: revert-layer; box-shadow: revert-layer; background: revert-layer; color: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .chips .chip:not(.on):hover { box-shadow: revert-layer; } }
+html .empty-folder .move-here { color: revert-layer; }
+html .loop-line .loop-go { color: revert-layer; font-weight: revert-layer; }
+html .list-head .btn.primary.new-note { background: revert-layer; box-shadow: revert-layer; }
+html .empty-folder .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .pick-all { color: revert-layer; }
+html .pick-export { color: revert-layer; }
+html .select-btn { min-height: revert-layer; border-radius: revert-layer; color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .select-btn[aria-pressed="true"] { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .select-btn[aria-pressed="true"]:hover { color: revert-layer; background: revert-layer; box-shadow: revert-layer; } }
+@media (min-width: 900px) { html .list-head .btn.primary.new-note { min-height: revert-layer; border-radius: revert-layer; padding: revert-layer; } }
+@media (min-width: 900px) { html .list-title .list-tools .icon-btn { border-radius: revert-layer; } }
+html .chips .chip.drop-on { color: revert-layer; background: revert-layer; }
+@media (min-width: 900px) { html .list-head .select-btn { min-height: revert-layer; } }
+@media (min-width: 900px) { html .list-title .select-btn { min-height: revert-layer; } }
+html :is(.empty-folder .move-here, .loop-line .loop-go, .pick-bar .pick-all, .pick-bar .pick-export) { min-height: revert-layer; text-decoration: revert-layer; color: revert-layer; font: revert-layer; line-height: revert-layer; }
+html .pick-bar :is(.pick-all, .pick-export) { min-height: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .pick-bar :is(.pick-all, .pick-export) { min-height: revert-layer; } }
+html .list-bar .btn.danger-quiet { min-height: revert-layer; padding: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .list-head .btn.primary.new-note { background: revert-layer; }
+html .empty-folder .btn.primary { background: revert-layer; }
+html .nt-bar > .icon-btn:not(.nt-stop) { border-radius: revert-layer; color: revert-layer; background: revert-layer; }
+@media (hover: hover) { html .nt-bar :is(.nt-hide, .icon-btn:not(.nt-stop)):hover:not(:disabled) { background: revert-layer; color: revert-layer; } }
+html .nt-foot > .btn { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; font: revert-layer; line-height: revert-layer; }
+html .nt-foot > .btn:not(.primary) { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+@media (max-width: 699px) { html .nt-foot > .btn { min-height: revert-layer; } }
+html :is(.nt-foot, .nt-setup) .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .nt-ready > .label { font: revert-layer; color: revert-layer; line-height: revert-layer; }
+html .nt-ready .field { min-height: revert-layer; border-radius: revert-layer; font-size: revert-layer; padding-inline: revert-layer; line-height: revert-layer; }
+html .nt-folder { padding-right: revert-layer; background-color: revert-layer; }
+html[data-theme="dark"] .nt-folder { background-color: revert-layer; }
+html .nt-source > .label { font: revert-layer; color: revert-layer; line-height: revert-layer; }
+html .nt-test .btn { min-height: revert-layer; border-radius: revert-layer; }
+html .nt-setup > .btn { min-height: revert-layer; border-radius: revert-layer; }
+html .nt-pocket-tip .btn { min-height: revert-layer; border-radius: revert-layer; padding: revert-layer; color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .nt-pcsound > .btn { min-height: revert-layer; border-radius: revert-layer; }
+html .nt-strip :focus-visible { outline: revert-layer; outline-offset: revert-layer; }
+html .note-meta .nt-chip { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .gate-box .label { color: revert-layer; font-weight: revert-layer; }
+html .gate-box .field { min-height: revert-layer; border-radius: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+html .gate-box .btn.wide-btn { min-height: revert-layer; border-radius: revert-layer; font: revert-layer; padding: revert-layer; line-height: revert-layer; }
+html .gate-box .btn.wide-btn:not(.primary):not(.quiet) { background: revert-layer; color: revert-layer; box-shadow: revert-layer; }
+html :is(.gate-box, .help-sheet, .hs) .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .gate-box .btn.doors-google { background: revert-layer; color: revert-layer; box-shadow: revert-layer; }
+html .gate-box .link-btn { color: revert-layer; font-weight: revert-layer; }
+html .doors-pass .field { padding-right: revert-layer; }
+html .gate-box .field.doors-code { min-height: revert-layer; }
+html .subject-chip { border-radius: revert-layer; padding: revert-layer; }
+html .welcome-own > .field { min-height: revert-layer; }
+html .welcome-own > .btn { min-height: revert-layer; }
+html .welcome-own > .btn { border-radius: revert-layer; }
+html[data-theme="dark"] .gate-box input[type=date].field { color-scheme: revert-layer; background: revert-layer; }
+html[data-theme="light"] .gate-box input[type=date].field { color-scheme: revert-layer; }
+html .welcome-skip { min-height: revert-layer; }
+html .help-search .field.help-box { min-height: revert-layer; border-radius: revert-layer; }
+html .help-acts .btn { border-radius: revert-layer; }
+html .toast.msg-card .toast-action { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; color: revert-layer; font: revert-layer; line-height: revert-layer; }
+html .toast.msg-card .toast-help.mc-more { padding: revert-layer; }
+html .toast.msg-card .mc-go { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html :is(.nav-item, .chip, .crumb, .subfolder, .arrange-row, .arrange-end, .nav-heading, .wday).drop-on { box-shadow: revert-layer; }
+html :is(.nav-item, .chip, .crumb, .subfolder, .arrange-row, .arrange-end, .wday).drop-no { box-shadow: revert-layer; }
+html .field::-webkit-datetime-edit-month-field:focus { outline: revert-layer; }
+html .field::-webkit-datetime-edit-day-field:focus { outline: revert-layer; }
+html .field::-webkit-datetime-edit-year-field:focus { outline: revert-layer; }
+html .field::-webkit-datetime-edit-hour-field:focus { outline: revert-layer; }
+html .field::-webkit-datetime-edit-minute-field:focus { outline: revert-layer; }
+html .field::-webkit-datetime-edit-second-field:focus { outline: revert-layer; }
+html .field::-webkit-datetime-edit-ampm-field:focus { outline: revert-layer; }
+html .menu.g-pick-menu { max-width: revert-layer; padding: revert-layer; }
+html .g-pick-option:focus { outline: revert-layer; }
+@container (max-width: 236px) { html .segmented button { font-size: revert-layer; line-height: revert-layer; } }
+html .set-search-box.field { min-height: revert-layer; border-radius: revert-layer; padding-left: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .set-search-box.field:hover:not(:focus) { box-shadow: revert-layer; } }
+html .setting-buttons .btn { min-height: revert-layer; border-radius: revert-layer; }
+html .segmented.g-seg > button:is([aria-checked="true"], [aria-selected="true"]) { background: revert-layer; box-shadow: revert-layer; color: revert-layer; }
+html :is(.view[data-tab=settings], .sheet:has(.ai-gemini-sheet, .connect, .invite-everyone, .news-everything, .person-sheet, .join-sheet, .help-body)) .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .send-row textarea.field { min-height: revert-layer; padding-top: revert-layer; padding-bottom: revert-layer; border-radius: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .send-row textarea.field:focus { box-shadow: revert-layer; }
+html .send-row .btn { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; font-size: revert-layer; font-weight: revert-layer; line-height: revert-layer; }
+html .send-row .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .send-card:has(> .tray[hidden]) .send-row:has(textarea:placeholder-shown) .btn.primary { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .clip-page > .send-row:has(textarea:placeholder-shown) .btn.primary { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .clip-page > .btn.wide-btn { min-height: revert-layer; border-radius: revert-layer; }
+html .clip-offer-buttons .btn { min-height: revert-layer; border-radius: revert-layer; }
+html .clip-actions .btn { border-radius: revert-layer; }
+html .files-roots .chip { border-radius: revert-layer; }
+html .select-btn.files-select { border: revert-layer; border-radius: revert-layer; background: revert-layer; color: revert-layer; box-shadow: revert-layer; }
+html .files-main.picking .select-btn.files-select { background: revert-layer; box-shadow: revert-layer; }
+html .files-view-btn { border-radius: revert-layer; color: revert-layer; background: revert-layer; }
+html .files-open:focus-visible { outline: revert-layer; outline-offset: revert-layer; }
+html .files-pick-line .btn { border-radius: revert-layer; }
+html .files-list.drive.grid .files-row > .icon-btn { border-radius: revert-layer; color: revert-layer; background: revert-layer; }
+html .files-view-sheet .viewer-nav:focus-visible { outline: revert-layer; }
+html .files-move-to:focus-visible { outline: revert-layer; }
+html .study-head .icon-btn { border-radius: revert-layer; color: revert-layer; }
+html .btn.study-done { min-height: revert-layer; padding: revert-layer; color: revert-layer; font: revert-layer; line-height: revert-layer; }
+html .btn.study-skip { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; color: revert-layer; background: revert-layer; box-shadow: revert-layer; font: revert-layer; line-height: revert-layer; }
+@media (pointer: coarse) { html .btn.study-skip { min-height: revert-layer; border-radius: revert-layer; } }
+html .flash-card:focus-visible { outline-offset: revert-layer; }
+html .g-study-stamp.know { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .g-study-stamp.still { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html :is(.btn.study-btn, .btn.study-back) { min-height: revert-layer; border: revert-layer; border-radius: revert-layer; color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .btn.study-btn { font: revert-layer; line-height: revert-layer; }
+html .btn.study-btn.still { color: revert-layer; }
+html .btn.study-btn.skip { color: revert-layer; background: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .btn.study-btn.skip:hover:not(:disabled) { background: revert-layer; color: revert-layer; } }
+html .btn.study-btn.know.primary { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .btn.study-back { color: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+@media (hover: hover) and (pointer: fine) { html .btn.study-back:hover:not(:disabled) { background: revert-layer; color: revert-layer; } }
+@container (min-width: 300px) { html .btn.study-back { min-height: revert-layer; border: revert-layer; } }
+html .btn.study-btn.was { box-shadow: revert-layer; }
+html .btn.study-btn.know.was { box-shadow: revert-layer; }
+html .btn.study-end-back { min-height: revert-layer; border-radius: revert-layer; background: revert-layer; box-shadow: revert-layer; color: revert-layer; }
+html .study-end-go .btn { min-height: revert-layer; border-radius: revert-layer; font: revert-layer; line-height: revert-layer; }
+html .study-end-go .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .learn-feedback .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .learn-type .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .learn-options.one .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .review-go .btn.primary { background: revert-layer; box-shadow: revert-layer; }
+html .study-end-go .btn:not(.primary) { background: revert-layer; box-shadow: revert-layer; color: revert-layer; }
+html .learn-input { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; font-size: revert-layer; line-height: revert-layer; }
+html .learn-type .btn { min-height: revert-layer; padding: revert-layer; border-radius: revert-layer; font: revert-layer; line-height: revert-layer; }
+html .learn-input.right { border: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .learn-input.wrong { border: revert-layer; background: revert-layer; box-shadow: revert-layer; }
+html .learn-feedback .btn { min-height: revert-layer; border-radius: revert-layer; }
+html .learn-feedback .btn.quiet { background: revert-layer; box-shadow: revert-layer; color: revert-layer; }
+html .learn-options.one .btn { min-height: revert-layer; border-radius: revert-layer; }
+html .btn.learn-back { min-height: revert-layer; border-radius: revert-layer; color: revert-layer; background: revert-layer; box-shadow: revert-layer; padding: revert-layer; }
+html .review-go .btn { min-height: revert-layer; border-radius: revert-layer; font: revert-layer; line-height: revert-layer; }
+html .review-go .btn:not(.primary):not(.tonal) { background: revert-layer; box-shadow: revert-layer; }
+html .review-make .btn { color: revert-layer; }
+html .aic-fields textarea.field { border-radius: revert-layer; }
+html .aic-top .aic-all { color: revert-layer; }
+html .page.today .test-go .btn { border-radius: revert-layer; }
+html .page.today .today-quiz { color: revert-layer; }
+html main.view[data-tab="today"] .g-tbar:focus-visible { outline-offset: revert-layer; }
+/* ---- end of what is given back */
+
+} /* @layer kit */
+
+/* Off is never faded as a whole (words never sit on a see-through panel: law 1): dim words on a quiet fill. Outside the kit's
+   sublayer, so an area's own colours given back above don't make a button that's off look on. */
+:where(.btn:disabled) { color: var(--muted); }
+:where(.btn.primary:disabled, .btn.tonal:disabled, .btn.danger:disabled) { background: var(--glass-quiet); box-shadow: none; }
+}
