@@ -1,8 +1,16 @@
 {
  "format": 1,
- "version": "1.22.5",
+ "version": "1.22.6",
  "min_shell": 1,
  "notes": [
+  "Adding a new device, deleting your account and removing a friend now need your password, and your cloud checks it too. An account with no password (you sign in with another account) gets a code by e-mail instead.",
+  "Before a code from another device, an invite or a link you didn't ask for puts you into an account, Wefty asks \"Sign in as \u2026?\", so nobody can slip you into theirs.",
+  "Signing out doesn't wait on the cloud. Settings > Account > Sign out my other devices ends every other sign-in, even one that was about to start, and offers Change password straight away. Signed out from another device? Wefty clears your notes off this one, and anything you hadn't sent waits until you sign back in.",
+  "Bad wifi can't sign you out or lose your words: Wefty waits and tries again, long notes go up even on one bar, a lost answer never makes a \"conflict copy\" of your own words, and what you were typing comes back after an update (in Chat after a restart too).",
+  "Forgot your password and no e-mail comes? Whoever invited you can tap Help them sign in (Settings > Friends) to give you a new one-time code.",
+  "Locked notes stay locked: changing your phone's clock doesn't skip the wait after wrong PINs, nothing of a locked note's words stays readable anywhere, and the PIN screen says plainly what a PIN does.",
+  "AI listening in the note-taker stays off until you say yes, and tells you exactly where the room's sound goes. Settings > AI lists everything the AI is sent.",
+  "A photo too big for your cloud (or with your space full) waits in its note with Try again and Remove, instead of being sent again and again. Snap a page works even when your phone is full.",
   "Your words are safer when the internet drops at the wrong moment: nothing written on another device gets written over, and a note you delete for good stays deleted on every device, even ones that were switched off.",
   "With no signal, Wefty opens straight to your notes, even after a while away, and says Offline until your cloud has everything.",
   "Locked notes stay locked: their older versions in History need your PIN, setting or changing the PIN on two devices at once can't shut any notes away, and after 5 wrong tries Wefty waits a little before the next.",
@@ -19,7 +27,7 @@
   "Help is here: tap your picture, then Help, and search for how to do anything. Every answer has a Show me button that opens the right screen and circles the right button. Ask Chat \"how do I...?\" and it answers from the same Help, with its own Show me.",
   "Add Wefty to your home screen: after your first note, Wefty shows how for your phone or computer (a one-tap button where your browser allows it, and the steps for an iPhone). New accounts get a \"how Wefty works\" note and a first-week checklist on Today.",
   "Every screen has its own web address now (wefty.org/notes, /chat, /settings/ai and so on), so Back and Forward move between tabs, and you can bookmark or share any of them.",
-  "Signing in on a new phone or Chromebook is easier: tap Use a code from another device, then type the code it shows on a device where you're already signed in (Settings > Devices > Sign in another device). No password needed.",
+  "Signing in on a new phone or Chromebook is easier: tap Use a code from another device, then type the code it shows on a device where you're already signed in (Settings > Devices > Sign in another device), with your password there.",
   "Settings > Account has Export everything (a copy of all your notes and files) and Delete my account. Share shows how much of your own room for files you've used.",
   "Setting up the free Gemini: Google needs the person making the key to be 18 or older, so a parent or guardian can make it with you. Wefty's Terms and Privacy policy are on wefty.org.",
   "Wefty has a new home: wefty.org. Open your old Wefty (or Vault) and tap Move to wefty.org: it signs you in there with one tap, no password, and brings your settings along. Then add the new one to your home screen and remove the old one. Your notes are all in your cloud, so nothing is lost. Notifications need turning on again there (Settings > Notifications).",
@@ -29,7 +37,7 @@
   "Holding your finger down now always does the same thing: on a note, a row, a day or a button it opens its menu (or picks the note) and never selects words; in a note, a chat message or the note-taker's words it selects words to copy. A chat message's menu is its \u22ef button.",
   "Flash cards show their topic at the top, and Skip topic (or S) skips the rest of it for now. Back (or \u2190) goes to the card before: answer again and the new answer counts instead. Test me has Back too.",
   "New: a 2-minute tour of Wefty. It shows where everything is and what the switches in Settings do. Take it any time: tap your picture, then Take the tour.",
-  "The note-taker hears a noisy class much better: with the free Gemini set up, AI listening records the room and writes down what the teacher says about every half minute, ignoring the groups chatting around you (switch it off on the note-taker's start screen or in Settings > AI). Without it, fewer words get dropped.",
+  "The note-taker hears a noisy class much better: with the free Gemini set up and AI listening switched on (it asks first), it records the room and writes down what the teacher says about every half minute, ignoring the groups chatting around you. Without it, fewer words get dropped.",
   "Small fixes to Today on small phones: a test's Test me and Study sit under its numbers when there isn't room beside them, so Today stays short.",
   "Test me is easy to find: tap Test me on Today, beside each deck in Flash cards, in a note's tools or \u22ef, or on a folder or test. With AI on, the wrong answers to pick from are trickier, and a typed answer with the right idea counts (Settings > AI to turn it off).",
   "Today is calmer: the week is just the strip at the top. Tap a day to see its reminders and to-dos right there, and tick, move or change them from the same spot.",
@@ -38,7 +46,7 @@
   "Right-click, two-finger tap or a long press opens more options on almost everything: notes, folders, flash cards, chats, pictures and files.",
   "Snap a page: take a photo of your notes or a handout (from Today, a new note or Chat) and AI turns it into a tidy note you check before it's saved. Share links, screenshots and PDFs into Wefty from other apps; on an iPhone, copy them and tap Paste into Wefty."
  ],
- "build": "1.22.5-c1c30170ae73",
+ "build": "1.22.6-a3a283fc2cf6",
  "files": {
   "chat/index.html": {
    "sha256": "98f794623744461d3714280e7ed675a806612660d4d47468d4253326654f0aa4",
@@ -165,100 +173,100 @@
    "size": 6599
   },
   "js/access.js": {
-   "sha256": "ce53f6e78dc75a9c1c8b1ad6881aba4a439369aff8bb1c542639d93d64c1de24",
-   "size": 72086
+   "sha256": "6f26442a2c3db423545dd616a426c3d45cef164aa3bf3997b17b25e6002da953",
+   "size": 78916
   },
   "js/ai.js": {
-   "sha256": "151e8e1e5da61c2c68105669903d78590f9ff9a2d8fc4417ca56f418c964c27c",
-   "size": 151972
+   "sha256": "a7800fe553e845e01a0b30ab56de74f0aca73a0cbc0f74f05d5fa6fd92bb622e",
+   "size": 155418
   },
   "js/aicards.js": {
-   "sha256": "acfd76f4daab52359356ed4e598ec8ad78d9b20d164a83f7458d15308560e9e0",
-   "size": 55497
+   "sha256": "bdf1abd3e27d8a44b2c207f18ecdce71420c951473ea52e2a4ec134e70edf9b5",
+   "size": 56184
   },
   "js/arrivals.js": {
    "sha256": "a49f2693dd330406f2221d5dece5c33516226118892f82f7e7ade82ed388716b",
    "size": 3838
   },
   "js/arrive.js": {
-   "sha256": "1192ea2b39a31b10ab5027257f40e7d958988c08ac2bb099fa816422ce3134c3",
-   "size": 36577
+   "sha256": "a64b6b5958335a6a5fd33727a1807582e100f8d8a3c387d821964f26fad2b2a2",
+   "size": 36679
   },
   "js/attachsearch.js": {
    "sha256": "6f9db8e59ddd767b1570d88fbca6e018cd8e8909a8ba2c0e43f1fe17f1671893",
    "size": 7173
   },
   "js/capture.js": {
-   "sha256": "9120df567f5589d08cc9eb5f111fba937bf3582cfa35a0a9b158c36ddca6f61c",
-   "size": 49961
+   "sha256": "0feeaa6c45c385263db081a1aa90542ee56e9678bf5a01ad84b48f8580d2acec",
+   "size": 69469
   },
   "js/chat.js": {
-   "sha256": "a3f59a93d780f9eef8a6d9184d4be490ff15374fb172ca086b3db5697740096c",
-   "size": 181621
+   "sha256": "281ea38310b17769fce00a115b29a9cb54d0e9191feaac94043d9b730d9cd04c",
+   "size": 191988
   },
   "js/chattools.js": {
-   "sha256": "93f208bba5317bb02821373404f64c5853ae2039e1f2c4aff31dea09d046fde9",
-   "size": 123954
+   "sha256": "81e962c150979d28fb9beabe7c526f14b5e5b024df5acd3b454fcb564655a1b2",
+   "size": 127348
   },
   "js/checkin.js": {
    "sha256": "710dc5c5dcb3475b3774ba72b5853b4ec6f90220b1084a32b59c6129c5d1cbc1",
    "size": 16271
   },
   "js/clips.js": {
-   "sha256": "cffe5c7fc5dbb7815b0a103501c68727df55e2b5d14fdfbbb8c1bed07ef9ec49",
-   "size": 57482
+   "sha256": "36f389e3bb0f2367b407e0938add755c42b7a9c7726048a7e9895eeda89b76bf",
+   "size": 58679
   },
   "js/cloud.js": {
-   "sha256": "ad4cfad6481989ce031a744e5b7d9bd8486baa9a3f5cf806c50f6b6483eae830",
-   "size": 95845
+   "sha256": "eb7e8ebf2ca5720f2c00d221d7c61aa8102f1e4dd33426aaa003db902fc806df",
+   "size": 160058
   },
   "js/coach.js": {
    "sha256": "12b410fcac7e93b0e61cbd87a37da1621184220e1a48a2970e8527c2533e6143",
    "size": 10778
   },
   "js/db.js": {
-   "sha256": "b1fa17fea94986abfe6ce7c7474fcb326acbc7f27e8269b98e4025ccef2497f3",
-   "size": 4125
+   "sha256": "f7fcac6c9ec2efc6b70ad24b67c1b036136b5500a164c19d21cf872ea052c853",
+   "size": 4629
   },
   "js/dictation.js": {
    "sha256": "793151d96b3b184183102cb7e7dc271402df938a60216be69406c20fcb1dc189",
    "size": 19528
   },
   "js/doors.js": {
-   "sha256": "0993f6da3ce3bc3762f62c3134cb642466dece56d9d5b9a219ec439cbdfd53e5",
-   "size": 59809
+   "sha256": "fc6faa72c02444562828765c0d25765481039da4477eeea502d99f661b32193a",
+   "size": 63126
   },
   "js/drag.js": {
    "sha256": "653a3b24b368b8c77ef027cdddcda79df9d92faaf4ce07955f132df99d8976c0",
    "size": 17479
   },
   "js/editor.js": {
-   "sha256": "166ab36f2d03ed18c0080b9a2863d47062dd4bcac498e437f77dd7acbdac0818",
-   "size": 226076
+   "sha256": "16d7a9834c6d94c9b399b8ead417141acf8a9f9665cde56c5c31523e45277e4d",
+   "size": 228411
   },
   "js/exams.js": {
    "sha256": "8573cdb3499258aa1bed883bfa812e7aa0f03e6c82e0fce0fda953bf19bbc9f4",
    "size": 6579
   },
   "js/export.js": {
-   "sha256": "cd7ec272211c2c8aed04f7043a83049cf70ac41c890fc2d5acf38a0bd088adfb",
-   "size": 24497
+   "sha256": "147ac3ecd8eda1ce5b93791f010cd42303badf87871615d2a14cfb1caf724caf",
+   "size": 24674
   },
   "js/files.js": {
-   "sha256": "e4d9facab64f12d48a0536204b4d96d6675d5eba2b36510aaf7f97274e3c63ee",
-   "size": 120862
+   "sha256": "5caa1689c1219b52b36111cd758a484143175148d6d907ae9224236aa620975f",
+   "size": 121009
   },
   "js/format.js": {
    "sha256": "8dd3359c918bd1c20e3d7635842edf77b66f9ef31d0d79cb01026fec850e7849",
    "size": 47702
   },
   "js/help.js": {
-   "sha256": "72434696b89d701e87349f1a793efea61fbe60574a16a1ed4b6dae2f397838ac",
-   "size": 56780
+   "sha256": "300bf1b4b35572957e1b82e541f5e52be82c18fef7fa5bde33070820a1fb2af2",
+   "size": 57598
   },
   "js/history.js": {
-   "sha256": "4980967037f8bc7fc0d0451b3f356e22b91430114c724e33071cd243a0589a6f",
-   "size": 37422
+   "sha256": "c7123c1e930ed61cc6e6840460ebcc394dea061f3e86c16190fb7fad98486aa1",
+   "size": 45361
   },
   "js/homescreen.js": {
    "sha256": "4e9e61d186e7c02d5729503e41cce50ee4953d3cec3f56800df340db9cf9d881",
@@ -269,12 +277,12 @@
    "size": 46738
   },
   "js/learn.js": {
-   "sha256": "cf4230c797e65ba917460a39419590728fec05822016a0b288966dc2ba1f21f2",
-   "size": 69903
+   "sha256": "f2054f6863717bba76c7a9664d202c26d74168e125a3b2f2868084559692eb70",
+   "size": 70305
   },
   "js/lock.js": {
-   "sha256": "df01e5d1ac80cec20d58e7af7c978139f574a7f1b1b5bf92b33446029216022d",
-   "size": 12669
+   "sha256": "09b8935cd2a52929302ea6d07730ce11a35f0cdffd3d82eb414b13c76aaa27f5",
+   "size": 28545
   },
   "js/moved.js": {
    "sha256": "9d7e2029b1d2f9034c5679b0a1fa1470f8d644711f89a807457f33a9a8f3afe0",
@@ -289,24 +297,24 @@
    "size": 87662
   },
   "js/notetaker.js": {
-   "sha256": "2132d4ad4317350aa7941e425b476ac530c7bc73cc8c8032ce653b67ee996eb9",
-   "size": 162796
+   "sha256": "64d6b07627f78130d07725407ec9ed1a9aecbda7958cdbb2649d5fbfb4516d18",
+   "size": 173822
   },
   "js/organise.js": {
-   "sha256": "cb66c4b293f03158a5abca15380f5fd8c055103c7b9d7279b03472fc6a42e4e1",
-   "size": 53171
+   "sha256": "9d799327177afc9ff5a4f6975abe3e7229b33ceb0957a7aab0b90684f236bb7b",
+   "size": 57877
   },
   "js/pair.js": {
-   "sha256": "9ef6c45436e6be973615e3df231ab23bf8a15ad6b75668dc1e46150ebfb38894",
-   "size": 21368
+   "sha256": "5c0649bb2ff9375e5fb1b17d0009ce8b6deb2cb95cf9f8dc9688594de88dadc0",
+   "size": 26023
   },
   "js/profile.js": {
-   "sha256": "7d276675ae4f05af27e38e07fd7acf3ba2c437280085a401faf3c5db6b49c916",
-   "size": 16721
+   "sha256": "1140fa41ca1b132213c2b27d3d80fc6cb3141dabe935e6fed73533836b68c716",
+   "size": 17344
   },
   "js/push.js": {
-   "sha256": "baf0f38e0d9b62e5367d9f6209d8150a3c0991f1f9e8d6c3008f6c6c8679c58e",
-   "size": 36402
+   "sha256": "fc06fc708d3115d6a4bceebe8bea1c8551a7cd343a81371f942c9e3888bc6b2e",
+   "size": 39983
   },
   "js/reading.js": {
    "sha256": "561e6365ef2376c6f63a4961d2ef7f791a4a3cfe7259121805adffe425b5c901",
@@ -321,16 +329,16 @@
    "size": 86303
   },
   "js/send.js": {
-   "sha256": "b6e4ef9e590dca43c9cc03fe483278bf29a83c8c2020f32bcf36b77b3b80e2f3",
-   "size": 76959
+   "sha256": "a1f3f0e02e72602293f93faba47d849b23a4283eec093a568079e4a5a0d8dcc1",
+   "size": 78885
   },
   "js/settings.js": {
-   "sha256": "76dd248ae0b2b3c27f8125b56b8aa337780bbdacad395aa39d480ccc4ef821ff",
-   "size": 58173
+   "sha256": "ac87160889d9a39d5d721f41cf72fb16c843e68fe075049bee7819ff442c9ff1",
+   "size": 81095
   },
   "js/settingsui.js": {
-   "sha256": "f32eba0e9d98795d41b6a83be4a169308e3c2603560c48ec27e4da99cecf135d",
-   "size": 38110
+   "sha256": "58df4ef094e3f75fdf7b80b662baab282a1e57237f377ecbd9f07a41518c1a2c",
+   "size": 38390
   },
   "js/share.js": {
    "sha256": "dc8807a199e637fba7b9ebf5a3782bc7e053d4e0308a146ba121932c0a1e7661",
@@ -341,8 +349,8 @@
    "size": 32106
   },
   "js/start.js": {
-   "sha256": "06dfd85a0adf3250e12baf97804e4a12f0dd681cfc2b0b32cd72ff16f471e942",
-   "size": 164306
+   "sha256": "5c68dbdd6b0db89e633f8821932c142e344c9cc9325250b2397003012d7f4ce8",
+   "size": 171821
   },
   "js/starthere.js": {
    "sha256": "0930205a2307d0dc7ff483492c1b8f8545c9b286164b5d6e61be596fce41e1a2",
@@ -357,8 +365,8 @@
    "size": 24093
   },
   "js/subs.js": {
-   "sha256": "c7c086f94ff80350944dd98bbfba8fb7e3e3f0332bf4f589a89ca3e474e6a32a",
-   "size": 30971
+   "sha256": "cf1b55a15037f6f3f7b9a199425d8e575054306866fa3bf246760629e9a14094",
+   "size": 31231
   },
   "js/theme.js": {
    "sha256": "c01b8b84be490d01341ded95c7ec6b26b1d393e0fcf067d1593e63ec48a8256e",
@@ -373,12 +381,12 @@
    "size": 33422
   },
   "js/update.js": {
-   "sha256": "bc714e8b405dc6c585cfb0b2dc91ab65b63c34c4651e1b1f0b8d7aaa9dc3c260",
-   "size": 16759
+   "sha256": "cf61fcb4ab1f5ec3b8e3946a9f4e2ffc2f4e2363d926bb8cdbc591af83a46709",
+   "size": 18419
   },
   "js/util.js": {
-   "sha256": "316abc9256d76943d08f639355aab06e0ca6397deacd155ac35913b363a70e1f",
-   "size": 79687
+   "sha256": "08010be15dfdb43e3fc14d44aef0c0f9751e38ce119190f34775d41a97737add",
+   "size": 81723
   },
   "js/week.js": {
    "sha256": "fc7876e2759528ccc85183afdb8286c4b25cef84418187deb68130d16d8e3c6f",
@@ -401,8 +409,8 @@
    "size": 6619
   },
   "privacy.html": {
-   "sha256": "ffcb4675e06ee39656eeb3a41e91e8342233c1674bb94e95cd95d5336240f8a5",
-   "size": 7275
+   "sha256": "abbb8130a94824bda2688dd27402fdebcadfa6497fea6ee76bb18f816992ceab",
+   "size": 8310
   },
   "settings/about/index.html": {
    "sha256": "2bb09e39911c6d6872a047125aa55d6b944a091ee48aade4271afda2c497733a",
@@ -453,11 +461,11 @@
    "size": 6619
   },
   "styles.css": {
-   "sha256": "470419369b42a52f31b50b97b341c6b02378ddeff48843837d93206729b588f2",
-   "size": 368119
+   "sha256": "db4b511e6d9566730e6748e3f13bc0179da6efdea4c7eece7d3ec34cd2de501f",
+   "size": 370069
   },
   "sw.js": {
-   "sha256": "04dbb45386e8c9aaf33b3b42fa0b213fa08d9c84d5f15f98a64b2335b55f0779",
+   "sha256": "324e225a64b4dfcc81af2902cbe28d261018dec8b30d73cde0dd01e3b17d076c",
    "size": 12908
   },
   "terms.html": {

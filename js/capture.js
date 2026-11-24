@@ -228,28 +228,157 @@ V.capture = (() => {
   /* -- files that wait here until they're in the cloud
 
      A note's photos (and a share's files) go up now, or when this device is next online: kept in V.db meta until then
-     (blobs, never anywhere but this device), each put into the note as it goes up. */
+     (blobs, never anywhere but this device), each put into the note as it goes up.
 
+     (1.22.6) Each file goes up under one path, picked once and kept with it (`path`), so a try whose answer never came
+     and the next one are the same file in the cloud, never two (N11). A file the cloud turns down for good is set aside
+     here, as Share > Send's are since 1.22.2 (DEV-07): `aside` 'big' (over the cloud's own limit for one file: it
+     waits for Try again or Remove, shown in its note, and goes by itself only once the cloud took a file at least as
+     big) or 'full' (the person's room for files is full: nothing goes until the cloud's count says there's room again,
+     or Try again). Each is said once (`told`, kept with it), never at every sync. Any other refusal waits longer each
+     time (REST_FIRST doubling to REST_MOST, this visit); no connection waits for the next time, as before. An older
+     Wefty on this device ignores `path`, `aside` and `told`, and keeps trying as it always has. */
+
+  const REST_FIRST = 30 * 1000;
+  const REST_MOST = 30 * 60 * 1000;
+  let answeredSync = false;  // (1.22.6, DATA-08) a sync this visit got the cloud's answer: a note missing now is gone
+  V.on('status', (status) => { if (status === 'synced' || status === 'held') answeredSync = true; });
+  V.on('signed-out', () => { answeredSync = false; });
   const waitingHere = new Set();  // notes with files waiting on this device (the chip says so)
+  const asideHere = new Map();    // note id -> its files set aside: [{ path, name, size, why }] (drawn in the note)
+  const resting = new Map();      // a file's path -> { n, next }: turned down some other way, it waits longer each time
   let loaded = null;
   function loadWaiting() {
     if (!loaded) {
       loaded = (async () => {
         for (const id of (await V.db.meta(WAITING)) || []) waitingHere.add(id);
+        for (const id of waitingHere) noteAside(id, (await V.db.meta(filesKey(id)).catch(() => null)) || []);
       })().catch(() => {});
     }
     return loaded;
   }
   const saveWaiting = () => V.db.meta(WAITING, [...waitingHere]);
+  const putFiles = (id, files) => V.db.meta(filesKey(id), files).then(() => true, () => false);
 
-  async function keep(noteId, files) {
-    if (!files.length) return;
+  /* What of a note's files is set aside, as the note shows it. True when that changed. */
+  function noteAside(id, files) {
+    const list = (files || []).filter((f) => f && !f.item && f.aside).map((f) => ({ path: f.path || '', name: f.name || 'file',
+      size: (f.blob && f.blob.size) || 0, why: f.aside }));
+    const was = JSON.stringify(asideHere.get(id) || []);
+    if (list.length) asideHere.set(id, list); else asideHere.delete(id);
+    return was !== JSON.stringify(list);
+  }
+
+  const endingOf = (f) => (f.type === 'image/jpeg' ? 'jpg' : ((/\.([a-z0-9]{1,10})$/i.exec(f.name || '') || [])[1] || '').toLowerCase());
+  const pathFor = (userId, noteId, f) => `${userId}/notes/${noteId}/${V.uuid()}${endingOf(f) ? '.' + endingOf(f) : ''}`;
+  const ownPath = (f, userId, noteId) => !!f.path && f.path.startsWith(`${userId}/notes/${noteId}/`);
+  const itemOf = (f) => ({ path: f.path, name: f.name, mime: f.type, size: f.blob.size, ...(f.w ? { w: f.w, h: f.h } : {}),
+    ...(f.page ? { page: f.page } : {}) });
+  // The cloud's count says there's room for files again (or it counts nothing for this person).
+  const roomNow = () => { const got = V.storage && V.storage.now ? V.storage.now() : null; return !!got && (got.limit === null || got.used < got.limit); };
+  const noConnection = (error) => !navigator.onLine || /No internet|Failed to fetch|NetworkError|Load failed/i.test(String((error && error.message) || error || ''));
+
+  /* `files` written to this device for the note `noteId` (not made yet, or made), each with its path picked: true, or
+     the error the device's storage gave (its storage full: nothing of them is left here then). The note is listed as
+     waiting only on this device's storage here; it waits in this page's list once it's made (`waitFor`), so a flush
+     meanwhile never takes the note for one deleted. */
+  async function stash(noteId, files) {
     await loadWaiting();
-    const had = (await V.db.meta(filesKey(noteId))) || [];
-    await V.db.meta(filesKey(noteId), [...had, ...files]);
+    const user = V.data.user;
+    for (const f of files) if (user && user.id && !ownPath(f, user.id, noteId)) f.path = pathFor(user.id, noteId, f);
+    let had = [];
+    try {
+      had = (await V.db.meta(filesKey(noteId))) || [];
+      await V.db.meta(filesKey(noteId), [...had, ...files]);
+      await V.db.meta(WAITING, [...new Set([...waitingHere, noteId])]);
+      return true;
+    } catch (error) {
+      await V.db.meta(filesKey(noteId), had.length ? had : null).catch(() => {});
+      return error || new Error('not kept');
+    }
+  }
+  function waitFor(noteId) {
     waitingHere.add(noteId);
-    await saveWaiting();
+    saveWaiting().catch(() => {});  // (stash listed it already: this keeps a list written meanwhile right)
     flush();
+  }
+
+  /* (1.22.6, DEV-12) `files` up to the cloud now, from memory (a device too full to keep them): each under its own
+     path (picked once, kept on the file object, so trying again never makes a second copy), then as `item`s for the
+     note. A file already up isn't sent again. Throws the upload's error. */
+  async function sendNow(noteId, files) {
+    const user = V.data.user;
+    if (!user || !user.id) throw new Error('Sign in to Wefty first.');
+    const items = [];
+    for (const f of files) {
+      if (!f.item) {
+        if (!ownPath(f, user.id, noteId)) f.path = pathFor(user.id, noteId, f);
+        await V.cloud.upload(f.path, f.blob, { mime: f.type });
+        if (f.blob.size < 6 * 1024 * 1024) await V.db.put('files', { key: f.path, blob: f.blob, at: Date.now() }).catch(() => {});
+        f.item = itemOf(f);
+      }
+      items.push(f.item);
+    }
+    return items;
+  }
+
+  /* A note saved, even when this device couldn't keep its row (its storage full): js/cloud.js has it in memory and
+     sends it all the same, so it's made. */
+  async function saveRow(note) {
+    try {
+      return await V.cloud.save('notes', note);
+    } catch (error) {
+      const inMemory = V.data.notes.get(note.id);
+      if (inMemory) return inMemory;
+      throw error;
+    }
+  }
+
+  /* (1.22.6, DEV-12) Words for a device that couldn't keep the files (`kept`: what its storage said), as the sheet
+     shows them. `tried`: online, and sending them straight up didn't work either. `then`: what to do instead of
+     Try again (a share). */
+  const thisDevice = () => (V.desktop ? 'this PC' : V.deviceKind.chromebook ? 'your Chromebook' : V.deviceKind.ipad ? 'your iPad'
+    : V.device === 'phone' ? 'your phone' : 'this device');
+  const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  function roomWords(kept, tried, what = 'this photo', then = '') {
+    const full = !!kept && (kept.name === 'QuotaExceededError' || /quota|space|full/i.test(String(kept.message || '')));
+    const first = full ? `${upper(thisDevice())} is full, so Wefty can't keep ${what} on it`
+      : `Wefty couldn't keep ${what} on ${thisDevice()}`;
+    const reach = tried ? ', and it couldn\'t reach your cloud just now' : '';
+    if (then) return `${first}${reach}. ${then}`;
+    return tried ? `${first}${reach}. Tap Try again in a moment.`
+      : `${first}. Connect to the internet and tap Try again: it goes straight to your cloud.`;
+  }
+  const noRoom = (kept, tried, what) => Object.assign(new Error(roomWords(kept, tried, what)), { room: true, kept, tried });
+
+  /* (1.22.6, DEV-12) A new note (`note`, its id made once, so trying again never makes a second one) with `files`.
+     The usual way: the files kept on this device first, the note made, the files sent up from here (now, or once
+     online). A device that can't keep them (its storage full): online, they go straight up from memory and the note
+     is made with them in it; offline, or when that fails too, nothing is made, and a `room` error says so (the sheet
+     stays open, with the photo, for Try again). */
+  async function makeWithFiles(note, files, what) {
+    if (!files.length) return saveRow(note);
+    const kept = await stash(note.id, files);
+    if (kept === true) {
+      let made;
+      try {
+        made = await saveRow(note);
+      } catch (error) {
+        await V.db.meta(filesKey(note.id), null).catch(() => {});
+        throw error;
+      }
+      waitFor(note.id);
+      return made;
+    }
+    if (!navigator.onLine) throw noRoom(kept, false, what);
+    let items;
+    try {
+      items = await sendNow(note.id, files);
+    } catch (error) {
+      if (error && (error.full || V.fileTooBig(error))) throw error;  // (the cloud's own words: no room there, too big)
+      throw noRoom(kept, true, what);
+    }
+    return saveRow({ ...note, attachments: [...(note.attachments || []), ...items] });
   }
 
   /* How many files wait on this device to go up (signing out would throw them away: js/cloud.js's unsent counts
@@ -271,11 +400,22 @@ V.capture = (() => {
     await loadWaiting();
     const user = V.data.user;
     if (!navigator.onLine || !user || !user.id) return;
+    const tooBig = [];   // turned down as too big in this run (and not said before): said once, together, at the end
+    let biggest = 0;     // the biggest file that went up in this run (the cloud's limit is at least that now)
+    // The person's room for files is full (a file set aside for it, and the cloud's count doesn't say there's room
+    // yet): nothing is sent until there is (V.storage's count is asked again in the background, at most once a minute).
+    let full = [...asideHere.values()].some((list) => list.some((a) => a.why === 'full')) && !roomNow();
+    let offline = false;
     for (const id of [...waitingHere]) {
       const row = V.data.notes.get(id);
+      // (1.22.6, DATA-08) "Not found" isn't "deleted": coming online before this device's notes were read (or before
+      // the cloud's newest arrived), a note made offline isn't there yet, and its page photos were thrown away. Only a
+      // note deleted for good, or one still missing after a sync this visit answered, lets its files go.
+      if (!row && !answeredSync) continue;
       if (!row || row._purge) {  // (the note was deleted for good meanwhile: its files go too)
         await V.db.meta(filesKey(id), null);
         waitingHere.delete(id);
+        asideHere.delete(id);
         await saveWaiting();
         continue;
       }
@@ -285,19 +425,57 @@ V.capture = (() => {
       let stuck = false;
       for (const f of files) {
         if (f.item) { items.push(f.item); continue; }
-        const ending = f.type === 'image/jpeg' ? 'jpg' : ((/\.([a-z0-9]{1,10})$/i.exec(f.name || '') || [])[1] || '').toLowerCase();
-        const path = `${user.id}/notes/${id}/${V.uuid()}${ending ? '.' + ending : ''}`;
-        try {
-          await V.cloud.upload(path, f.blob, { mime: f.type });
-        } catch (error) {
-          stuck = true;  // (offline again, or the cloud said no: tried again later)
-          if (error && error.full) V.problem(error);  // (out of room: said, with a button: js/send.js's V.storage)
-          break;
+        if (f.aside === 'big' || offline) { stuck = true; continue; }  // (too big: Try again or Remove, in the note)
+        if (f.aside === 'full') {
+          if (full) { stuck = true; continue; }
+          delete f.aside;  // (there's room again: it goes)
         }
-        if (f.blob.size < 6 * 1024 * 1024) await V.db.put('files', { key: path, blob: f.blob, at: Date.now() }).catch(() => {});
-        f.item = { path, name: f.name, mime: f.type, size: f.blob.size, ...(f.w ? { w: f.w, h: f.h } : {}), ...(f.page ? { page: f.page } : {}) };
+        // (the cloud said lately that the person's room is full: not sent, and said once, as a refusal would be)
+        const noRoomThere = !full && V.storage && V.storage.before ? V.storage.before() : null;
+        if (full || noRoomThere) {
+          full = true;
+          stuck = true;
+          if (noRoomThere && !f.told) {
+            f.aside = 'full';
+            f.told = true;
+            V.problem(noRoomThere);
+            await putFiles(id, files);
+          }
+          continue;
+        }
+        if (!ownPath(f, user.id, id)) {
+          f.path = pathFor(user.id, id, f);
+          await putFiles(id, files);  // (its one path, kept before it's sent: N11)
+        }
+        const rest = resting.get(f.path);
+        if (rest && Date.now() < rest.next) { stuck = true; continue; }
+        try {
+          await V.cloud.upload(f.path, f.blob, { mime: f.type });
+        } catch (error) {
+          stuck = true;
+          if (V.fileTooBig(error)) {  // (turned down for good: set aside, said once)
+            f.aside = 'big';
+            if (!f.told) { f.told = true; tooBig.push({ id, name: f.name || 'file', size: f.blob.size }); }
+            await putFiles(id, files);
+          } else if (error && error.full) {  // (no room left in the cloud: nothing more goes until there's room)
+            full = true;
+            f.aside = 'full';
+            if (!f.told) { f.told = true; V.problem(error); }  // (js/send.js's V.storage: the words, Manage files)
+            await putFiles(id, files);
+          } else if (noConnection(error)) {
+            offline = true;  // (no connection: everything waits for the next time, as before)
+          } else {
+            const n = ((resting.get(f.path) || {}).n || 0) + 1;
+            resting.set(f.path, { n, next: Date.now() + Math.min(REST_MOST, REST_FIRST * 2 ** (n - 1)) });
+          }
+          continue;
+        }
+        resting.delete(f.path);
+        biggest = Math.max(biggest, f.blob.size);
+        if (f.blob.size < 6 * 1024 * 1024) await V.db.put('files', { key: f.path, blob: f.blob, at: Date.now() }).catch(() => {});
+        f.item = itemOf(f);
         items.push(f.item);
-        await V.db.meta(filesKey(id), files);  // (what's up already is never sent twice)
+        await putFiles(id, files);  // (what's up already is never sent twice)
       }
       if (items.length) {
         const ok = await V.editor.changeAttachments(id, (list) => [...list,
@@ -309,9 +487,75 @@ V.capture = (() => {
         waitingHere.delete(id);
         await saveWaiting();
       }
-      if (items.length && V.editor.openId() === id) V.editor.update(() => {}, { draw: true });  // (the chip says they're in)
+      const moved = noteAside(id, stuck ? files : []);
+      if ((items.length || moved) && V.editor.openId() === id) V.editor.update(() => {}, { draw: true });  // (the chip says so)
     }
+    if (tooBig.length) tellTooBig(tooBig);
+    if (biggest && (await mayFitNow(biggest))) flush();
     readWanted();
+  }
+
+  /* (1.22.6, DEV-07) The one card for the files the cloud turned down as too big in a run: their names, the cloud's
+     limit, and Show (the first one's note, where Try again and Remove are). A card in the corner, never a dialog. */
+  function tellTooBig(list) {
+    const first = list[0];
+    V.notice({
+      title: list.length === 1 ? 'File too big' : 'Files too big', icon: 'file', cls: 'whole', ms: 15000,
+      text: V.fileRefusedWords(list.map((f) => f.name), Math.min(...list.map((f) => f.size || 0))),
+      actions: [{ label: 'Show', kind: 'tonal', onClick: () => { V.notes.open(first.id); } }],
+    });
+  }
+
+  /* A file of `size` went up: the files set aside as too big that are no bigger can go now (the cloud's limit went
+     up). Said again only if they're turned down after all (`told` stays). True when one was freed. */
+  async function mayFitNow(size) {
+    let freed = false;
+    for (const [id, list] of [...asideHere]) {
+      if (!list.some((a) => a.why === 'big' && a.size <= size)) continue;
+      const files = (await V.db.meta(filesKey(id))) || [];
+      for (const f of files) if (!f.item && f.aside === 'big' && f.blob && f.blob.size <= size) { delete f.aside; freed = true; }
+      await putFiles(id, files);
+      noteAside(id, files);
+    }
+    return freed;
+  }
+
+  /* Try again (in the note): its files set aside go once more, now (turned down again, it's said again). */
+  async function tryAside(id) {
+    const files = (await V.db.meta(filesKey(id))) || [];
+    let full = false;
+    for (const f of files) {
+      if (f.item || !f.aside) continue;
+      full = full || f.aside === 'full';
+      delete f.aside;
+      f.told = false;
+      if (f.path) resting.delete(f.path);
+    }
+    await putFiles(id, files);
+    noteAside(id, files);
+    if (V.editor.openId() === id) V.editor.update(() => {}, { draw: true });
+    if (full && V.storage && V.storage.read) await V.storage.read().catch(() => null);  // (the count asked afresh)
+    return flush();
+  }
+
+  /* Remove (in the note): its files set aside are let go of (they never reached the cloud: asked first). */
+  async function removeAside(id) {
+    const out = asideHere.get(id) || [];
+    if (!out.length) return;
+    const one = out.length === 1;
+    const yes = await V.confirm(one ? `Remove ${out[0].name}?` : `Remove these ${out.length} files?`,
+      `${one ? 'It' : 'They'} never went up to your cloud, so ${one ? 'it\'s' : 'they\'re'} gone from Wefty once removed.`,
+      { ok: 'Remove', danger: true });
+    if (!yes) return;
+    const left = ((await V.db.meta(filesKey(id))) || []).filter((f) => f.item || !f.aside);
+    await V.db.meta(filesKey(id), left.length ? left : null);
+    if (!left.length) {
+      waitingHere.delete(id);
+      await saveWaiting();
+    }
+    noteAside(id, left);
+    if (V.editor.openId() === id) V.editor.update(() => {}, { draw: true });
+    if (left.length) flush();  // (what was waiting with them, and what's up already, go into the note)
   }
 
   /* -- reading later: the notes this device was asked to read once it's back online */
@@ -381,7 +625,7 @@ V.capture = (() => {
     const marked = ((row && row.attachments) || []).filter((a) => a.page).sort((a, b) => a.page - b.page);
     const out = [];
     for (const a of marked) {
-      const blob = a.size < 6 * 1024 * 1024 ? await V.cloud.blob(a.path) : await (await fetch(await V.cloud.link(a.path))).blob();
+      const blob = a.size < 6 * 1024 * 1024 ? await V.cloud.blob(a.path) : await (await V.cloud.deadlineFetch(await V.cloud.link(a.path))).blob();
       out.push({ blob, type: a.mime || blob.type, name: a.name });
     }
     return out;
@@ -438,6 +682,11 @@ V.capture = (() => {
       sheetOpen = null;
       if (state.ctl) state.ctl.abort();
       for (const p of state.pages) if (p.url) URL.revokeObjectURL(p.url);
+      // (1.22.6) A photo that went straight up for a note that was never made (Try again, then Cancel): taken back.
+      if (!state.made) {
+        const sent = state.pages.filter((p) => p.item).map((p) => p.item.path);
+        if (sent.length) V.cloud.remove(sent).catch(() => {});
+      }
     } });
     sheet.el.classList.add('cap-sheet');
     sheet.el.append(bar);
@@ -455,6 +704,7 @@ V.capture = (() => {
           const at = state.pages.indexOf(p);
           if (at < 0 || state.closed) return;
           if (p.url) URL.revokeObjectURL(p.url);
+          if (p.item && !state.made) V.cloud.remove([p.item.path]).catch(() => {});  // (it went up on a try: taken back)
           state.pages.splice(at, 1);
           go();
         }, 'cap-page-out') : null)),
@@ -493,20 +743,38 @@ V.capture = (() => {
       V.clear(bar, button('Cancel', '', () => sheet.close()));
     };
 
+    /* (1.22.6, DEV-12) The photo couldn't be kept on this device, nor sent: said in the sheet, which stays open with
+       the photo, and Try again (`again`). `whole`: in place of what the sheet showed (no note shown to keep). */
+    const troubled = (error, again, { whole = false } = {}) => {
+      if (state.closed) return;
+      if (whole) {
+        head.textContent = into ? 'Read this page' : 'Snap a page';
+        V.clear(area, V.h('div.aic-state.cap-state.cap-problem', { role: 'alert' },
+          V.h('span.aic-problem-icon', {}, V.icon('alert')), V.h('h3', { text: 'Your photo isn\'t kept yet' }),
+          V.h('p', { text: error.message })));
+      } else {
+        area.querySelectorAll('.cap-save-trouble').forEach((line) => line.remove());
+        area.prepend(V.h('p.error-text.cap-save-trouble', { role: 'alert', text: error.message }));
+      }
+      V.clear(bar, button('Cancel', '', () => sheet.close()), button('Try again', 'primary', () => again(), 'restore'));
+    };
+
     /* `setUp` ('gemini' or 'claude'): the photo kept first, then the AI's setup (never a photo lost to it). */
     const keepForLater = async (setUp = '') => {
       if (state.busy) return;
       state.busy = true;
       try {
         if (into) {
-          await want(into.id, true);
+          // (1.22.6) Not remembered here (a full device): the note's own chip still reads it, whenever it's tapped.
+          const remembered = await want(into.id, true).then(() => true, () => false);
           sheet.close();
-          V.toast('Wefty reads it by itself when it can.', { ms: 5000 });
+          V.toast(remembered ? 'Wefty reads it by itself when it can.' : 'Tap Read this page in the note to read it later.', { ms: 5000 });
           return;
         }
         const note = await saveNew({ title: `Page photo, ${new Date().toLocaleDateString([], { day: 'numeric', month: 'short' })}`,
           body: '', folderId: picked(), read: false });
-        if (!navigator.onLine) await want(note.id, true);
+        // (wanted here only when it can be: a full device leaves it to the note's chip)
+        if (!navigator.onLine) await want(note.id, true).catch(() => {});
         sheet.close();
         if (setUp) {
           if (onSaved) onSaved(note);
@@ -520,6 +788,8 @@ V.capture = (() => {
         if (onSaved) onSaved(note); else V.notes.open(note.id);
       } catch (error) {
         state.busy = false;
+        // (1.22.6, DEV-12) Nothing made: no empty note for a photo this device couldn't keep. Said, with Try again.
+        if (error && error.room) { troubled(error, () => keepForLater(setUp), { whole: true }); return; }
         V.problem(error);
       }
     };
@@ -631,18 +901,37 @@ V.capture = (() => {
         if (cards && V.aiCards) setTimeout(() => V.aiCards.forNote(note.id), 250);  // (after the note opens)
       } catch (error) {
         state.busy = false;
+        // (1.22.6, DEV-12) The photo couldn't be kept here nor sent: the sheet stays, with the note shown, and Try again.
+        if (error && error.room) { troubled(error, () => saveIt()); return; }
         V.problem(error);
       }
     };
 
-    /* A new note with the photos (they go up now, or when this device is next online). */
+    /* A new note with the photos (they go up now, or when this device is next online). (1.22.6, DEV-12) Its id is
+       made once (`state.note`) and the note this sheet made is remembered (`state.made`): Save note again after a
+       problem writes into that note, never a second one; and a photo this device can't keep goes straight up while
+       online, or nothing is made (js/capture.js's makeWithFiles). */
     const saveNew = async ({ title, body: words, folderId, read: done, brain }) => {
+      if (state.made) {  // (made on an earlier try, its photos with it: what's shown now goes into it)
+        const row = V.data.notes.get(state.made.id) || state.made;
+        state.made = await saveRow({ ...row, title, body: words, folder_id: folderId || row.folder_id || null });
+        return state.made;
+      }
       const at = new Date().toISOString();
-      const note = await V.cloud.save('notes', V.notes.blankNote({ folder_id: folderId || null, title, body: words,
-        extra: { capture: { from: 'snap', pages: state.pages.length, read: done, at, ...(brain ? { by: brain } : {}) } } }));
+      if (!state.note) state.note = V.notes.blankNote();
+      const note = { ...state.note, folder_id: folderId || null, title, body: words,
+        extra: { capture: { from: 'snap', pages: state.pages.length, read: done, at, ...(brain ? { by: brain } : {}) } } };
+      const pages = [...state.pages];
+      const files = pages.map((p, i) => ({ blob: p.blob, type: p.type, name: p.name, w: p.w || 0, h: p.h || 0, page: i + 1,
+        ...(p.path ? { path: p.path } : {}), ...(p.item ? { item: { ...p.item, page: i + 1 } } : {}) }));
+      try {
+        state.made = await makeWithFiles(note, files, pages.length === 1 ? 'this photo' : 'these photos');
+      } finally {
+        // (a path picked, and what went up from memory, stay with each page: trying again never sends a second copy)
+        files.forEach((f, i) => { if (f.path) pages[i].path = f.path; if (f.item) pages[i].item = f.item; });
+      }
       if (folderId) store(FOLDER_KEY, folderId);
-      await keep(note.id, state.pages.map((p, i) => ({ blob: p.blob, type: p.type, name: p.name, w: p.w || 0, h: p.h || 0, page: i + 1 })));
-      return note;
+      return state.made;
     };
 
     const go = async () => {
@@ -785,10 +1074,26 @@ V.capture = (() => {
       const reads = isPicture(f) || (isPdf(f) && f.size <= PDF_MOST);
       files.push({ ...made, w: made.w || 0, h: made.h || 0, ...(reads ? { page: ++page } : {}) });
     }
-    const note = await V.cloud.save('notes', V.notes.blankNote({ folder_id: folderId || (V.notes.inbox() || {}).id || null,
-      title: t.title, body: t.body, extra: { capture: { from: 'share', at, ...(page ? { pages: page, read: false, named: t.named } : {}) } } }));
+    const fresh = V.notes.blankNote({ folder_id: folderId || (V.notes.inbox() || {}).id || null,
+      title: t.title, body: t.body, extra: { capture: { from: 'share', at, ...(page ? { pages: page, read: false, named: t.named } : {}) } } });
+    let note;
+    try {
+      // (1.22.6, DEV-12) Kept here, then sent up; a device too full to keep them sends them straight up while online.
+      note = await makeWithFiles(fresh, files, files.length === 1 ? files[0].name || 'this file' : 'these files');
+    } catch (error) {
+      if (!(error && error.room)) throw error;
+      // Not kept, and they couldn't go up: the words still go in a note (never an empty one), and it's said plainly.
+      const say = roomWords(error.kept, error.tried, files.length === 1 ? files[0].name || 'this file' : 'these files',
+        'Free up some space, then share it again.');
+      if (!String(t.body || '').trim()) {
+        V.toast(say, { kind: 'err', ms: 10000 });
+        return null;
+      }
+      note = await saveRow({ ...fresh, extra: { capture: { from: 'share', at } } });
+      V.toast(say, { kind: 'err', ms: 10000 });
+      page = 0;
+    }
     if (folderId) store(FOLDER_KEY, folderId);
-    await keep(note.id, files);
     next(note, t, page);
     return note;
   }
@@ -878,21 +1183,39 @@ V.capture = (() => {
   /* -- in an open note: "Read this page" while its photos haven't been read */
 
   V.editor.addMeta((note) => {
-    if (!note || note.locked || !needsReading(note)) return null;
-    const n = note.extra.capture.pages || 1;
-    const waiting = waitingHere.has(note.id);
+    if (!note) return null;
+    const reading = !note.locked && needsReading(note);
+    // (1.22.6, DEV-07) Files the cloud turned down, set aside on this device: said where the person sees them, with
+    // Try again and Remove (as Share > Send says its own since 1.22.2).
+    const aside = asideHere.get(note.id) || [];
+    const waiting = waitingHere.has(note.id) && !aside.length;
+    if (!reading && !aside.length) return null;
+    const one = aside.length === 1;
+    const why = aside.some((a) => a.why === 'big') ? `${one ? aside[0].name : `${aside.length} files`}: too big for your cloud right now`
+      : `${one ? aside[0].name : `${aside.length} files`}: waiting for room in your files`;
     return V.h('span.cap-meta', {},
-      V.h('button.chip.cap-chip', { type: 'button', title: 'Turn the photo\'s words into this note', onclick: () => readNote(note.id) },
-        V.icon('spark'), V.h('span', { text: n === 1 ? 'Read this page' : `Read these ${n} pages` })),
-      waiting ? V.h('span.cap-waiting', { text: navigator.onLine ? 'Photos going up…' : 'Photos go up when you\'re online' }) : null);
+      reading ? V.h('button.chip.cap-chip', { type: 'button', title: 'Turn the photo\'s words into this note', onclick: () => readNote(note.id) },
+        V.icon('spark'), V.h('span', { text: (note.extra.capture.pages || 1) === 1 ? 'Read this page' : `Read these ${note.extra.capture.pages} pages` })) : null,
+      reading && waiting ? V.h('span.cap-waiting', { text: navigator.onLine ? 'Photos going up…' : 'Photos go up when you\'re online' }) : null,
+      aside.length ? V.h('span.cap-aside', { role: 'status' }, V.icon('alert'), V.h('span.cap-aside-words', { text: why }),
+        V.h('button.link-btn.cap-aside-again', { type: 'button', text: 'Try again', 'aria-label': `Try sending ${one ? aside[0].name : 'them'} again`,
+          onclick: () => { tryAside(note.id).catch(V.problem); } }),
+        V.h('button.link-btn.cap-aside-remove', { type: 'button', text: 'Remove', 'aria-label': `Remove ${one ? aside[0].name : 'them'}`,
+          onclick: () => { removeAside(note.id).catch(V.problem); } })) : null);
   });
 
   // Back online, back in sight, or the first sync: what waits here goes up, and what was wanted is read.
   window.addEventListener('online', () => flush());
   V.on('back', () => { if (waitingHere.size) flush(); else readWanted(); });
   V.on('status', (status) => { if (status === 'synced' || status === 'held') flush(); });
-  V.on('signed-out', () => { waitingHere.clear(); ready.clear(); loaded = null; });
+  // (1.22.6, DEV-07) The cloud's count says there's room again: what was set aside for want of it goes now.
+  V.on('storage', (known) => {
+    if (!known || known.missing || (known.limit !== null && known.used >= known.limit)) return;
+    if ([...asideHere.values()].some((list) => list.some((a) => a.why === 'full'))) flush();
+  });
+  V.on('signed-out', () => { waitingHere.clear(); asideHere.clear(); resting.clear(); ready.clear(); loaded = null; });
 
   return { snap, share, paste, read, parse, tidy, sheetEntries, pasteRow, readNote, flush, prepare, waitingFiles,
-    IPHONE_WAY, SYSTEM, waits: { EDGE, MOST_PAGES }, showing: () => !!sheetOpen };
+    tryAside, removeAside, aside: (id) => [...(asideHere.get(id) || [])],
+    IPHONE_WAY, SYSTEM, waits: { EDGE, MOST_PAGES, REST_FIRST, REST_MOST }, showing: () => !!sheetOpen };
 })();

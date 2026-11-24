@@ -435,7 +435,9 @@ V.doors = (() => {
     if (!V.pair || !pair) return null;
     return V.button('Use a code from another device', { kind: 'wide-btn doors-pair', icon: 'devices', onClick: async () => {
       let got = 'back';
-      try { got = await V.pair.signInScreen({ cloud: pair.cloud || current() }); } catch (error) { console.error(error); }
+      // (the e-mail typed on the sign-in screen, if any: a yes from that account needs no "Is this you?", js/pair.js)
+      const email = pair.email ? tidyEmail(pair.email()) : '';
+      try { got = await V.pair.signInScreen({ cloud: pair.cloud || current(), email }); } catch (error) { console.error(error); }
       if (got === 'in') pair.done();
       else pair.back();
     } });
@@ -669,8 +671,8 @@ V.doors = (() => {
         V.h('button.link-btn', { type: 'button', text: 'Wrong e-mail? Go back', onclick: () => { leave(); back(); } }),
         V.h('p.hint.doors-center.doors-fallback', { text: kind === 'signup'
           ? 'Nothing came? Check the e-mail is right, or ask a friend who uses Wefty for an invite.'
-          : 'Nothing came? On a device where you\'re still signed in, change your password there (Settings > Account > '
-            + 'Change password), then sign in here with the new one.' }));
+          : `Nothing came? Ask the person who invited you to help you sign in (or write to ${V.TEAM_EMAIL || 'Wefty\'s team'} `
+            + 'if you signed up yourself): they can give you a new one-time code.' }));
       count();
       requestAnimationFrame(() => codeBox.focus());
     }
@@ -737,7 +739,7 @@ V.doors = (() => {
         }
       });
     }
-    return { forgot, ways: [or(), V.h('div.doors-stack', {}, code, google, pairButton({ cloud, done, back })), problem, more], create };
+    return { forgot, ways: [or(), V.h('div.doors-stack', {}, code, google, pairButton({ cloud, done, back, email })), problem, more], create };
   }
 
   /* A password sign-in that didn't work, said on js/start.js's sign-in screen; an e-mail not confirmed yet gets a
@@ -800,8 +802,13 @@ V.doors = (() => {
         if (passBox.value.length < 8) { problem.textContent = WORDS.short; passBox.focus(); return; }
         if (passBox.value !== againBox.value) { problem.textContent = WORDS.twice; againBox.focus(); return; }
         try {
-          const { error } = await V.cloud.sb.auth.updateUser({ password: passBox.value });
+          // (1.22.6: a password chosen here ends an invite's one-time code too, as Change password does: the account
+          // stops saying it's still waiting for one, which is what lets the owner's New code ask for no proof)
+          const { data, error } = await V.cloud.sb.auth.updateUser({ password: passBox.value, data: { must_change_password: false } });
           if (error) throw error;
+          // (1.22.6, round D, D3-05) A new password ends the other sign-ins, so their devices stop getting this
+          // person's notifications now, as after Change password (js/push.js dropOthers; never throws)
+          if (V.push && V.push.dropOthers) V.push.dropOthers(data && data.user && data.user.id);
           V.toast('Password saved. Use it to sign in on your other devices.', { ms: 6000 });
           resolve();
         } catch (error) {
@@ -809,7 +816,11 @@ V.doors = (() => {
         }
       }) });
       againBox.addEventListener('keydown', (event) => { if (event.key === 'Enter') go.click(); });
+      // (1.22.6, SEC-02: the new password goes to this cloud, so a cloud that isn't Wefty's own is named, as on the
+      // sign-in screen: js/start.js's cloudNote)
+      const cloud = current();
       screen(V.h('h1', { text: 'Pick a new password' }),
+        cloud && V.gate && V.gate.cloudNote ? V.gate.cloudNote(cloud.url) : null,
         email ? V.h('p.muted.doors-sent', { text: `For ${email}.` }) : null,
         passRow, againRow, problem, go);
       requestAnimationFrame(() => passBox.focus());
@@ -824,8 +835,16 @@ V.doors = (() => {
     if (V.deviceKind.inApp) { inAppGoogle(back); return; }
     if (problem) problem.textContent = '';
     try {
-      noteGoogle(current());  // (Google comes back to this tab: that sign-in needs no question, 1.22.5)
-      const { error } = await V.cloud.sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: here() } });
+      // (Google comes back to this tab: that sign-in needs no question, 1.22.5. 1.22.6, SEC-16: only one that comes
+      // back with this tab's own mark in its address, which no other page can know; another page holding this tab
+      // could otherwise send it anyone's sign-in while Google showed)
+      const mark = noteGoogle(current());
+      // (DEV-15: someone signed in to Wefty in this browser before, so it may be someone else's turn now: Google
+      // shows its account chooser, never signs the next person straight in as the last one)
+      const before = stored('vault-config');
+      const options = { redirectTo: `${here()}?${GOOGLE_MARK}=${mark}` };
+      if (before && before.email) options.queryParams = { prompt: 'select_account' };
+      const { error } = await V.cloud.sb.auth.signInWithOAuth({ provider: 'google', options });
       if (error) throw error;
     } catch (error) {
       if (problem) problem.textContent = words(error);
@@ -906,17 +925,25 @@ V.doors = (() => {
     list.push({ email: address, url: cloud.url, at: Date.now() });
     try { localStorage.setItem(ASKED, JSON.stringify(list.slice(-5))); } catch (error) { /* a question, then */ }
   }
+  /* (1.22.6) Whether this browser asked for an e-mail to `email` in the cloud at `url` in the last hour, without using
+     that up (js/start.js: an invite for that address needs no "Is this you?"). */
+  const askedFor = (email, url) => askedList().some((one) => one.email === String(email || '').trim().toLowerCase() && one.url === url);
+  // (1.22.6) the address's mark that Google comes back with: random, kept only in this tab (noteGoogle)
+  const GOOGLE_MARK = 'wefty-g';
   function noteGoogle(cloud) {
-    try { sessionStorage.setItem(GOOGLE, JSON.stringify({ url: cloud ? cloud.url : '', at: Date.now() })); } catch (error) { /* */ }
+    const mark = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+    try { sessionStorage.setItem(GOOGLE, JSON.stringify({ url: cloud ? cloud.url : '', at: Date.now(), mark })); } catch (error) { /* */ }
+    return mark;
   }
-  /* Whether this browser asked for the sign-in that came (`type` from the link: an e-mail's; none: Google's), for the
-     account `email` in `cloud`. Used up once it's matched. */
-  function expected(type, email, cloud) {
+  /* Whether this browser asked for the sign-in that came (`type` from the link: an e-mail's; none: Google's, with the
+     `mark` its address came back with), for the account `email` in `cloud`. Used up once it's matched. */
+  function expected(type, email, cloud, mark = '') {
     const address = String(email || '').toLowerCase();
     if (!type) {
       let google = null;
       try { google = JSON.parse(sessionStorage.getItem(GOOGLE) || 'null'); sessionStorage.removeItem(GOOGLE); } catch (error) { /* */ }
-      return !!google && google.url === cloud.url && Date.now() - Number(google.at) < GOOGLE_MS;
+      return !!google && google.url === cloud.url && Date.now() - Number(google.at) < GOOGLE_MS
+        && typeof google.mark === 'string' && !!google.mark && google.mark === mark;
     }
     const list = askedList();
     const found = list.find((one) => one.email === address && one.url === cloud.url);
@@ -926,8 +953,9 @@ V.doors = (() => {
   }
 
   /* "Sign in as <e-mail>?", over whatever shows: true when they said yes. `line`: what to say about its cloud
-     (cloudLine), when it isn't Wefty's own or the one used here already. */
-  function signInAs(email, { line = '' } = {}) {
+     (cloudLine), when it isn't Wefty's own or the one used here already. `hint` (1.22.6): the words under it, for a
+     way in that someone else may have started (a code another device said yes to, an invite). */
+  function signInAs(email, { line = '', hint = '' } = {}) {
     return new Promise((resolve) => {
       let yes = false;
       V.sheet({
@@ -935,8 +963,8 @@ V.doors = (() => {
         content: [
           V.h('p.who-ask', {}, 'Sign in as ', V.h('strong.who-email', { text: email || 'this account' }), '?'),
           line ? V.h('p.doors-note.who-cloud', { text: line }) : null,
-          V.h('p.hint', { text: 'Only if it\'s your own account. If someone sent you this, tap No: in their account, they '
-            + 'could read everything you write.' })],
+          V.h('p.hint', { text: hint || 'Only if it\'s your own account. If someone sent you this, tap No: in their '
+            + 'account, they could read everything you write.' })],
         actions: [{ label: 'No, not me' }, { label: 'Yes, sign in', kind: 'primary who-yes', onClick: () => { yes = true; } }],
         onClose: () => resolve(yes),
       });
@@ -958,8 +986,10 @@ V.doors = (() => {
     const kept = new Map();
     const storage = { getItem: (key) => (kept.has(key) ? kept.get(key) : null), setItem: (key, value) => { kept.set(key, String(value)); },
       removeItem: (key) => { kept.delete(key); } };
-    return window.supabase.createClient(cloud.url, cloud.key, { auth: { storage, storageKey: `wefty-door-${++temps}`,
-      persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+    // (1.22.6: with the same deadlines as the app's own requests, js/cloud.js: a wifi that never answers ends in words)
+    const global = V.cloud && V.cloud.deadlineFetch ? { fetch: V.cloud.deadlineFetch } : undefined;
+    return window.supabase.createClient(cloud.url, cloud.key, { ...(global ? { global } : {}), auth: { storage,
+      storageKey: `wefty-door-${++temps}`, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   }
   // Who's signed in to this browser's Wefty now (its e-mail, lower case), or ''.
   function signedInHere() {
@@ -987,9 +1017,16 @@ V.doors = (() => {
         query.delete(name);
       }
     }
+    // (1.22.6, SEC-16: the mark Google comes back with, taken out of the address with the rest)
+    const mark = query.get(GOOGLE_MARK) || '';
+    const marked = query.has(GOOGLE_MARK);
+    query.delete(GOOGLE_MARK);
+    if (marked) {
+      try { history.replaceState(history.state, '', location.pathname + (query.toString() ? '?' + query.toString() : '') + location.hash); } catch (error) { /* */ }
+    }
     if (!params.has('auth') && !params.has('access_token') && !params.has('error_code')
       && !(params.has('error') && params.has('error_description'))) return null;
-    const search = queried ? (query.toString() ? '?' + query.toString() : '') : location.search;
+    const search = queried || marked ? (query.toString() ? '?' + query.toString() : '') : location.search;
     try { history.replaceState(history.state, '', location.pathname + search); } catch (error) { /* */ }
     const type = KINDS.includes(params.get('type') || '') ? params.get('type') : '';
     if (params.has('error') || params.has('error_code')) {
@@ -1028,7 +1065,7 @@ V.doors = (() => {
     }
     // Nobody signed in here: a link this browser didn't ask for says whose account it is first. (Its cloud is the one
     // saved here, or Wefty's own: nothing to say about it.)
-    if (!mine && !expected(params.has('type') ? type || 'link' : '', email, cloud)) {
+    if (!mine && !expected(params.has('type') ? type || 'link' : '', email, cloud, mark)) {
       if (!(await signInAs(email))) return { note: `That link was for ${email || 'another account'}, so nobody was signed in.` };
     }
     try {
@@ -1043,7 +1080,7 @@ V.doors = (() => {
     return { toast: type === 'email_change' ? 'Your new e-mail address is confirmed.' : '' };
   }
 
-  return { TERMS, defaultCloud, official, officialCloud, signInAs, cloudLine, settings, captcha, termsUrl, privacyUrl, words, arrival, front, use, signInWays,
+  return { TERMS, defaultCloud, official, officialCloud, signInAs, askedFor, cloudLine, settings, captcha, termsUrl, privacyUrl, words, arrival, front, use, signInWays,
     signInTrouble, signInFrom, resume, signUpScreen, forgotScreen, codeScreen, newPasswordScreen, termsGate, needsTerms, isNew,
     welcomed, waits, WORDS };
 })();

@@ -223,15 +223,35 @@ V.ai = (() => {
     return `$${d.toFixed(2)}`;
   }
 
-  /* This month's spending, as every device sees it (plus anything this one couldn't write yet). */
+  /* This month's spending, as every device sees it (plus anything this one couldn't write yet).
+
+     (1.22.6, N10) Each request counted has an id (`owedParts`), and the settings row keeps the newest COUNTED_KEPT ids
+     the tally took (extra.ai_counted, beside extra.ai, which keeps its shape): a write that reached the cloud but whose
+     answer never came is owed here, and when it's sent again with the next request, the cloud already has its id, so
+     it's never added twice. 'ai-owed' stays the sum (what an older Wefty on this device reads); 'ai-owed-parts' holds
+     the parts. An owed sum with no parts (from an older Wefty) is added once, as before. Older pages spread extra when
+     they write it (V.cloud.changeExtra), so they keep extra.ai_counted. */
+  const COUNTED_KEPT = 40;
   let owed = 0;
+  let owedParts = [];  // [{ id, cost }]: what this device counted that the cloud may not have yet
   let owedRead = null;
-  const readOwed = () => (owedRead = owedRead || V.db.meta('ai-owed').then((value) => { owed = Number(value) || 0; })
-    .catch(() => {}));
+  const sum = (parts) => parts.reduce((total, p) => total + (Number(p.cost) || 0), 0);
+  const readOwed = () => (owedRead = owedRead || Promise.all([V.db.meta('ai-owed'), V.db.meta('ai-owed-parts')])
+    .then(([value, parts]) => {
+      owed = Number(value) || 0;
+      owedParts = Array.isArray(parts) ? parts.filter((p) => p && typeof p.id === 'string' && Number.isFinite(Number(p.cost))) : [];
+      const rest = owed - sum(owedParts);  // (owed by an older Wefty on this device: added once, as it would have)
+      if (rest > 1e-9) owedParts.push({ id: '', cost: rest });
+    }).catch(() => {}));
+  const countedIn = (extra) => new Set(Array.isArray(extra && extra.ai_counted) ? extra.ai_counted : []);
   function tally() {
-    const ai = ((V.data.settings || {}).extra || {}).ai || {};
+    const extra = (V.data.settings || {}).extra || {};
+    const ai = extra.ai || {};
     const same = ai.month === month();
-    return { month: month(), spent: (same ? Number(ai.spent) || 0 : 0) + owed, calls: same ? Number(ai.calls) || 0 : 0,
+    // (owed parts the cloud's tally has already taken, as this device heard since: not counted twice here either)
+    const there = countedIn(extra);
+    const stillOwed = owedParts.length ? sum(owedParts.filter((p) => !p.id || !there.has(p.id))) : owed;
+    return { month: month(), spent: (same ? Number(ai.spent) || 0 : 0) + stillOwed, calls: same ? Number(ai.calls) || 0 : 0,
       limit: typeof ai.limit === 'number' && ai.limit >= 0 ? ai.limit : LIMIT };
   }
 
@@ -241,19 +261,31 @@ V.ai = (() => {
     await V.cloud.changeExtra((extra) => ({ ...extra, ai: change({ ...(extra.ai || {}) }) }));
   }
 
-  /* `cost` added to this month's tally (every device's), as one more request. */
+  /* `cost` added to this month's tally (every device's), as one more request; with it, what this device still owes
+     the tally, except what the cloud's tally already has (its ids in extra.ai_counted: a write that landed unanswered). */
   async function count(cost) {
+    await readOwed();
     const now = month();
-    const add = cost + owed;
+    const parts = [...owedParts, { id: V.uuid().replace(/-/g, '').slice(0, 16), cost: Number(cost) || 0 }];
     try {
-      await writeAi((ai) => (ai.month === now
-        ? { ...ai, spent: (Number(ai.spent) || 0) + add, calls: (Number(ai.calls) || 0) + 1 }
-        : { ...ai, month: now, spent: add, calls: 1 }));
+      await V.cloud.changeExtra((extra) => {
+        const ai = { ...(extra.ai || {}) };
+        const there = countedIn(extra);
+        const fresh = parts.filter((p) => !p.id || !there.has(p.id));
+        const add = sum(fresh);
+        return { ...extra, ai_counted: [...there, ...fresh.filter((p) => p.id).map((p) => p.id)].slice(-COUNTED_KEPT),
+          ai: ai.month === now ? { ...ai, spent: (Number(ai.spent) || 0) + add, calls: (Number(ai.calls) || 0) + 1 }
+            : { ...ai, month: now, spent: add, calls: 1 } };
+      });
       owed = 0;
+      owedParts = [];
       await V.db.meta('ai-owed', 0);
+      await V.db.meta('ai-owed-parts', null);
     } catch (error) {
-      owed = add;  // counted here meanwhile, and added next time
+      owedParts = parts;  // counted here meanwhile, and added next time (unless the cloud has it by then)
+      owed = sum(parts);
       await V.db.meta('ai-owed', owed).catch(() => {});
+      await V.db.meta('ai-owed-parts', parts).catch(() => {});
     }
   }
 
@@ -403,7 +435,20 @@ V.ai = (() => {
   async function getKey() {
     if (!claudeOn()) { key = null; throw new AiError('off', WORDS.off); }  // (never fetched while Claude is off)
     if (key) return key;
-    const { data, error } = await V.cloud.sb.storage.from('vault').download(keyPath());
+    let got;
+    try {
+      got = await V.cloud.sb.storage.from('vault').download(keyPath());
+    } catch (error) {
+      got = { data: null, error };
+    }
+    const { data, error } = got;
+    // (1.22.6) A download that didn't get through (no answer in time, the cloud's own trouble) says nothing about the
+    // key, as for the Gemini one: what needed it waits ('offline'), never "set up the AI first", and what the last look
+    // found stays. Only the cloud saying there's no such file is "no key".
+    if (error && !notThere(error)) {
+      throw navigator.onLine ? Object.assign(new AiError('offline', WORDS.cloudOut), { cloud: true })
+        : new AiError('offline', WORDS.away);
+    }
     if (error || !data) {
       known = { ...(known || {}), cloud: false };
       throw new AiError('nokey', 'Set up the AI first: Settings > AI.');
@@ -2388,16 +2433,19 @@ V.ai = (() => {
       parts: [
         tag(ui.card('Gemini', geminiKeyLine(ui)), 'free'),
         tag(ui.card('Claude', claudeSwitch(ui), on ? month : null, on && !keySet ? claudeKey : null), 'paid'),
-        ui.card('Note-taker', notesLine(ui), V.notetaker && V.notetaker.aiSwitch ? V.notetaker.aiSwitch(ui) : null),
+        ui.card('Note-taker', notesLine(ui), V.notetaker && V.notetaker.aiSwitch ? V.notetaker.aiSwitch(ui) : null,
+          V.notetaker && V.notetaker.waitingLine ? V.notetaker.waitingLine(ui) : null),
         ui.card('Test me', testMeSwitch(ui)),
-        V.h('p.hint.set-foot.ai-privacy', { text: on
-          ? 'Gemini (by Google) and Claude (by Anthropic) only read what you send them: your messages in Chat, and a '
-            + 'transcript when you make notes. Claude never hears the sound itself; Gemini does only with AI listening on '
-            + '(the recording, half a minute at a time, deleted from this device once it\'s written down). Gemini is free, '
-            + 'so it isn\'t counted here.'
-          : 'Gemini (by Google) only reads what you send it: your messages in Chat, and a transcript when you make notes. It '
-            + 'hears the sound itself only with AI listening on (the recording, half a minute at a time, deleted from this '
-            + 'device once it\'s written down), and it\'s free.' }),
+        // (1.22.6, STU-21: everything the code sends, as it is: Chat, its own look-ups and what's attached; the
+        // note-taker's transcript; the notes flash cards are made from; snapped pages; Test me's cards and typed
+        // answers; and the sound only with AI listening on, which is off until asked)
+        V.h('p.hint.set-foot.ai-privacy', { text: `${on ? 'Google\'s free AI and the paid one only read what you send them'
+          : 'Google\'s free AI only reads what you send it'}: what you write or attach in Chat, and the notes Chat looks `
+          + 'up for you; the transcript when you make notes; the notes you make flash cards from; page photos you snap; '
+          + `and your cards and typed answers in Test me. ${on ? 'Only the free one hears' : 'It hears'} the sound of a `
+          + 'class, and only with AI listening on (half a minute at a time, deleted from this device once it\'s written '
+          + `down). ${on ? 'The free one isn\'t counted here. ' : ''}On a free key, Google may use what you send it to `
+          + 'improve its products.' }),
       ],
       more,
       says: says.join(' · '),

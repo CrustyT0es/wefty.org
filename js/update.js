@@ -43,6 +43,7 @@ V.update = (() => {
   }
   const inUse = () => (picking && Date.now() - picking < 10 * 60 * 1000)
     || !!(V.notetaker && V.notetaker.listening())
+    || !!(V.chat && V.chat.inUse && V.chat.inUse())  // (1.22.6, DATA-09: an answer being written, a message typed)
     || [...document.querySelectorAll('#app .send-row textarea')].some((box) => box.value.trim() !== '');
   /* The owner asking for a reload (Update now, the built-in copy) while the note-taker listens: not now, and why. */
   function listening() {
@@ -137,13 +138,32 @@ V.update = (() => {
   function keep() {
     const old = read('sessionStorage', KEPT) || {};
     const tab = V.tab ? V.tab() : old.tab || 'notes';
-    write('sessionStorage', KEPT, {
+    const place = {
       tab,
       note: (V.editor && V.editor.openId()) || (started ? null : old.note || null),
       // (Settings' page, where it says which: js/settings.js's page())
       page: tab !== 'settings' ? undefined : (V.settings && V.settings.page && V.settings.page()) || old.page || undefined,
       from: old.from || V.VERSION,
-    });
+      // (1.22.6, DEV-14) Words left in Share's Send and Clipboard boxes, kept while another tab shows: they come
+      // back after the reload, so they never need to hold an update. This tab only, and only this person's.
+      boxes: boxesNow() || old.boxes || undefined,
+    };
+    write('sessionStorage', KEPT, place);
+    // (words too many for this tab's storage: the place is kept without them, never lost with them)
+    if (place.boxes && !(read('sessionStorage', KEPT) || {}).boxes) write('sessionStorage', KEPT, { ...place, boxes: undefined });
+  }
+  function boxesNow() {
+    const by = (V.data && V.data.user && V.data.user.id) || '';
+    const send = V.send && V.send.boxWords ? V.send.boxWords() : '';
+    const clips = V.clips && V.clips.boxWords ? V.clips.boxWords() : '';
+    if (!by || (!send.trim() && !clips.trim())) return null;
+    return { by, send: send.trim() ? send : undefined, clips: clips.trim() ? clips : undefined };
+  }
+  function putBoxesBack(kept) {
+    const boxes = kept && kept.boxes;
+    if (!boxes || typeof boxes !== 'object' || !V.data || !V.data.user || boxes.by !== V.data.user.id) return;
+    if (typeof boxes.send === 'string' && V.send && V.send.keepWords) V.send.keepWords(boxes.send);
+    if (typeof boxes.clips === 'string' && V.clips && V.clips.keepWords) V.clips.keepWords(boxes.clips);
   }
 
   /* Reloads into the waiting version. Resolves true while that happens, false if it didn't (the owner stays put).
@@ -318,6 +338,7 @@ V.update = (() => {
     resume() {
       const kept = read('sessionStorage', KEPT);
       write('sessionStorage', KEPT, null);
+      putBoxesBack(kept);
       return kept;
     },
 
@@ -348,7 +369,9 @@ V.update = (() => {
        listens: the reload would end it part-way through a class.) */
     async now() {
       if (listening()) return false;
-      if (!(await V.editor.settled()) || V.send.busy() || V.files.busy()) {
+      // (1.22.6, DEV-04: an answer Chat is still writing, or a message on its way, waits too; words in its box are kept
+      // and come back, so they don't)
+      if (!(await V.editor.settled()) || V.send.busy() || V.files.busy() || (V.chat && V.chat.busy && V.chat.busy())) {
         V.toast('Wefty updates as soon as what\'s being saved or sent is done.');
         return false;
       }

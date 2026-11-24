@@ -735,7 +735,7 @@ V.files = (() => {
       }));
       if (navigator.share && navigator.canShare) {
         actions.push(act('Share', 'share', async (file) => {
-          const response = await fetch(await V.cloud.link(file.path));
+          const response = await V.cloud.deadlineFetch(await V.cloud.link(file.path));  // (1.22.6: never waits for ever)
           const blob = await response.blob();
           const shared = new File([blob], file.name || name, { type: file.mime || blob.type });
           if (!navigator.canShare({ files: [shared] })) throw new Error('This phone can\'t share that kind of file.');
@@ -1262,7 +1262,7 @@ V.files = (() => {
     if (job.stopped) throw new Error('Stopped');
     job.controller = new AbortController();
     try {
-      const response = await fetch(url, { signal: job.controller.signal });
+      const response = await V.cloud.deadlineFetch(url, { signal: job.controller.signal });  // (1.22.6: a deadline too)
       if (!response.ok) throw new Error(`The cloud said ${response.status}`);
       return new Uint8Array(await response.arrayBuffer());
     } finally {
@@ -1727,7 +1727,7 @@ V.files = (() => {
       const url = await V.cloud.link(t.path);
       if (kind === 'video') shot = V.send.videoPreview ? await V.send.videoPreview(url) : null;
       else {
-        const response = await fetch(url);
+        const response = await V.cloud.deadlineFetch(url);  // (1.22.6: never waits for ever)
         if (!response.ok) throw new Error(`The cloud said ${response.status}`);
         shot = await V.send.preview(new File([await response.blob()], t.name || 'picture', { type: pictureType(t) }));
       }

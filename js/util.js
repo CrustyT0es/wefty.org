@@ -4,7 +4,7 @@
 'use strict';
 
 const V = (window.V = window.V || {});
-V.VERSION = '1.22.5';
+V.VERSION = '1.22.6';
 V.desktop = !!window.VAULT_DESKTOP;  // set by the PC app (vault/desktop.py) before any script runs
 /* Sentences from the cloud's helper (vault/functions/vault-admin), which may have been put in before Vault became
    Wefty and still say "Vault ..." (its VERSION didn't change for words alone, so nothing asks the owner to update it):
@@ -908,9 +908,17 @@ V.contextMenu = (() => {
   return attach;
 })();
 
+/* (1.22.6) What a browser or the cloud's library says of a request that didn't get through ("TypeError: Failed to
+   fetch", "Load failed" on an iPhone, "NetworkError when attempting to fetch resource.", a deadline's "Failed to fetch
+   (no answer in time)") is never what reaches the screen: these plain words are said instead. */
+V.UNREACHED = 'Wefty couldn\'t connect. Check you\'re online and try again.';
+V.plainError = ((raw) => (text) => (typeof text === 'string' && raw.test(text) ? V.UNREACHED : text))(
+  /^\s*(?:[A-Za-z]*Error:\s*)?(?:Failed to fetch\b|NetworkError when attempting to fetch|Load failed\b|The network connection was lost|The Internet connection appears to be offline|Network request failed|Request was aborted)/i);
+
 /* `help` (1.22): a Help card's id (js/help.js V.help.forError), for a Help button that opens that answer: a message that
    needs more than one tap to fix is never a dead end. */
 V.toast = function toast(text, { kind = '', action, onAction, ms = 3200, help = '' } = {}) {
+  text = V.plainError(text);  // (1.22.6: never a raw "Failed to fetch")
   const box = document.getElementById('toasts');
   const helps = !!help && !!(V.help && V.help.open);
   const item = V.h('div.toast' + (kind ? '.' + kind : ''), { role: 'status' },
@@ -1169,7 +1177,22 @@ V.RISKY_TYPES = ['exe', 'com', 'scr', 'pif', 'cpl', 'msi', 'msp', 'mst', 'msix',
   'ppam', 'docm', 'xlsm', 'pptm', 'dotm', 'xltm', 'potm', 'ppsm', 'sldm',
   // (1.22.5, SEC-18)
   'pyz', 'pyzw', 'pyc', 'pyo', 'one', 'diagcab', 'theme', 'themepack', 'jnlp', 'website', 'searchconnector-ms', 'accde',
-  'accdr', 'ade', 'mde', 'sct', 'wsc', 'html', 'htm', 'xht', 'xhtml', 'mht', 'mhtml', 'svg'];
+  'accdr', 'ade', 'mde', 'sct', 'wsc', 'html', 'htm', 'xht', 'xhtml', 'mht', 'mhtml', 'svg',
+  // (1.22.6, SEC-18 again: the rest of what a double-click runs or acts on in Windows, macOS, ChromeOS and Linux; each
+  // group's reason is beside it in vault/local.py)
+  'rdp', 'msrcincident', 'wcx', 'ica', 'vnc',  // remote desktop and remote help
+  'ovpn', 'pbk',  // VPN and dial-up connections
+  'iqy', 'dqy', 'oqy', 'rqy', 'odc',  // Office query and data connection files
+  'slk',  // SYLK spreadsheets (old Excel 4 macros)
+  'xla', 'ppa', 'wll', 'xlm', 'xlsb', 'vsto',  // Office add-ins and macro sheets
+  'vsdm', 'vssm', 'vstm', 'onepkg', 'accda', 'adp', 'mda',  // Visio macro files, OneNote packages, Access add-ins
+  'cer', 'crt', 'der', 'p7b', 'p7c', 'p12', 'pfx', 'sst',  // certificates
+  'msu', 'ppkg', 'diagpkg',  // Windows update and provisioning packages, troubleshooters
+  'deskthemepack', 'appcontent-ms', 'printerexport', 'wsb', 'prf',  // settings that act when opened
+  'dmg', 'pkg', 'mpkg', 'command', 'terminal', 'mobileconfig',  // macOS images, installers, scripts, profiles
+  'webloc', 'inetloc', 'fileloc',  // macOS shortcuts
+  'desktop', 'run', 'snap', 'flatpak', 'flatpakref', 'flatpakrepo',  // Linux launchers and installers
+  'bash', 'zsh', 'csh', 'ksh'];  // more shell scripts
 V.CHROMEBOOK_RISKY = ['apk', 'crx', 'deb', 'rpm', 'appimage'];
 V.risky = (name) => {
   const clean = String(name || '').split(/[\\/]/).pop().replace(/[. ]+$/, '');

@@ -425,6 +425,7 @@ V.chat = (() => {
         for (const id of [...chats.keys()]) {
           if (seen.has(id) || index.waiting.has(id) || !index.prints[id] || (busy && busy.chatId === id)) continue;
           chats.delete(id);  // deleted on another device
+          forgetDraft(id);  // (its box goes with it, kept words too)
           delete index.prints[id];
           await V.db.meta('chat:' + id, null);
           changed = true;
@@ -478,7 +479,7 @@ V.chat = (() => {
     await V.cloud.remove(paths);
     chats.delete(id);
     unsent.delete(id);
-    drafts.delete(id);
+    forgetDraft(id);
     delete index.prints[id];
     index.waiting.delete(id);
     await V.db.meta('chat:' + id, null);
@@ -487,18 +488,173 @@ V.chat = (() => {
 
   const listOf = () => [...(chats || new Map()).values()].sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
 
-  function newChat() {
+  /* A chat not sent yet. `madeFor`: for a note (Ask in Chat) or Help, so the words a plain new chat left aren't put in
+     its box. */
+  function newChat(made) {
     const chat = { format: 1, id: V.uuid(), title: '', created: now(), updated: now(), model: defaultModel(), think: false,
       search: false, system: SYSTEM, turns: [] };
     unsent.set(chat.id, chat);
     defaulted.add(chat.id);
+    if (made) madeFor.add(chat.id);
     return chat;
   }
   const chatOf = (id) => (chats && chats.get(id)) || unsent.get(id) || null;
+  /* (1.22.6, DATA-09) A message being typed is kept on this device too (V.db meta 'chat-drafts': { by, words: chat id
+     -> its words, cut?: keys kept only in part }, never sent anywhere), so a reload (an update, Android putting Wefty
+     to sleep) finds it in the box again. Notes and files picked for it stay in memory only, as before. Wiped with this
+     device's copy at sign-out.
+     A chat not sent yet gets a new id each visit, so its words are kept as the new chat's, '*new'. Only one such chat
+     has them (`holder`): the plain New chat that took them, or the chat not sent yet that was typed in first; New chat
+     goes back to it rather than making another, and a chat made for a note (Ask in Chat) or for Help never takes
+     them. Any other chat not sent yet is let go once it's left (nothing leads back to it). */
+  const DRAFTS_KEY = 'chat-drafts';
+  const DRAFT_MOST = TEXT_MOST;  // (letters kept: Chat's own size for a text file; longer is kept cut, and says so)
+  let keptDrafts = null;  // what's kept, as this page last read or wrote it
+  const touched = new Set();  // chats whose box changed since the last write (only those are written)
+  let holder = null;      // the chat not sent yet whose words are '*new'
+  const madeFor = new Set();  // chats not sent yet made for a note or Help: never filled from '*new'
+  const isNew = (id) => unsent.has(id) && !((chatOf(id) || {}).turns || []).length;
+  const hasStuff = (d) => !!d && (!!(d.text && d.text.trim()) || d.notes.length > 0 || d.files.length > 0);
+  const holderFree = () => !holder || !isNew(holder) || !hasStuff(drafts.get(holder));
+  /* The key a chat's words are kept under: its id, '*new' (`claim`: taking it when no other chat not sent yet has
+     anything in its box), or null (not kept: another chat not sent yet has '*new'). */
+  function draftKey(id, claim) {
+    if (!isNew(id)) return id;
+    if (holder === id) return '*new';
+    if (claim && holderFree()) { holder = id; return '*new'; }
+    return null;
+  }
+  // (kept as { by: the person's id, words }: read only once someone is signed in, and only that person's, so the words
+  // someone else left on this browser never show in another person's box)
+  const draftsBy = () => (V.data && V.data.user && V.data.user.id) || '';
+  const signedIn = () => new Promise((resolve) => {
+    const look = () => (draftsBy() ? resolve() : setTimeout(look, 200));
+    look();
+  });
+  const readKept = async () => {
+    const kept = await V.db.meta(DRAFTS_KEY);
+    const mine = kept && typeof kept === 'object' && kept.by && kept.by === draftsBy() && kept.words && typeof kept.words === 'object';
+    return { words: mine ? { ...kept.words } : {}, cut: new Set(mine && Array.isArray(kept.cut) ? kept.cut : []) };
+  };
+  let cutKeys = new Set();  // kept words that are only the first DRAFT_MOST letters of what was typed
+  const saidCut = new Set();
+  function sayCut(key) {
+    if (!cutKeys.has(key) || saidCut.has(key)) return;
+    saidCut.add(key);
+    V.toast('That message was too long to keep whole: only its start came back. Check the end before you send it.', { ms: 9000 });
+  }
+  /* What the last visit left, put in a box the first time it's drawn. */
+  function fillKept(id, draft) {
+    if (!keptDrafts || draft.text || touched.has(id)) return false;
+    let key = null;
+    if (!isNew(id)) key = id;
+    else if (!madeFor.has(id) && holderFree() && typeof keptDrafts['*new'] === 'string') { key = '*new'; holder = id; }
+    if (!key || typeof keptDrafts[key] !== 'string') return false;
+    draft.text = keptDrafts[key];
+    if (cutKeys.has(key)) setTimeout(() => sayCut(key), 0);
+    return true;
+  }
+  const draftsRead = signedIn().then(readKept).then((kept) => {
+    keptDrafts = kept.words;
+    cutKeys = kept.cut;
+    // (a box drawn before they were read: its kept words put in, unless something was typed there meanwhile)
+    let filled = false;
+    for (const [id, draft] of drafts) if (fillKept(id, draft)) filled = true;
+    if (filled) drawBox();
+  }).catch(() => { keptDrafts = {}; });
+  let draftsTimer = 0;
+  let keepFailed = false;  // (1.22.6, round C, DEV2-05) the last write of kept words was turned down (a full device): they're only here
+  let draftsOwed = 0;  // writes asked for and not done yet (a reload now would lose what they keep)
+  let draftsChain = Promise.resolve();
+  let newTouched = false;  // a chat not sent yet (or the holder) touched: '*new' is written again
+  /* The words in these chats' boxes kept (soon: typing goes on). What's kept is read again first, so another window's
+     words (Wefty open twice) are kept too: only the chats this page touched are changed. */
+  function keepDrafts(id) {
+    if (id) {
+      touched.add(id);
+      if (holder === id || isNew(id)) newTouched = true;
+    }
+    if (!draftsTimer) draftsOwed++;
+    clearTimeout(draftsTimer);
+    draftsTimer = setTimeout(() => {
+      draftsTimer = 0;
+      draftsChain = draftsChain.then(async () => { await writeDrafts(); keepFailed = false; })
+        .catch(() => { keepFailed = true; }).finally(() => { draftsOwed--; });
+    }, 400);
+  }
+  async function writeDrafts() {
+    const these = [...touched];
+    let news = newTouched;
+    touched.clear();
+    newTouched = false;
+    await draftsRead;
+    if (!draftsBy()) return;  // (signed out meanwhile: nothing kept)
+    let kept;
+    try { kept = await readKept(); } catch (error) { kept = { words: { ...(keptDrafts || {}) }, cut: new Set(cutKeys) }; }
+    const all = kept.words;
+    const cut = kept.cut;
+    const put = (key, text) => {
+      if (text && text.trim()) {
+        all[key] = text.slice(0, DRAFT_MOST);
+        if (text.length > DRAFT_MOST) cut.add(key); else cut.delete(key);
+      } else { delete all[key]; cut.delete(key); }
+    };
+    for (const one of these) {
+      const key = draftKey(one, true);
+      if (key === '*new') { news = true; delete all[one]; cut.delete(one); continue; }  // (an id it had in the list)
+      if (key !== null) put(key, (drafts.get(one) || {}).text || '');
+    }
+    // '*new' is this page's holder's words (none any more once it's sent, let go or emptied)
+    if (news) put('*new', holder && isNew(holder) ? (drafts.get(holder) || {}).text || '' : '');
+    keptDrafts = all;
+    cutKeys = cut;
+    if (!draftsBy()) return;
+    const cutNow = [...cut].filter((k) => k in all);
+    await V.db.meta(DRAFTS_KEY, Object.keys(all).length ? { by: draftsBy(), words: all, ...(cutNow.length ? { cut: cutNow } : {}) } : null);
+  }
   const draftOf = (id) => {
-    if (!drafts.has(id)) drafts.set(id, { text: '', notes: [], files: [] });
+    if (!drafts.has(id)) {
+      const draft = { text: '', notes: [], files: [] };
+      drafts.set(id, draft);
+      fillKept(id, draft);
+    }
     return drafts.get(id);
   };
+  /* A chat not sent yet, let go: from memory, its kept words with it (its files from the cloud, as unattach does). */
+  function forgetUnsent(id) {
+    const draft = drafts.get(id);
+    unsent.delete(id);
+    drafts.delete(id);
+    defaulted.delete(id);
+    picked.delete(id);
+    madeFor.delete(id);
+    if (holder === id) { keepDrafts(id); holder = null; }
+    const up = draft ? draft.files.filter((f) => f.state === 'ready').map((f) => f.path) : [];
+    if (up.length) V.cloud.remove(up).catch(() => {});
+  }
+  /* A chat removed (here, or on another device): its box goes with it, kept words too. */
+  function forgetDraft(id) {
+    if (!drafts.has(id) && !(keptDrafts && keptDrafts[id] !== undefined)) return;
+    drafts.delete(id);
+    keepDrafts(id);
+  }
+  /* The chat open now changes: one not sent yet that was left, with nothing leading back to it (not the holder, New
+     chat's), is let go. */
+  function leaving(was, now) {
+    if (!was || was === now || was === sendingId || was === holder || !isNew(was)) return;
+    forgetUnsent(was);
+  }
+  /* (1.22.6, DATA-09) Whether an update's reload would lose something here: an answer being written or a message
+     being sent, words not kept yet (a write still to come, or a box whose words aren't kept), or notes and files
+     picked for a message (memory only) in a box the person can get back to (the open chat's, New chat's, a chat in
+     the list). Words already kept come back after the reload, so they never hold an update. */
+  const inUse = () => !!busy || !!sendingId || sendingTurns.size > 0 || draftsOwed > 0
+    || (keepFailed && [...drafts].some(([, d]) => !!(d.text && d.text.trim())))
+    || [...drafts].some(([id, d]) => {
+      if (!(openId === id || holder === id || (chats && chats.has(id)))) return false;
+      if (d.notes.length || d.files.length) return true;
+      return !!(d.text && d.text.trim()) && (draftKey(id) === null || d.text.length > DRAFT_MOST);
+    });
 
   /* ---------------------------------------------------------------- files */
 
@@ -632,7 +788,7 @@ V.chat = (() => {
   async function blobOf(f) {
     try {
       if (f.size < 6 * 1024 * 1024) return await V.cloud.blob(f.path);
-      const response = await fetch(await V.cloud.link(f.path));
+      const response = await V.cloud.deadlineFetch(await V.cloud.link(f.path));
       if (!response.ok) throw new Error(String(response.status));
       return await response.blob();
     } catch (error) {
@@ -1035,6 +1191,9 @@ V.chat = (() => {
     try {
       sending = await V.ai.getKey();
     } catch (error) {
+      // (1.22.6) The key couldn't be fetched from the cloud just now (js/ai.js getKey): the message waits, as for any
+      // connection trouble, and goes once it can; only a cloud with no key there sends it back with "set it up".
+      if (error && error.kind === 'offline') throw new ChatError(navigator.onLine ? 'offline' : 'away', navigator.onLine ? WORDS.offline : WORDS.away);
       throw new ChatError('nokey', error.message || WORDS.nokey);
     }
     let response;
@@ -1360,6 +1519,7 @@ V.chat = (() => {
           draft.notes = sentNotes.get(turn) || [];
           draft.files = (turn.files || []).map((f) => ({ ...f, state: 'ready', url: pictures.get(f.path) }));
           trouble = { chatId: chat.id, kind: failed.kind, message: failed.message };
+          keepDrafts(chat.id);  // (kept again: a restart while it's being fixed doesn't lose it)
           if (!chat.turns.length) {
             chats.delete(chat.id);
             unsent.set(chat.id, chat);
@@ -1708,6 +1868,7 @@ V.chat = (() => {
       return { id: n.id, title: n.title, text: live ? (live.body || '') : '' };
     });
     draft.files = (turn.files || []).map((f) => ({ ...f, state: 'ready', url: pictures.get(f.path) }));
+    keepDrafts(chat.id);  // (kept again, as typed words are: a restart doesn't lose it)
     if (!chat.turns.length) {  // its only message: the chat is back to one never sent, here and in the cloud
       chats.delete(chat.id);
       unsent.set(chat.id, chat);
@@ -1737,6 +1898,7 @@ V.chat = (() => {
     if (draft.files.some((f) => f.state !== 'ready')) return V.toast('Wait for the files to finish going up.');
     const taken = { text: draft.text, notes: draft.notes, files: draft.files };
     drafts.set(id, { text: '', notes: [], files: [] });
+    keepDrafts(id);
     sendingId = id;
     drawBox();
     let started = false;
@@ -1774,6 +1936,8 @@ V.chat = (() => {
       await settleAsks(current, turn, !!turn.text && V.chatTools && V.chatTools.saysYes(turn.text));
       chats.set(current.id, current);
       unsent.delete(current.id);
+      madeFor.delete(current.id);
+      if (holder === current.id) holder = null;  // (sent: '*new' is free for the next new chat)
       trouble = null;
       started = true;
       const going = answer(current, turn, { first: true });  // (sets busy at once)
@@ -1786,6 +1950,7 @@ V.chat = (() => {
         drafts.set(id, { text: [taken.text, now2.text].filter((t) => t.trim()).join('\n'),
           notes: [...taken.notes, ...now2.notes.filter((n) => !taken.notes.some((t) => t.id === n.id))],
           files: [...taken.files, ...now2.files] });
+        keepDrafts(id);
         drawBox();
       }
     }
@@ -2619,7 +2784,7 @@ V.chat = (() => {
     const input = V.h('textarea.chat-input', { rows: '1', placeholder: 'Ask anything', 'aria-label': 'Your message',
       enterkeyhint: enterSends ? 'send' : 'enter' });
     // (the drafts are kept in memory only: nothing is saved, sent or drawn again as a letter is typed)
-    input.addEventListener('input', () => { draftOf(openId).text = input.value; grow(); drawSendButton(); });
+    input.addEventListener('input', () => { draftOf(openId).text = input.value; keepDrafts(openId); grow(); drawSendButton(); });
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && enterSends && !event.isComposing) { event.preventDefault(); send(); }
     });
@@ -2743,18 +2908,26 @@ V.chat = (() => {
   const blank = () => [...unsent.values()].find((c) => c.id !== sendingId && !c.turns.length && !draftOf(c.id).text
     && !draftOf(c.id).files.length && !draftOf(c.id).notes.length);
 
+  /* Where New chat goes: back to the chat not sent yet that has something in its box (the words kept as '*new'), else
+     a blank one, else a new one. Never a copy of the words in a second chat. */
+  const newHome = () => (holder && holder !== sendingId && isNew(holder) && hasStuff(draftOf(holder)) ? holder
+    : (blank() || newChat()).id);
+
   /* The chat to show when none is open: the newest (a new one when there's none, shown straight away). */
   function choose() {
     const newest = listOf()[0];
     const open = openId && chatOf(openId);
     if (open && !(auto && newest && open === blank())) return;
-    openId = newest ? newest.id : (blank() || newChat()).id;
+    const was = openId;
+    openId = newest ? newest.id : newHome();
+    leaving(was, openId);
     showingChat = !newest;
     auto = !newest;  // chats from the cloud arriving later take its place
   }
 
   function open(id) {
-    if (id === null) id = (blank() || newChat()).id;
+    if (id === null) id = newHome();
+    leaving(openId, id);
     // (from a phone's list of chats: the chat comes up at its newest message, as one opened the first time does; a box
     // that was hidden keeps no scroll place, so before 1.22.2 it came up at its first message instead)
     if (!showingChat && !V.wide()) shown = '';
@@ -2872,7 +3045,7 @@ V.chat = (() => {
           sheet.close();
           try {
             const blob = item.size && item.size < 6 * 1024 * 1024 ? await V.cloud.blob(item.path)
-              : await (await fetch(await V.cloud.link(item.path))).blob();
+              : await (await V.cloud.deadlineFetch(await V.cloud.link(item.path))).blob();
             attach([new File([blob], item.name, { type: item.mime || blob.type || V.format.typeOf(item.name) || '' })]);
           } catch (error) {
             V.toast(`${item.name} couldn't be fetched (are you online?).`, { kind: 'err' });
@@ -2938,7 +3111,7 @@ V.chat = (() => {
     if (!sure) return;
     try {
       if (chats.has(chat.id)) await removeChat(chat.id);
-      else { unsent.delete(chat.id); drafts.delete(chat.id); }
+      else forgetUnsent(chat.id);
       if (openId === chat.id) { openId = null; showingChat = false; choose(); }
       V.toast('Chat deleted');
       draw();
@@ -2970,8 +3143,9 @@ V.chat = (() => {
     }
     const item = { id: note.id, title: V.noteTitle({ ...note, body: words || '' }), text: String(words || '').slice(0, 200000), locked: !!note.locked };
     await load();
-    const chat = newChat();
+    const chat = newChat(true);
     draftOf(chat.id).notes = [item];
+    leaving(openId, chat.id);
     openId = chat.id;
     showingChat = true;
     if (V.editor.covering()) V.editor.close();
@@ -2996,8 +3170,10 @@ V.chat = (() => {
     const words = String(question || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
     await load().catch(() => {});
     if (V.editor.covering()) V.editor.close();  // (a note over everything on a phone)
-    const chat = blank() || newChat();  // (a blank chat has nothing in its box, notes and files included)
+    const chat = blank() || newChat(true);  // (a blank chat has nothing in its box, notes and files included)
     drafts.set(chat.id, { text: words, notes: [], files: [] });
+    keepDrafts(chat.id);  // (kept as typed words are, where no other new chat has words kept)
+    leaving(openId, chat.id);
     openId = chat.id;
     showingChat = true;
     auto = false;
@@ -3051,8 +3227,10 @@ V.chat = (() => {
   const filesSize = () => listOf().reduce((sum, chat) => sum + chat.turns.reduce((s, t) => s + (t.files || []).reduce((x, f) => x + (f.size || 0), 0), 0), 0);
 
   V.on('signed-out', () => {
-    chats = null; index = null; unsent.clear(); drafts.clear(); picked.clear(); defaulted.clear(); openId = null; stopPump();
+    chats = null; index = null; unsent.clear(); drafts.clear(); keptDrafts = {}; touched.clear(); clearTimeout(draftsTimer); picked.clear(); defaulted.clear(); openId = null; stopPump();
     unread.clear(); resumed.clear();
+    holder = null; madeFor.clear(); cutKeys = new Set(); saidCut.clear(); newTouched = false;
+    if (draftsTimer) { draftsTimer = 0; draftsOwed--; }  // (cleared above: nothing is owed now)
     try { localStorage.removeItem(GOING); } catch (error) { /* (nothing kept) */ }
     [...soon.keys()].forEach(forgetSoon);
   });
@@ -3096,6 +3274,8 @@ V.chat = (() => {
   return {
     render,
     again,
+    inUse,
+    draftsRead,
     unsent: unsentHere,  // (1.22.5: counted before signing out, js/cloud.js unsentParts)
     refresh: () => refresh().catch(() => {}),
     load,

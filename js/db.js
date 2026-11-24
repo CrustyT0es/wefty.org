@@ -45,7 +45,12 @@ V.db = (() => {
     return opening;
   }
 
+  // (1.22.6, DEV-09 and ACC-13) This page let go of the person's copy (signed out or deleted here, or someone else
+  // signed in from another tab): whatever it still does writes nothing more here. Reads go on.
+  let closed = false;
+
   async function run(store, mode, work) {
+    if (closed && mode === 'readwrite') return undefined;
     const db = await open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(store, mode);
@@ -65,6 +70,9 @@ V.db = (() => {
     put: (store, value) => run(store, 'readwrite', (s) => s.put(value)),
     putMany: (store, values) => run(store, 'readwrite', (s) => { for (const value of values) s.put(value); }),
     del: (store, key) => run(store, 'readwrite', (s) => s.delete(key)),
+    delMany: (store, keys) => run(store, 'readwrite', (s) => { for (const key of keys) s.delete(key); }),
+    close() { closed = true; },
+    get closed() { return closed; },
     clear: (store) => run(store, 'readwrite', (s) => s.clear()),
     async meta(key, value) {
       if (value === undefined) {
@@ -77,6 +85,7 @@ V.db = (() => {
        nothing: a page closed half way used to leave when each table was last checked over an empty copy, which then
        showed no notes and never fetched the older ones (DATA-24). */
     async wipe() {
+      if (closed) return undefined;
       const db = await open();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(STORES, 'readwrite');

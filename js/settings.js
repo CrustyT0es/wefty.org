@@ -85,55 +85,152 @@ V.settings = (() => {
 
   /* (1.22.5, SEC-07) "Is it you?": the box (or, asked for, the e-mailed code) a sheet adds before something that can't
      be undone. { el, filled(), prove() }: prove() resolves true once the cloud says it's them, else says why in
-     `problem` and resolves false. */
-  function itsYou(problem, { label = 'Your Wefty password', changed = () => {} } = {}) {
+     `problem` and resolves false.
+
+     (1.22.6) The cloud asks as well now (the helper's version 7), so the check's own sign-in is kept for the one call
+     it guards: prove({ keep: true }), then proof() gives what goes with that call ({ proof: its access token }, or
+     for an account with no password { proof_code } when `forHelper`: the helper trades the code itself), and
+     release() ends it, or adopt() makes it this device's own sign-in. Only an account with no password (made with
+     Google) gets a code by e-mail: for the rest, the mail app on the same phone would be the way round the password,
+     so "Forgot your password?" opens Help's answer for it instead (ACC-03). The box is emptied after every check, and
+     by clear() (pair.js's Back): the next code never finds a password waiting (ACC-15). */
+  /* Whether the cloud's helper trades an e-mailed code itself (version 7) or leaves it to this page (any older one: it
+     answers "proof-info", like any action it doesn't know, 400 "unknown" or 403 "not_owner"). Asked before the code is
+     used, so a made-up code never goes through on a helper that doesn't look at it. A helper that can't be reached says
+     so (the check stops: the same words as any call to it) rather than guess. Yes is remembered for the page's life. */
+  let tradesCodes = false;
+  async function helperTradesCodes() {
+    if (tradesCodes) return true;
+    if (!V.invites || !V.invites.helperCall) return false;
+    try {
+      const said = await V.invites.helperCall('proof-info', {}, 15000);
+      tradesCodes = !!said && Number(said.proof) >= 7;
+      return tradesCodes;
+    } catch (error) {
+      if (error && (error.code === 'unknown' || error.code === 'not_owner')) return false;
+      throw error;
+    }
+  }
+
+  function itsYou(problem, { label = 'Your Wefty password', changed = () => {}, forHelper = false } = {}) {
+    const noPassword = !V.desktop && !!(V.cloud.hasPassword && !V.cloud.hasPassword());
     const box = V.h('input.field.itsyou-password', { type: 'password', autocomplete: 'current-password', 'aria-label': label });
     const code = V.h('input.field.itsyou-code', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code',
       maxlength: '10', 'aria-label': 'Code from the e-mail' });
     const codeRow = V.h('label.label.itsyou-code-row', { hidden: true }, 'Code from the e-mail', code);
     let byCode = false;
-    const ask = V.desktop ? null : V.h('button.link-btn.itsyou-email', { type: 'button',
-      text: 'No password (signed up with Google), or forgot it? E-mail me a code', onclick: async () => {
+    let typed = '';    // the password the last check was made with (a change of password sends it as the one now)
+    let held = null;   // the last check's own sign-in, kept for the call it guards (`keep`)
+    const ask = noPassword ? V.h('button.link-btn.itsyou-email', { type: 'button', text: 'E-mail me a code', onclick: async () => {
+      problem.textContent = '';
+      ask.disabled = true;
+      try {
+        const email = await V.cloud.sendCheckCode();
+        byCode = true;
+        codeRow.hidden = false;
+        ask.hidden = true;
         problem.textContent = '';
-        ask.disabled = true;
+        V.toast(`Sent a code to ${email}.`);
+        requestAnimationFrame(() => code.focus());
+      } catch (error) {
+        problem.textContent = error.message || String(error);
+      } finally {
+        ask.disabled = false;
+        changed();
+      }
+    } }) : null;
+    const forgot = !noPassword && !V.desktop && V.help && V.help.open ? V.h('button.link-btn.itsyou-forgot', { type: 'button',
+      text: 'Forgot your password?', onclick: () => V.help.open({ card: 'forgot-password' }) }) : null;
+    const passRow = V.h('label.label.itsyou-password-row', { hidden: noPassword }, label, box);
+    const why = noPassword ? V.h('p.hint.itsyou-why', { text: 'Your account was made with Google, so it has no password: Wefty '
+      + 'e-mails you a code instead.' }) : null;
+    for (const input of [box, code]) input.addEventListener('input', () => { problem.textContent = ''; changed(); });
+    const release = () => { if (held && held.client) V.cloud.endCheck(held); held = null; };
+    return {
+      el: V.h('div.itsyou', {}, why, passRow, codeRow, ask, forgot),
+      filled: () => (byCode ? code.value.replace(/\D/g, '').length >= 6 : !noPassword && box.value.length > 0),
+      // (what to do first, when it isn't filled in)
+      needs: (words = 'Type your password first.') => (byCode ? 'Type the code from the e-mail first.'
+        : noPassword ? 'Tap E-mail me a code first.' : words),
+      // (the password the check was made with, for a change of password: a cloud that asks for the one now gets it)
+      password: () => (byCode ? '' : typed),
+      focus: () => (byCode || noPassword ? (byCode ? code : ask) : box).focus(),
+      clear() { box.value = ''; code.value = ''; changed(); },
+      async prove({ keep = false } = {}) {
+        release();
+        if (!navigator.onLine) { problem.textContent = 'You\'re offline. Connect to the internet, then try again.'; return false; }
+        const password = box.value;
+        const digits = code.value.replace(/\D/g, '');
+        box.value = '';  // (ACC-15: never left for the next go)
         try {
-          const email = await V.cloud.sendCheckCode();
-          byCode = true;
-          passRow.hidden = true;
-          codeRow.hidden = false;
-          ask.hidden = true;
-          problem.textContent = '';
-          V.toast(`Sent a code to ${email}.`);
-          requestAnimationFrame(() => code.focus());
+          if (byCode && keep && forHelper && await helperTradesCodes()) {
+            held = { code: digits };  // (the helper trades it itself, so it knows it came from the e-mail)
+            return true;
+          }
+          // (A helper from before version 7 ignores a code it's sent, so this page checks it, as 1.22.5 did, and sends
+          // none: a code can be used once, so only one of the two ever looks at it.)
+          const got = byCode ? await V.cloud.checkCode(digits, { keep }) : await V.cloud.checkPassword(password, { keep });
+          typed = byCode ? '' : password;
+          if (keep) held = got;
+          return true;
         } catch (error) {
           problem.textContent = error.message || String(error);
+          (byCode ? code : box).focus();
+          return false;
         } finally {
-          ask.disabled = false;
+          if (byCode) code.value = '';
           changed();
         }
-      } });
-    const passRow = V.h('label.label.itsyou-password-row', {}, label, box);
-    for (const input of [box, code]) input.addEventListener('input', () => { problem.textContent = ''; changed(); });
-    return {
-      el: V.h('div.itsyou', {}, passRow, codeRow, ask),
-      filled: () => (byCode ? code.value.replace(/\D/g, '').length >= 6 : box.value.length > 0),
-      // (the password typed, for a change of password: a cloud that asks for the one now gets it; '' by code)
-      password: () => (byCode ? '' : box.value),
-      focus: () => (byCode ? code : box).focus(),
-      async prove() {
-        if (!navigator.onLine) { problem.textContent = 'You\'re offline. Connect to the internet, then try again.'; return false; }
-        try {
-          return byCode ? await V.cloud.checkCode(code.value) : await V.cloud.checkPassword(box.value);
-        } catch (error) {
-          problem.textContent = error.message || String(error);
-          (byCode ? code : box).select();
-          return false;
-        }
+      },
+      // What goes with the call the check was for (the helper's version 7; an older helper doesn't look).
+      proof: () => (!held ? {} : held.code ? { proof_code: held.code } : held.session ? { proof: held.session.access_token } : {}),
+      session: () => (held && held.session ? held.session.access_token : ''),
+      release,
+      // The check's sign-in becomes this device's own (web). False when the cloud couldn't be asked.
+      async adopt() {
+        if (!held || !held.session) return true;  // (the PC: Python's sign-in is the fresh one already)
+        const done = await V.cloud.adopt(held);
+        held = null;
+        return done;
       },
     };
   }
 
-  /* A new password: the one there now first (or a code by e-mail), then the new one twice (1.22.5). */
+  /* (1.22.6) What's on its way in for this account stops (the helper's "end-sign-ins": yeses to codes from another
+     device that nobody collected, one-time sign-ins handed out). Asked before the other sign-ins end, with the check's
+     proof. Says what happened, never throws: 'done'; 'none' (no helper in this cloud, or the PC: nothing here is asked
+     or waiting); 'old' (a helper from before version 7 doesn't know it: 400 "unknown", or 403 "not_owner" to a friend);
+     'failed' (the helper had trouble: asked once more at once, unless the one-time code it was asked with is used up). */
+  async function endSignIns(proofFields) {
+    if (V.desktop || !V.invites || !V.invites.helperCall) return 'none';
+    for (let tries = 0; ; tries++) {
+      try {
+        await V.invites.helperCall('end-sign-ins', proofFields || {}, 20000);
+        return 'done';
+      } catch (error) {
+        if (error && (error.code === 'unknown' || error.code === 'not_owner')) return 'old';
+        if (error && error.status === 404) return 'none';
+        if (tries >= 1 || (proofFields && proofFields.proof_code) || (error && error.kind === 'signed-out')) return 'failed';
+        await sleep(waits.endRetry);
+      }
+    }
+  }
+
+  /* What to tell the person when what's on its way in could not be ended (the sessions themselves were). */
+  const STILL_ON_ITS_WAY = {
+    failed: 'Wefty couldn\'t end a code you may have just said yes to on another device, so that device could still sign in.',
+    old: 'A code you said yes to on another device in the last 10 minutes could still sign it in, until your cloud\'s '
+      + 'helper is updated: ask whoever runs your Wefty cloud to do that.',
+  };
+
+  // What a request with no answer (the cloud took it, and the answer was lost) looks like here.
+  const noAnswer = (error) => !(error && error.status) && /fetch|network|load failed|timed? ?out|no answer|reach/i.test(
+    String((error && error.message) || error));
+
+  /* A new password: the one there now first (or a code by e-mail), then the new one twice (1.22.5). (1.22.6) The check's
+     sign-in becomes this device's own first, so the new password, which ends every other sign-in, keeps this device
+     signed in; what's on its way in ends too. A change whose answer never came (N5) is checked with the new password
+     the same way before anything is said. */
   function changePassword() {
     const problem = V.h('p.error-text.password-problem', { role: 'alert' });
     const fresh = V.h('input.field.password-new', { type: 'password', autocomplete: 'new-password', placeholder: 'At least 8 characters',
@@ -141,11 +238,13 @@ V.settings = (() => {
     const again = V.h('input.field.password-again', { type: 'password', autocomplete: 'new-password', 'aria-label': 'Type the new one again' });
     const now = itsYou(problem, { label: 'Your password now' });
     let busy = false;
+    let closed = false;
     V.sheet({
       title: 'Change password',
       content: V.h('div.change-password', {}, now.el,
         V.h('label.label', {}, 'New password', fresh), V.h('label.label', {}, 'Type the new one again', again),
-        V.h('p.hint', { text: 'Use the new one next time you sign in.' }), problem),
+        V.h('p.hint', { text: 'Your other devices get signed out and need the new password to sign in again.' }), problem),
+      onClose: () => { closed = true; },
       actions: [{ label: 'Cancel' }, { label: 'Change it', kind: 'primary', onClick: async () => {
         if (busy) return true;
         problem.textContent = '';
@@ -155,57 +254,160 @@ V.settings = (() => {
             { kind: 'offline' }));
           return true;
         }
-        if (!now.filled()) { problem.textContent = 'Type the password you have now first.'; now.focus(); return true; }
+        if (!now.filled()) { problem.textContent = now.needs('Type the password you have now first.'); now.focus(); return true; }
         if (fresh.value.length < 8) { problem.textContent = 'Pick a new password of at least 8 characters.'; fresh.focus(); return true; }
         if (fresh.value !== again.value) { problem.textContent = 'The two new passwords aren\'t the same.'; again.focus(); return true; }
         busy = true;
         try {
-          if (!(await now.prove())) return true;
-          await V.cloud.changePassword(fresh.value, { current: now.password() });
-          V.toast('Password changed.');
+          if (!(await now.prove({ keep: true }))) return true;
+          if (closed) { now.release(); return true; }  // (ACC-14: closed during the check: nothing more)
+          const proof = now.proof();
+          if (!(await now.adopt())) {
+            problem.textContent = 'Wefty couldn\'t reach your cloud, so your password wasn\'t changed. Try again in a minute.';
+            return true;
+          }
+          const ended = await endSignIns(proof);
+          try {
+            await V.cloud.changePassword(fresh.value, { current: now.password() });
+          } catch (error) {
+            if (!noAnswer(error)) throw error;
+            // (N5) The cloud may have changed it, its answer lost: the new password, checked as the old one was.
+            let took = null;
+            try { took = await V.cloud.checkPassword(fresh.value); } catch (check) { took = check && check.kind === 'not-you' ? false : null; }
+            if (took === false) throw new Error('Your password wasn\'t changed: Wefty couldn\'t reach your cloud in time. Try again.');
+            if (took !== true) {
+              throw new Error('Wefty couldn\'t reach your cloud to check, so your password may or may not have changed. Try the new '
+                + 'one next time you sign in, and if it doesn\'t work, the one you had.');
+            }
+          }
+          if (V.push && V.push.dropOthers) V.push.dropOthers();
+          V.toast(STILL_ON_ITS_WAY[ended] ? `Password changed. ${STILL_ON_ITS_WAY[ended]}` : 'Password changed.',
+            STILL_ON_ITS_WAY[ended] ? { ms: 9000 } : {});
           return false;
         } catch (error) {
           problem.textContent = error.message || String(error);
           return true;
         } finally {
+          now.release();
           busy = false;
         }
       } }],
     });
   }
 
+  /* (1.22.6, SEC-11) Sign out my other devices: "is it you?" first (someone holding this phone for a moment mustn't
+     lock the owner out of their own Chromebook), then every other sign-in ends; this device stays signed in. The
+     check's own fresh sign-in becomes this device's first, so the one it had before ends with the others, and every
+     copy of it (ACC-10); what's on its way in ends before that (ACC-08), and the other devices' notifications after
+     (ACC-11). A password someone else knows signs them straight back in, so it says so, with Change password (ACC-12). */
+  function signOutOthers() {
+    const problem = V.h('p.error-text.others-problem', { role: 'alert' });
+    const proof = itsYou(problem, { label: 'Type your Wefty password to confirm' });
+    const password = V.cloud.hasPassword ? V.cloud.hasPassword() : true;
+    let busy = false;
+    let closed = false;
+    V.sheet({
+      title: 'Sign out your other devices?',
+      content: V.h('div.sign-out-others', {}, V.h('p', { text: 'Every other phone, Chromebook or computer signed in to your '
+        + 'account is signed out within the hour. This one stays signed in. Use it if you lost a device, or signed in '
+        + 'somewhere that isn\'t yours.' }),
+      password ? V.h('p.hint.others-password', { text: 'If someone else knows your password, change it too: signing out '
+        + 'doesn\'t stop them signing in again.' }) : null, proof.el, problem),
+      onClose: () => { closed = true; },
+      actions: [{ label: 'Cancel' }, { label: 'Sign them out', kind: 'primary', onClick: async () => {
+        if (busy) return true;
+        problem.textContent = '';
+        if (!proof.filled()) { problem.textContent = proof.needs(); proof.focus(); return true; }
+        busy = true;
+        try {
+          if (!(await proof.prove({ keep: true }))) return true;
+          if (closed) { proof.release(); return true; }  // (ACC-14: closed during the check: nobody is signed out)
+          const fields = proof.proof();
+          if (!(await proof.adopt())) {
+            problem.textContent = 'Couldn\'t reach the cloud. Try again when you\'re online.';
+            return true;
+          }
+          const ended = await endSignIns(fields);
+          await V.cloud.signOutOthers();
+          if (V.push && V.push.dropOthers) await V.push.dropOthers();
+          if (STILL_ON_ITS_WAY[ended]) {
+            // (ACC2-02: never "signed out" in full when what was on its way in could not be ended)
+            V.toast(`Your other devices were signed out. ${STILL_ON_ITS_WAY[ended]}${ended === 'failed' ? ' Try again in a minute.' : ''}`
+              + (password ? ' If someone else knows your password, change it too.' : ''),
+            { action: ended === 'failed' ? 'Try again' : password ? 'Change password' : undefined,
+              onAction: ended === 'failed' ? () => signOutOthers() : () => changePassword(), ms: 12000 });
+            return false;
+          }
+          V.toast(password ? 'Your other devices are signed out. If someone else knows your password, change it too.'
+            : 'Your other devices are signed out.', password ? { action: 'Change password', onAction: () => changePassword(), ms: 9000 } : {});
+          return false;
+        } catch (error) {
+          problem.textContent = error.message || String(error);
+          return true;
+        } finally {
+          proof.release();
+          busy = false;
+        }
+      } }],
+    });
+  }
+
+  const sleep = (ms) => new Promise((done) => { setTimeout(done, ms); });
+  // (tests shorten them; the delete-my-account three: see deleteSheet's N7 note)
+  const waits = { lastSend: 5000, told: 3500, deleteSlow: 30000, deleteMost: 120000, deleteLook: 5000, endRetry: 1500 };
+  let leaving = false;  // (Sign out tapped again while it asks: one at a time)
+
   async function signOut() {
-    // The note-taker listening (its screen hidden, say): stopped first, so what it heard is saved and goes up too.
-    let asked = false;
-    if (V.notetaker && V.notetaker.listening()) {
-      const stop = await V.confirm('Stop listening and sign out?', 'The note-taker is listening. What it heard is saved '
-        + 'in its note first.', { ok: 'Stop and sign out', danger: true });
-      if (!stop) return;
-      asked = true;
-      await V.notetaker.stopQuietly();
+    if (leaving) return;
+    leaving = true;
+    try {
+      // The note-taker listening (its screen hidden, say): stopped first, so what it heard is saved and goes up too.
+      let asked = false;
+      if (V.notetaker && V.notetaker.listening()) {
+        const stop = await V.confirm('Stop listening and sign out?', 'The note-taker is listening. What it heard is saved '
+          + 'in its note first.', { ok: 'Stop and sign out', danger: true });
+        if (!stop) return;
+        asked = true;
+        await V.notetaker.stopQuietly();
+      }
+      // (1.22.6, N15) Asked at once: what only this device has is counted here, never waited for from the cloud (a
+      // wifi that takes requests and never answers held this for minutes). What's waiting gets a few seconds to go
+      // up first, said.
+      let parts = await V.cloud.unsentParts();
+      if (Object.values(parts).some(Boolean) && navigator.onLine) {
+        V.toast('Saving your last changes…', { ms: waits.lastSend });
+        await Promise.race([V.cloud.sync({ pullFirst: false }).catch(() => {}), sleep(waits.lastSend)]);
+        parts = await V.cloud.unsentParts();
+      }
+      if (Object.values(parts).some(Boolean)) {
+        // (the review of 1.22.5: everything only this device has is named, as forgetHere wipes it all)
+        const sure = await V.confirm('Sign out and lose changes?', lossWords(parts),
+          { ok: 'Sign out anyway', danger: true });
+        if (!sure) return;
+      } else {
+        const ok = asked || await V.confirm('Sign out?', V.desktop
+          ? `Wefty on this PC${V.pc.standalone() ? '' : ' (and Jarvis\'s notes)'} stops until you sign in again. Your notes stay safe in the cloud.`
+          : 'Wefty on this phone stops until you sign in again. Your notes stay safe in the cloud.', { ok: 'Sign out', danger: true });
+        if (!ok) return;
+      }
+      await leave();
+    } finally {
+      leaving = false;
     }
-    await V.cloud.sync();
-    const parts = await V.cloud.unsentParts();
-    if (Object.values(parts).some(Boolean)) {
-      // (the review of 1.22.5: everything only this device has is named, as forgetHere wipes it all)
-      const sure = await V.confirm('Sign out and lose changes?', lossWords(parts),
-        { ok: 'Sign out anyway', danger: true });
-      if (!sure) return;
-      if (V.push) await V.push.beforeSignOut();  // (this device's notifications off first: never the next person's)
-      await V.cloud.signOut();
-      await forgetHere();  // (1.22.5, SEC-17: nothing of theirs stays for the next person here)
-      location.reload();
-      return;
-    }
-    const ok = asked || await V.confirm('Sign out?', V.desktop
-      ? `Wefty on this PC${V.pc.standalone() ? '' : ' (and Jarvis\'s notes)'} stops until you sign in again. Your notes stay safe in the cloud.`
-      : 'Wefty on this phone stops until you sign in again. Your notes stay safe in the cloud.', { ok: 'Sign out', danger: true });
-    if (!ok) return;
-    if (V.push) await V.push.beforeSignOut();
-    await V.cloud.signOut();
-    // (1.22.5, SEC-17) Everything Wefty kept here for them goes, as when an account is deleted: their recordings
-    // waiting to be written down, their classes, what they'd seen... Only the cloud and the device's own look stay.
+  }
+
+  /* (1.22.6, N15 and DEV-11) Signed out: the notes leave the screen at once, and this device forgets everything of
+     theirs before anything waits on the cloud (1.22.5, SEC-17: their recordings waiting to be written down, their
+     classes, what they'd seen... only the cloud and the device's own look stay). The cloud is told, and this device's
+     notifications let go at the helper (with the sign-in's own pass, taken first), in the background, a few seconds at
+     most, then Wefty starts again. */
+  async function leave() {
+    if (V.gate && V.gate.screen) V.gate.screen(V.h('h1', { text: 'Signing out…' }), V.h('div.spinner.signing-out'));
+    const pass = V.cloud.kept ? (V.cloud.kept() || {}).access_token : '';
+    const push = V.push ? V.push.beforeSignOut({ pass }).catch(() => false) : Promise.resolve(false);
+    const { told } = await V.cloud.signOut({ wait: 0 });
     await forgetHere();
+    await Promise.race([Promise.all([told, push]).catch(() => {}), sleep(waits.told)]);
     location.reload();
   }
 
@@ -238,8 +440,11 @@ V.settings = (() => {
     const pinned = V.cloud.waitingPin || 0;  // (1.22.5: locked on another device meanwhile: they wait for the PIN here)
     const state = V.cloud.status;
     const said = { synced: 'Up to date', syncing: 'Syncing...', offline: 'Offline: changes wait on this device',
-      held: pinned ? `${plural(pinned, 'note')} locked on your other device: your changes go up once you type your PIN `
-        + '(tap your picture)' : `${plural(held || 1, 'note')} too big to sync: they're safe here until they're shorter`,
+      held: pinned ? (V.cloud.waitingPinHere === pinned
+        ? `${plural(pinned, 'note')} changed on your other device after you locked ${pinned === 1 ? 'it' : 'them'} here: `
+          + 'both versions go up locked once you type your PIN (tap your picture)'
+        : `${plural(pinned, 'note')} locked on your other device: your changes go up once you type your PIN `
+          + '(tap your picture)') : `${plural(held || 1, 'note')} too big to sync: they're safe here until they're shorter`,
       error: 'Having trouble reaching the cloud', asleep: 'Your free cloud is asleep (tap your picture for what to do)',
       'signed-out': 'Signed out', idle: 'Up to date' }[state] || '';
     const short = { synced: 'Synced', idle: 'Synced', syncing: 'Syncing...', offline: 'Offline: changes wait here',
@@ -282,6 +487,7 @@ V.settings = (() => {
   async function whyNotDeleted(error) {
     const code = String((error && (error.code || error.kind)) || '');
     const status = (error && error.status) || 0;
+    if (code === 'slow') return '';  // (1.22.6, N7: its own words: no answer in time, said as it is)
     if (code === 'offline' || !navigator.onLine) return 'offline';
     if (code === 'signed-out' || code === 'signed_out' || status === 401) return 'signedOut';
     if (code === 'owner') return 'owner';
@@ -292,19 +498,58 @@ V.settings = (() => {
     return '';
   }
 
+  /* (1.22.6, N7) delete-me can take the helper a while (one request to Storage per folder, every note's History and
+     every file sent): past `waits.deleteSlow` the button says "Still deleting...", and the page waits up to
+     `waits.deleteMost` for the answer, asking the sign-in service now and then (`waits.deleteLook`) whether the account
+     is still there: gone, it's done, whatever the answer. With no answer by then, whether it's still there is what's
+     said (an error of kind 'slow'): never "this cloud can't delete accounts", which only a quick failure (a helper that
+     isn't there answers at once) or the helper's own words can mean. (Those three live in `waits` above.) */
+  const STILL_THERE = 'Wefty couldn\'t finish deleting your account yet, so it\'s still here. Try again in a minute: it '
+    + 'carries on where it stopped.';
+  const CANT_TELL = 'Wefty couldn\'t reach your cloud, so it can\'t tell yet whether your account was deleted. Try again '
+    + 'in a minute.';
+  async function deleting(email, proof, { slow }) {
+    const started = Date.now();
+    const token = () => (proof.session() || V.cloud.accessToken().catch(() => ''));
+    const there = async () => V.cloud.accountThere(await token());
+    const asked = V.invites.helperCall('delete-me', { confirm: email, ...proof.proof() }, waits.deleteMost);
+    asked.catch(() => {});
+    let looking = null;
+    const gone = new Promise((resolve) => {
+      const look = async () => {
+        if ((await there()) === false) { resolve(true); return; }
+        looking = setTimeout(look, waits.deleteLook);
+      };
+      looking = setTimeout(() => { slow(); look(); }, waits.deleteSlow);
+    });
+    try {
+      await Promise.race([asked, gone]);
+    } catch (error) {
+      if (error && error.status) throw error;  // (the helper's own answer)
+      const now = await there();
+      if (now === false) return;  // (deleted: only its answer was lost)
+      if (Date.now() - started < waits.deleteSlow) throw error;  // (a quick failure: no helper there, or offline)
+      throw Object.assign(new Error(now ? STILL_THERE : CANT_TELL), { kind: 'slow' });
+    } finally {
+      clearTimeout(looking);
+    }
+  }
+
   /* The person's account, everything in it and this device's copy, gone: the helper (with their own sign-in) or the
      PC part does it, then this device forgets them and says goodbye. The owner never gets here (their row says why). */
   function deleteSheet() {
     const email = String((V.data.user || {}).email || '');
     const problem = V.h('p.error-text.delete-problem', { role: 'alert' });
     // (1.22.5, SEC-07) The account's password again (or a code by e-mail), never just the e-mail the sheet shows: anyone
-    // holding an unlocked phone could type that.
+    // holding an unlocked phone could type that. (1.22.6) The cloud checks it too: the check's sign-in goes with it.
     let go = null;
     let busy = false;
-    const proof = itsYou(problem, { label: 'Type your Wefty password to confirm', changed: () => {
+    let closed = false;
+    const proof = itsYou(problem, { label: 'Type your Wefty password to confirm', forHelper: true, changed: () => {
       if (go && !busy) go.disabled = !proof.filled();
     } });
     const sheet = V.sheet({
+      onClose: () => { closed = true; },
       title: 'Delete my account',
       content: V.h('div.delete-account', {},
         V.h('p.delete-what', { text: 'This deletes every note, folder, file, chat and setting, and this account, on every device, '
@@ -325,20 +570,24 @@ V.settings = (() => {
           go.disabled = !proof.filled();
           go.lastChild.textContent = 'Delete my account forever';
         };
-        if (!(await proof.prove())) { again(); return true; }
+        if (!(await proof.prove({ keep: true }))) { again(); return true; }
+        // (1.22.6, ACC-14) Closed while the password was checked (Cancel, Esc, a second thought): nothing is deleted.
+        if (closed) { proof.release(); return true; }
         go.lastChild.textContent = 'Deleting...';
         try {
           if (V.desktop) {
             if (!V.pc.can('deleteMe')) throw Object.assign(new Error(V.pc.howToUpdate()), { kind: 'pc' });
             await V.pc.call('deleteMe', { confirm: email });
           } else {
-            await V.invites.helperCall('delete-me', { confirm: email });
+            await deleting(email, proof, { slow: () => { go.lastChild.textContent = 'Still deleting...'; } });
           }
         } catch (error) {
           const why = await whyNotDeleted(error);
           problem.textContent = why ? NOT_DELETED[why] : (error && error.message) || String(error);
           again();
           return true;
+        } finally {
+          proof.release();
         }
         sheet.close();
         await forgetHere();
@@ -359,20 +608,20 @@ V.settings = (() => {
     'vault-gemini-speed'];
 
   /* This device forgets the person: their copy (V.db), their sign-in and everything Wefty kept for them. Nothing may
-     sign them in again or bring the sign-in screen up over the goodbye (V.emit: the cloud's sync finding no sign-in). */
+     sign them in again or bring the sign-in screen up over the goodbye (V.emit: the cloud's sync finding no sign-in).
+     (1.22.6, DEV-09 and DEV-10) This page then stops: it never looks at the cloud again (V.cloud.end), what it kept in
+     the notification tray goes, and its copy is marked nobody's and closed as the last step, so what this page still
+     does (an answer Chat is still writing, a look whose answer is on its way) writes nothing more here, and anything
+     that got in anyway is wiped for whoever signs in next (js/cloud.js ownCopy). */
   async function forgetHere() {
     const emit = V.emit;
     V.emit = (type, detail) => (type === 'signed-out' ? undefined : emit(type, detail));
     try { V.emit('signing-out'); } catch (error) { /* (each part forgets what it can) */ }
+    if (V.cloud.end) V.cloud.end();
     for (const table of ['notes', 'folders', 'transfers']) V.data[table] = new Map();
     V.data.clips = [];
     V.data.settings = {};
-    try {
-      if (V.cloud.sb && !V.desktop) {
-        if (V.cloud.sb.removeAllChannels) V.cloud.sb.removeAllChannels();
-        if (V.cloud.sb.auth.stopAutoRefresh) V.cloud.sb.auth.stopAutoRefresh();
-      }
-    } catch (error) { /* (only background work) */ }
+    if (V.push && V.push.closeShown) await V.push.closeShown().catch(() => {});
     try { await V.db.wipe(); } catch (error) { console.warn('Wefty:', error); }
     try { indexedDB.deleteDatabase('wefty-listening'); } catch (error) { /* (the note-taker's pieces, if any) */ }
     try {
@@ -381,6 +630,98 @@ V.settings = (() => {
       }
       sessionStorage.clear();
     } catch (error) { /* a private window: nothing kept anyway */ }
+    try { await V.db.meta('owner', V.cloud.NOBODY || '(nobody)'); } catch (error) { /* (wiped, unmarked: as before) */ }
+    if (V.db.close) V.db.close();
+  }
+
+  /* (1.22.6, SEC-11 and SEC-17) This device was signed out from elsewhere: Sign out my other devices, a new password,
+     or its sign-in ended at the cloud (the library let go of the kept sign-in when the cloud turned it down: never a
+     renewal that only couldn't get through, js/cloud.js). What it kept of that person's goes at once, as at Sign out,
+     but for what only this device has: changes not sent yet, the note-taker's recordings, page photos and files
+     waiting to go up, drafts, chats not up yet. Those stay under the person's own mark: signing in again as them
+     sends them, and anyone else's sign-in here wipes them (js/cloud.js ownCopy). Also at a start that finds the kept
+     sign-in gone (Wefty was closed while it ended): `started` (that start) leaves this browser's storage as it is, as a
+     sign-in by an e-mailed code may be under way in it, except what the person chose for themselves (ASKED_HERE). Returns how many such changes wait here (0 when there's no
+     copy of anyone's). */
+  const LEFT_META = new Set(['owner', 'chat-drafts', 'ink-draft', 'capture-waiting', 'capture-wanted', 'history-waiting',
+    'history-unplain', 'starter-made']);
+  // (localStorage: the person's own bits still to go, each carrying whose they are: the streak's days, the welcome's
+  // plan and Start here's word, a picked password not set yet, and this device's notifications sign-up, which the same
+  // person signing in again gets back with no question, js/push.js keepUp)
+  const LEFT_HERE = ['vault-streak', 'vault-start-plan', 'vault-start-here', 'wefty-pick-password', 'vault-push',
+    'vault-push-offer'];
+  // (what one person answered or chose on this device, and which the next one is asked again: AI listening's yes, recording
+  // while Wefty is in another tab, the clipboard in step, recording this PC's sound; and bits that carry a name or a look)
+  const ASKED_HERE = ['vault-notetaker-ai', 'vault-notetaker-backup', 'vault-clip-auto', 'vault-pcsound-ok', 'vault-clip-seen',
+    'vault-reading', 'vault-news-seen', 'vault-capture-folder', 'vault-capture-cards', 'vault-notetaker-folder',
+    'vault-notetaker-cards', 'vault-week-name'];
+  async function forgetSent({ started = false } = {}) {
+    for (const table of ['notes', 'folders', 'transfers']) {
+      V.data[table] = new Map([...V.data[table]].filter(([, row]) => row && row._dirty));
+    }
+    V.data.clips = [];
+    if (!V.data.settings || !V.data.settings._dirty) V.data.settings = {};
+    const owner = await V.db.meta('owner').catch(() => null);
+    if (!owner || owner === (V.cloud.NOBODY || '(nobody)')) return 0;
+    if (V.push && V.push.closeShown) await V.push.closeShown().catch(() => {});
+    try {
+      if (!started) {
+        for (const key of Object.keys(localStorage)) {
+          if (/^(vault|wefty|sb)-/.test(key) && !KEEP_HERE.includes(key) && !LEFT_HERE.includes(key)) localStorage.removeItem(key);
+        }
+        sessionStorage.clear();
+      } else {
+        // (1.22.6, round C, DEV2-02) A start leaves the rest as it is (a sign-in may be under way in it), but not what this
+        // person chose or answered for themselves on this device: the next person is asked for themselves.
+        for (const key of ASKED_HERE) localStorage.removeItem(key);
+      }
+    } catch (error) { /* a private window: nothing kept anyway */ }
+    let rows = 0;  // (changed here and not sent: counted from the device's copy, as at a start nothing is in memory yet)
+    try {
+      for (const table of ['notes', 'folders', 'transfers']) {
+        const all = await V.db.all(table);
+        const sent = all.filter((row) => !row._dirty).map((row) => row.id);
+        rows += all.length - sent.length;
+        if (sent.length) await V.db.delMany(table, sent);
+      }
+      const settings = await V.db.meta('settings');
+      if (settings && settings._dirty) rows += 1;
+      await V.db.clear('clips');
+      await V.db.clear('files');  // (pictures kept to show: they're in the cloud)
+      const drop = [];
+      // Chats (js/chat.js's own: an index 'chats' and each 'chat:<id>'): only those with a message waiting to send,
+      // or not up yet, stay.
+      const index = await V.db.meta('chats');
+      const stays = new Set();
+      if (index && Array.isArray(index.ids)) {
+        const waiting = new Set(Array.isArray(index.waiting) ? index.waiting : []);
+        for (const id of index.ids) {
+          const chat = await V.db.meta('chat:' + id);
+          if (waiting.has(id) || ((chat && chat.turns) || []).some((turn) => turn && turn.state === 'waiting')) stays.add(id);
+        }
+        const prints = index.prints && typeof index.prints === 'object' ? index.prints : {};
+        await V.db.meta('chats', { ids: [...stays], prints: Object.fromEntries(Object.entries(prints).filter(([id]) => stays.has(id))),
+          waiting: [...waiting].filter((id) => stays.has(id)), gone: Array.isArray(index.gone) ? index.gone : [] });
+      }
+      for (const { key, value } of await V.db.all('meta')) {
+        if (LEFT_META.has(key) || key === 'chats' || /^capture-files:/.test(key)) continue;
+        if (/^chat:/.test(key) && stays.has(key.slice(5))) continue;
+        if (key === 'settings' && value && value._dirty) continue;  // (a PIN set here, not sent yet)
+        if (key === 'pin-orphans' && Array.isArray(value) && value.some((one) => one && !one.sent)) {
+          await V.db.meta('pin-orphans', value.filter((one) => one && !one.sent));  // (earlier PINs not in the cloud yet)
+          continue;
+        }
+        drop.push(key);
+      }
+      if (drop.length) await V.db.delMany('meta', drop);
+    } catch (error) {
+      console.warn('Wefty: forgetting this device\'s copy', error);
+    }
+    // (V.cloud.unsentParts counts the rows in memory: the device's copy is the one that counts here)
+    const inMemory = ['notes', 'folders', 'transfers'].reduce((n, table) => n + V.data[table].size, 0)
+      + (V.data.settings && V.data.settings._dirty ? 1 : 0);
+    const parts = await V.cloud.unsentParts().catch(() => ({}));
+    return Object.values(parts).reduce((a, b) => a + (Number(b) || 0), 0) - inMemory + Math.max(inMemory, rows);
   }
 
   function goodbye() {
@@ -420,6 +761,9 @@ V.settings = (() => {
       whose !== 'owner' ? V.h('p.hint.account-stats', { text: `Whoever runs this Wefty's cloud can see what's stored in it. ${V.welcome.STATS_WORDS}` }) : null,
       ui.line('Change password', 'For signing in on a new device. It isn\'t your locked-notes PIN (that\'s in Notes & files).',
         V.button('Change', { icon: 'key', onClick: changePassword })),
+      V.cloud.canSignOutOthers() ? ui.line('Sign out my other devices', 'Lost a phone, or signed in somewhere that isn\'t '
+        + 'yours? This ends every other sign-in.', V.button('Sign them out', { icon: 'sign-out', onClick: signOutOthers }),
+      'sign-out-others') : null,
       ui.line('Sign out', 'Your notes stay safe in the cloud.', V.button('Sign out', { kind: 'danger-quiet', icon: 'sign-out', onClick: signOut })));
     const syncLine = ui.line('Sync', `${sync.said}. ${V.cloud.live ? 'Changes arrive the moment they\'re made.' : 'Checking for changes every 20 seconds.'}`,
       V.button('Sync now', { icon: 'restore', onClick: () => V.cloud.sync() }));
@@ -972,7 +1316,8 @@ V.settings = (() => {
 
   let page = '';
   return {
-    CATEGORIES, categories, slug, signOut, dropMark, connectSheet, shareLink, exportEverything, deleteSheet, forgetHere, goodbye,
+    CATEGORIES, categories, slug, signOut, signOutOthers, itsYou, dropMark, connectSheet, shareLink, exportEverything, deleteSheet, forgetHere, goodbye,
+    forgetSent, changePassword, waits,
     render(container, opts = {}) {
       root = container;
       page = opts && typeof opts.page === 'string' ? opts.page : '';

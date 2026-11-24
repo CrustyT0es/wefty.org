@@ -187,10 +187,15 @@ V.notetaker = (() => {
         : { kind: null, why: 'Use your phone or Chromebook for the note-taker (this PC\'s Wefty needs an update for it: open Jarvis and click Update).' };
     }
     if (aiWanted()) return { kind: 'ai', preview: aiPreview() };  // (an iPhone's home screen icon too: it records)
+    const why = webWhyNot();
+    return why ? { kind: null, why } : { kind: 'web' };
+  }
+
+  /* Why the browser's own speech service can't hear here, or '' where it can. */
+  function webWhyNot() {
     const ios = iosWhyNot();
-    if (ios) return { kind: null, why: ios };
-    return Recognition() ? { kind: 'web' }
-      : { kind: null, why: 'This browser can\'t turn speech into words. Use Chrome on your phone or Chromebook.' };
+    if (ios) return ios;
+    return Recognition() ? '' : 'This browser can\'t turn speech into words. Use Chrome on your phone or Chromebook.';
   }
 
   /* On an iPhone or iPad, speech turns into words in Safari itself (with Siri or Dictation on). The other browsers
@@ -421,8 +426,8 @@ V.notetaker = (() => {
   /* -- AI listening (1.19.5; the owner, in a real class on a Samsung phone: "it doesn't pick up well in class with
      other groups talking, and it gets many of the words wrong... it's trying to dodge too much"). The browser's speech
      service is made for one person talking into the phone: in a room of groups it drops or garbles most of the
-     teacher. With AI listening (on by default once the free Gemini is set up, phones and Chromebooks; the start
-     screen's switch and Settings > AI turn it off), the phone records the room itself (getUserMedia, with the
+     teacher. With AI listening (phones and Chromebooks, once the free key is set up; off until its person said use it
+     on that device, 1.22.6: aiAsked below; the start screen's switch and Settings > AI), the phone records the room itself (getUserMedia, with the
      browser's echo cancellation, noise suppression and gain on, MediaRecorder: opus in webm on Chrome, AAC in mp4 on
      an iPhone) in pieces of `aiChunk.seconds`, each overlapping the one before by `overlap` seconds, and the person's
      own free Gemini writes down what the main speaker says (AI_PROMPT), one piece at a time, in order. The words land
@@ -457,13 +462,29 @@ V.notetaker = (() => {
   /* AI listening can run here (a phone's or a Chromebook's browser that records sound; the PC listens with Python). */
   const aiCan = () => !V.desktop && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
     && typeof window.MediaRecorder === 'function';
-  const aiPicked = () => stored(AI_PREF) !== 'off';  // (on unless switched off, on this device)
-  /* It's used for the next recording: it can run here, it isn't switched off, and the free Gemini is set up. */
-  const aiWanted = () => aiCan() && aiPicked() && !!(V.ai && V.ai.has('gemini'));
+  /* AI listening asks first (1.22.6, STU-21). The people using the note-taker record classrooms, and on a free key the
+     AI service may use what's sent to it to improve its products, and people there may listen to it. So it's off on a
+     device until its person answered one question there: the start screen's (askAbout), before any recording and never
+     during one, or the same question as a sheet when a switch is turned on before that (askSheet). AI_PREF, per
+     device: 'yes' (asked here, and they said use it), 'off' (switched off, or Not now: it stays off and isn't asked
+     again, the switches offer it), '' or 'on' (never asked here: '' a device that never chose, 'on' one switched on
+     before 1.22.6, when nobody was asked: both are asked once). An older Wefty reads 'yes' as on and 'off' as off, so
+     the answer holds there too, and an older one's own 'on' is asked about again here. Signing out forgets it
+     (js/settings.js forgetHere), so the next person on this device is asked for themselves. */
+  const AI_YES = 'yes';
+  const aiAsked = () => [AI_YES, 'off'].includes(stored(AI_PREF));
+  const aiPicked = () => stored(AI_PREF) === AI_YES;
+  /* AI listening could be used here: it can run, and the free key is set up. */
+  const aiThere = () => aiCan() && !!(V.ai && V.ai.has('gemini'));
+  /* It's used for the next recording: it could be, and they said use it. */
+  const aiWanted = () => aiThere() && aiPicked();
   function setAiPicked(on) {
-    store(AI_PREF, on ? 'on' : 'off');
+    store(AI_PREF, on ? AI_YES : 'off');
     V.emit('notetaker-ai', !!on);
   }
+  /* Where AI listening is the only way Wefty can hear here (an iPhone's Home Screen app, another browser on an iPhone,
+     a browser with no speech service of its own): it could be used, and the speech service can't. */
+  const aiOnly = () => aiThere() && !!webWhyNot();
   // Where the browser's own speech recognition can run beside the recorder (its words shown in grey meanwhile): not
   // Android's Chrome or an iPhone, where only one thing at a time has the microphone (unverified on real phones: the
   // safe side), so there the recorder runs alone.
@@ -870,7 +891,11 @@ V.notetaker = (() => {
   let pumping = false;
   let pumpTimer = null;
   let pumpWait = 0;            // the wait before the next try now (ms), longer each time
-  let aiTrouble = null;        // why the pieces are waiting: { kind: 'offline' | 'busy' | 'nokey', words } or null
+  let aiTrouble = null;        // why the pieces are waiting: { kind: 'offline' | 'busy' | 'nokey' | 'off', words } or null
+  // (1.22.6, round C, DEV2-03) AI listening is off (or its yes was forgotten at a sign-out): the waiting pieces are NOT
+  // sent. Only the person's own tap on "Write down with the AI" (Settings > AI) lets them go, until none wait.
+  let writeAnyway = false;
+  let toldOff = false;         // (said once a run: recordings are waiting and AI listening is off)
   let waitingNotes = new Map();     // note id -> pieces waiting for it
   let waitingSessions = new Map();  // session key -> pieces waiting for it
   let piecesKnown = false;
@@ -895,7 +920,7 @@ V.notetaker = (() => {
     waitingNotes = notes;
     waitingSessions = keys;
     piecesKnown = true;
-    if (!rows.length) aiTrouble = null;
+    if (!rows.length) { aiTrouble = null; writeAnyway = false; }
     drawStatus();
     finishingMoved();
     if (done.length) setTimeout(() => autoMake().catch(() => {}), 0);  // (notes that waited for their transcript)
@@ -999,6 +1024,9 @@ V.notetaker = (() => {
       for (;;) {
         const next = (await chunkStore.all()).find((row) => row.owner === mine() && !row.memo);
         if (!next) { aiTrouble = null; break; }
+        // (1.22.6, round C) Never to the AI while AI listening is off, whenever the piece was recorded: the choice is
+        // read now, not when it was recorded. They wait, said in Settings > AI, where they can be written down or deleted.
+        if (!aiPicked() && !writeAnyway) { heldBack(); break; }
         if (!navigator.onLine) { setAiTrouble('offline', 'You\'re offline. The recording is kept on this device and written down when you\'re back online.'); break; }
         let words;
         try {
@@ -1044,6 +1072,92 @@ V.notetaker = (() => {
       await recount().catch(() => {});
       await tidySlots().catch(() => {});
     }
+  }
+
+  /* (1.22.6, round C, DEV2-03) Recordings wait and AI listening is off: said once, with the way to Settings > AI. */
+  function heldBack() {
+    setAiTrouble('off', 'AI listening is off, so this recording isn\'t sent anywhere. It\'s kept on this device until you '
+      + 'write it down with the AI or delete it (Settings > AI).');
+    if (toldOff) return;
+    toldOff = true;
+    V.toast('Recordings are waiting on this device, and AI listening is off, so they aren\'t sent.',
+      { ms: 9000, action: 'Settings', onAction: () => { if (V.settings && V.settings.open) V.settings.open('ai', {}); } });
+  }
+
+  /* How many recordings (stretches) of this person wait to be written down by the AI (voice memos waiting to go up are
+     another thing: sound kept in a note, never sent to the AI). */
+  async function waitingToWrite() {
+    if (!mine()) return 0;
+    const rows = (await chunkStore.all()).filter((row) => row.owner === mine() && !row.memo);
+    return new Set(rows.map((row) => row.session)).size;
+  }
+
+  /* "Write down with the AI": their own tap sends what waits, whatever AI listening says, until nothing waits. */
+  async function writeWaitingDown() {
+    if (!(await waitingToWrite())) return 0;
+    if (V.ai && V.ai.has && !V.ai.has('gemini')) return 0;  // (round D: no key, nothing to write with: no yes kept)
+    writeAnyway = true;
+    if (aiTrouble && aiTrouble.kind === 'off') aiTrouble = null;
+    clearTimeout(pumpTimer);
+    pumpTimer = null;
+    pump(true).catch(() => {});
+    return 1;
+  }
+
+  /* "Delete": what waits to be written down goes, for good (asked first by the caller). The notes it was for are made
+     from what's in them. */
+  async function deleteWaiting() {
+    if (!mine()) return 0;
+    let n = 0;
+    for (const row of await chunkStore.all()) {
+      if (row.owner !== mine() || row.memo) continue;
+      await chunkStore.remove(row.id).catch(() => {});
+      n++;
+    }
+    writeAnyway = false;
+    if (aiTrouble && aiTrouble.kind === 'off') aiTrouble = null;
+    await recount().catch(() => {});
+    return n;
+  }
+
+  /* Settings > AI's line about them (only while some wait, and said in words: they never sit unseen). */
+  function waitingLine(ui) {
+    const row = V.h('div.setting.nt-waiting-line', { hidden: true });
+    const fill = async () => {
+      const n = await waitingToWrite().catch(() => 0);
+      if (!n) { row.hidden = true; return; }
+      const sent = aiPicked() || writeAnyway;
+      const write = V.button('Write down with the AI', { onClick: async () => {
+        if (!sent && !(await V.confirm('Send these recordings to the AI?', 'The sound of the room goes to Google\'s Gemini, '
+          + 'which writes it down. Google may use what\'s sent on a free key. Do it only if everyone in it was told.', { ok: 'Send' }))) return;
+        await writeWaitingDown();
+        V.toast('Writing the recordings down…');
+        setTimeout(() => fill().catch(() => {}), 1500);
+      } });
+      const drop = V.button('Delete', { kind: 'danger-quiet', icon: 'trash', onClick: async () => {
+        if (!(await V.confirm('Delete these recordings?', 'The sound is deleted from this device for good. What was already written down stays in its note.',
+          { ok: 'Delete', danger: true }))) return;
+        const gone = await deleteWaiting();
+        V.toast(gone ? 'Deleted.' : 'Nothing was waiting.');
+        fill().catch(() => {});
+      } });
+      // (1.22.6, round D, D3-07) With no free AI key nothing can write them down: no "Write down with the AI" (it said
+      // it was writing while nothing could), the key's setup instead, and no yes kept for when a key comes later
+      const keyless = !(V.ai && V.ai.has && V.ai.has('gemini'));
+      const setUp = V.button('Set up the free AI', { kind: 'tonal', onClick: () => { if (V.ai && V.ai.setUp) V.ai.setUp(); } });
+      const why = keyless
+        ? (aiTrouble && aiTrouble.kind === 'nokey' ? aiTrouble.words
+          : 'Nothing can write them down until the free AI is set up. They stay on this device meanwhile.')
+        : `${aiPicked() || writeAnyway ? 'Kept on this device until the AI writes them down.' : 'AI listening is off, so nothing is sent.'}`;
+      V.clear(row, V.h('div.setting-text', {}, V.h('strong', { text: n === 1 ? '1 recording waiting' : `${n} recordings waiting` }),
+        V.h('p.hint', { text: `${why} The sound is deleted once it\'s written down.` })),
+      V.h('div.setting-buttons', {}, !aiCan() ? null : keyless ? setUp : write, drop));
+      row.hidden = false;
+    };
+    fill().catch(() => {});
+    V.on('notetaker-ai', () => { if (row.isConnected) fill().catch(() => {}); });
+    V.on('ai', () => { if (row.isConnected) fill().catch(() => {}); });
+    return row;
   }
 
   function setAiTrouble(kind, words) {
@@ -1716,7 +1830,7 @@ V.notetaker = (() => {
           await flagWants(id, wantsCards()).catch(() => {});
           if (ui && !ui.making && !ui.problem) closeLayer();
           openNote(id);
-          V.toast(aiTrouble && aiTrouble.kind === 'nokey' ? aiTrouble.words
+          V.toast(aiTrouble && ['nokey', 'off'].includes(aiTrouble.kind) ? aiTrouble.words
             : 'The rest of the recording is kept on this device and written down when Gemini can be reached. The notes are made by themselves after.',
           { ms: 9000 });
           return id;
@@ -2420,10 +2534,68 @@ V.notetaker = (() => {
   // The phone or Chromebook's browser hears (its speech recognition, or AI listening's recorder), not the PC's Python.
   const inBrowser = (kind) => kind === 'web' || kind === 'ai';
 
-  /* "AI listening" as a switch (the start screen, Settings > AI): this device's choice, on unless switched off. */
+  /* AI listening's one question (1.22.6, STU-21): what it sends, to whom, what may be done with it, what Wefty keeps,
+     and that recording people needs their OK. True for every way it records here: its pieces wait only on this device
+     and are deleted once written down (pump, deliver), and a Chromebook's "Record while in another tab" sends the room
+     there only with AI listening on (backupHearing's begin); without it, that switch's own words say the sound goes
+     into the note. */
+  const hereName = () => (V.deviceKind && V.deviceKind.ios ? `this ${V.deviceKind.model}`
+    : V.deviceKind && V.deviceKind.chromebook ? 'this Chromebook' : ANDROID ? 'this phone' : 'this device');
+  function askWords() {
+    return [
+      V.h('p.nt-ai-why', { text: aiOnly() ? 'Here, Wefty can only hear with AI listening. This is what it does:'
+        : 'It hears a noisy class better. This is what it does:' }),
+      V.h('ul.nt-ai-facts', {},
+        V.h('li', { text: 'It records the sound of the room and sends it to Google, about half a minute at a time, '
+          + 'through your own free key. Google\'s AI writes down what\'s said.' }),
+        V.h('li', { text: 'On a free key, Google may use what you send to improve its products, and people at Google '
+          + 'may listen to it. Don\'t use it for anything private.' }),
+        V.h('li', { text: `Wefty keeps only the words, in your note. The sound is deleted from ${hereName()} once it's `
+          + 'written down, and never goes to Wefty\'s cloud.' }),
+        V.h('li', { text: 'It records everyone near you, so ask your teacher and classmates first.' })),
+    ];
+  }
+  /* On the start screen while it's unanswered here (never while a recording runs: the start screen isn't shown then).
+     `answered(on)` once they said. */
+  function askAbout(answered) {
+    const id = `nt-ai-ask-${Math.random().toString(36).slice(2, 9)}`;
+    const answer = (on) => { setAiPicked(on); answered(on); };
+    return V.h('section.nt-ai-ask', { 'aria-labelledby': id },
+      V.h('h4', { id, text: 'Use AI listening?' }),
+      askWords(),
+      V.h('div.nt-ai-answers', {},
+        V.button('Use AI listening', { kind: 'nt-ai-yes', onClick: () => answer(true) }),
+        V.button('Not now', { kind: 'nt-ai-no', onClick: () => answer(false) })));
+  }
+  /* The same question as a sheet, for a switch turned on before they said use it here. Resolves true once they did;
+     Not now keeps it off (an answer: the start screen doesn't ask again); closing the sheet answers nothing. */
+  function askSheet() {
+    return new Promise((resolve) => {
+      let yes = false;
+      V.sheet({ title: 'Use AI listening?', content: [V.h('div.nt-ai-ask-sheet', {}, askWords())],
+        actions: [
+          { label: 'Not now', kind: 'nt-ai-no', onClick: () => { setAiPicked(false); } },
+          { label: 'Use AI listening', kind: 'nt-ai-yes', onClick: () => { yes = true; setAiPicked(true); } },
+        ],
+        onClose: () => resolve(yes) });
+    });
+  }
+
+  /* "AI listening" as a switch (the start screen once it's answered, Settings > AI): this device's choice. Turned on
+     before they said use it here, it asks first (askSheet), and stays off unless they do. */
   function aiSwitchBox(onChange) {
     const box = V.h('input.switch', { type: 'checkbox', checked: aiPicked(), 'aria-label': 'AI listening',
-      onchange: () => { setAiPicked(box.checked); if (onChange) onChange(box.checked); } });
+      onchange: async () => {
+        if (box.checked && !aiPicked()) {
+          box.checked = false;
+          if (!(await askSheet())) return;
+          box.checked = true;
+          if (onChange) onChange(true);
+          return;
+        }
+        setAiPicked(box.checked);
+        if (onChange) onChange(box.checked);
+      } });
     return box;
   }
   const AI_HINT = 'Better in noisy rooms: sends the recording to Google\'s Gemini, which writes down what the teacher says.';
@@ -2474,10 +2646,17 @@ V.notetaker = (() => {
     ready.folderEl = folder;
     const remember = () => { if (name) ready.name = name.value; if (folder) ready.folderId = folder.value; };
     const choice = how.kind === 'pc' && pcSoundKnown() ? soundChoice(remember) : null;
-    // AI listening (a phone or Chromebook with the free Gemini set up): on unless switched off here.
-    const aiRow = aiCan() && V.ai.has('gemini') ? V.h('label.switch-row.nt-ai', {},
-      V.h('span.switch-text', {}, V.h('strong', { text: 'AI listening' }), V.h('span', { text: `${AI_HINT} Free.` })),
-      aiSwitchBox(() => { remember(); draw(); })) : null;
+    // AI listening (a phone or Chromebook with the free key set up): its one question until it's answered here, then
+    // the switch (1.22.6: off until they said use it). Answered, the keyboard goes to the switch it leaves.
+    const toSwitch = () => requestAnimationFrame(() => {
+      const box = ui && ui.parts.body.querySelector('.nt-ai input.switch');
+      if (box) box.focus();
+    });
+    const aiRow = !aiThere() ? null
+      : !aiAsked() ? askAbout(() => { remember(); draw(); toSwitch(); })
+        : V.h('label.switch-row.nt-ai', {},
+          V.h('span.switch-text', {}, V.h('strong', { text: 'AI listening' }), V.h('span', { text: `${AI_HINT} Free.` })),
+          aiSwitchBox(() => { remember(); draw(); }));
     // A Chromebook's recording while Wefty is in another tab (backupHearing): said before it ever records, and only
     // when switched on here.
     const backupRow = how.kind === 'web' && backupCan() ? V.h('label.switch-row.nt-backup', {},
@@ -2887,6 +3066,8 @@ V.notetaker = (() => {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
   V.on('back', () => kick());
   V.on('ai', () => { if (aiTrouble && aiTrouble.kind === 'nokey') aiTrouble = null; kick(); });
+  // (they said use it again: what waited for that goes on)
+  V.on('notetaker-ai', (on) => { if (on && aiTrouble && aiTrouble.kind === 'off') { aiTrouble = null; kick(); } });
   V.on('data', (table) => { if (table === 'notes' && !piecesKnown) kick(); });
   window.addEventListener('focus', () => autoMake().catch(() => {}));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) autoMake().catch(() => {}); });
@@ -2939,7 +3120,7 @@ V.notetaker = (() => {
     // Pocket mode on a phone (1.19.11), and a Chromebook's recording while Wefty is in another tab (backup.least: tests)
     pocket: (on = true) => pocket(!!on), pocketOn: () => !!pocketUi, backup,
     // AI listening (1.19.5): Settings > AI's switch, and what tests look at (aiChunk, restartGaps: tests shorten them)
-    aiSwitch, aiWanted, aiPicked, setAiPicked, aiChunk, restartGaps, AI_PROMPT, withoutOverlap, newPart,
-    hearing: () => (session ? session.hearing : null), unsent,
+    aiSwitch, aiWanted, aiPicked, aiAsked, aiOnly, setAiPicked, aiChunk, restartGaps, AI_PROMPT, withoutOverlap, newPart,
+    hearing: () => (session ? session.hearing : null), unsent, waitingLine, writeWaitingDown, deleteWaiting, waitingToWrite,
     waiting: () => ({ notes: Object.fromEntries(waitingNotes), sessions: Object.fromEntries(waitingSessions), trouble: aiTrouble }) };
 })();

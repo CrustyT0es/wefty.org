@@ -39,6 +39,7 @@ V.invites = (() => {
   const JOIN_SINCE = 2;  // the helper's first version that makes join codes (vault/helper.py's JOIN_SINCE)
   const NEWS_SINCE = 3;  // ...and the first with announcements (vault/helper.py's NEWS_SINCE)
   const PUSH_SINCE = 4;  // ...and the first that sends phone notifications (vault/helper.py's PUSH_SINCE)
+  const PROOF_SINCE = 7;  // ...and the first that checks it's really you (vault/helper.py's PROOF_SINCE)
   const JOINED_SLACK = 5000;  // the cloud's sign-in service and its helper may not quite agree on the time
   const waits = { tick: 30000, poll: 15000 };  // the join sheet's countdown, and asking who joined (tests shorten them)
   const TOKENS_PAGE = 'https://supabase.com/dashboard/account/tokens';
@@ -529,8 +530,22 @@ V.invites = (() => {
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim())) { problem.textContent = 'Type their e-mail address.'; return true; }
         busy = true;
         try {
-          show(await call('invite', { name: name.value.trim(), email: email.value.trim() }));
-          refresh(ui);
+          // (1.22.6, round D, A3-01) A waiting friend who has signed in (Help them sign in leaves them so, with all their
+          // notes in the account): a new invite replaces their password, so it's New code's question, the owner's
+          // password, here too (the e-mail is on the list in front of whoever holds the device)
+          const typed = { name: name.value.trim(), email: email.value.trim() };
+          let them = await signedInWaiting(typed.email);
+          if (!them) {
+            try {
+              show(await call('invite', typed));
+              refresh(ui);
+              return false;
+            } catch (error) {
+              if (!notProven(error)) throw error;
+              them = { ...typed, state: 'waiting', signedIn: true };
+            }
+          }
+          newCode(ui, { ...them, name: them.name || typed.name, signedIn: them.signedIn || true });
           return false;
         } catch (error) {
           problem.textContent = error.message || String(error);
@@ -769,18 +784,77 @@ V.invites = (() => {
     button: (disabled) => V.button(words, { kind: words === 'Write' ? '' : 'primary', icon: 'plus', disabled, onClick: () => V.news.compose() }),
     cant: 'post announcements', what: 'Announcements' }) : null);
 
+  /* (1.22.6, ACC-04) A sheet that asks "Is it really you?" (js/settings.js itsYou) before something done to someone
+     else's account, for good: `run(proofFields)` does it once the owner's password (or e-mailed code) checks out, and
+     the check's own sign-in goes with it (the helper's version 7 looks; an older one doesn't). Resolves what `run`
+     gave, or null (closed, or it failed: said in the sheet). Closed during the check: nothing is done. */
+  function proveSheet({ title, text, ok, danger = false, run }) {
+    return new Promise((resolve) => {
+      const problem = V.h('p.error-text.person-problem', { role: 'alert' });
+      const proof = V.settings.itsYou(problem, { label: 'Your Wefty password, to show it\'s you', forHelper: true });
+      let busy = false;
+      let closed = false;
+      let done = null;
+      V.sheet({
+        title,
+        content: V.h('div.person-prove', {}, V.h('p', { text }), proof.el, problem),
+        onClose: () => { closed = true; proof.release(); resolve(done); },
+        actions: [{ label: 'Cancel' }, { label: ok, kind: danger ? 'danger' : 'primary', onClick: async () => {
+          if (busy) return true;
+          problem.textContent = '';
+          if (!proof.filled()) { problem.textContent = proof.needs(); proof.focus(); return true; }
+          busy = true;
+          try {
+            if (!(await proof.prove({ keep: true })) || closed) return true;
+            done = await run(proof.proof());
+            return false;
+          } catch (error) {
+            problem.textContent = error.message || String(error);
+            return true;
+          } finally {
+            proof.release();
+            busy = false;
+          }
+        } }],
+      });
+    });
+  }
+
   async function remove(ui, person) {
     const who = person.name || person.email;
-    const sure = await V.confirm(`Remove ${who}?`, `${who}'s account is deleted with everything in it: their notes, files and `
-      + 'clipboard. They can\'t sign in any more, and this can\'t be undone.', { ok: 'Remove', danger: true });
-    if (!sure) return;
-    try {
-      await call('remove', { id: person.id });
-      V.toast(`${who} was removed. Their notes are deleted.`);
-      stats = null;
-    } catch (error) {
-      V.problem(error);
+    const removed = await proveSheet({ title: `Remove ${who}?`, ok: 'Remove', danger: true,
+      text: `${who}'s account is deleted with everything in it: their notes, files and clipboard. They can't sign in any `
+        + 'more, and this can\'t be undone. Type your password to show it\'s you.',
+      run: (proofFields) => call('remove', { id: person.id, ...proofFields }) });
+    if (!removed) return;
+    V.toast(`${who} was removed. Their notes are deleted.`);
+    stats = null;
+    refresh(ui);
+  }
+
+  /* (1.22.6, ACC-05) "Help them sign in": someone who joined forgot their password, where the cloud's e-mails don't
+     reach them. A new one-time code (the helper's "help-sign-in"), as an invite has: it replaces their password and
+     signs them out everywhere, and they choose a new one once they've signed in with it. The owner's own check first.
+     The PC's Python can't do it (vault/invites.py makes codes only for people who haven't joined yet): the PC says to
+     do it on a phone or Chromebook. */
+  async function helpSignIn(ui, person) {
+    const who = person.name || person.email;
+    const first = String(who).split(' ')[0] || 'them';
+    if (V.desktop) {
+      V.toast(`Do this on your phone or Chromebook: Settings > Friends > ${who} > Help them sign in.`, { ms: 6000 });
+      return;
     }
+    if (state && state.how === 'helper' && Number(state.version) < PROOF_SINCE) {  // (the helper from before: it can't)
+      V.toast('Update the helper in Wefty on your PC first (Settings > Friends > Update the helper). No Update there? '
+        + 'Open Jarvis and click Update first.', { ms: 8000 });
+      return;
+    }
+    const made = await proveSheet({ title: `Help ${who} sign in?`, ok: 'Make a code',
+      text: `${first} gets a new one-time code to sign in with. It replaces their password, and they're signed out on every `
+        + 'device until they use it; then they pick a new password. Type your password to show it\'s you.',
+      run: (proofFields) => call('help-sign-in', { id: person.id, ...proofFields }) });
+    if (!made) return;
+    show(made);
     refresh(ui);
   }
 
@@ -791,9 +865,7 @@ V.invites = (() => {
       : waiting ? (person.signedIn ? 'Signed in, hasn\'t chosen a password yet' : `Waiting · invited ${V.ago(person.invitedAt)}`)
         : `Joined${since}`;
     const row = ui.line(person.name || person.email, `${person.email} · ${said}`, V.h('div.setting-buttons', {},
-      waiting ? V.button('New code', { onClick: async () => {
-        try { show(await call('invite', { name: person.name, email: person.email })); } catch (error) { V.problem(error); }
-      } }) : null,
+      waiting ? V.button('New code', { onClick: () => newCode(ui, person) }) : null,
       V.button('Remove', { kind: 'danger-quiet', onClick: () => remove(ui, person) })));
     row.classList.add('invite-person');
     row.dataset.state = person.state;
@@ -934,8 +1006,44 @@ V.invites = (() => {
     return `${person.via === 'qr' ? 'Joined with the QR code' : 'Joined'}${when ? ` · active ${V.ago(when)}` : ''}`;
   }
 
-  async function newCode(person) {
-    try { show(await call('invite', { name: person.name, email: person.email })); } catch (error) { V.problem(error); }
+  /* (1.22.6, ACC2-01) A new code replaces the person's password. For an invite nobody used yet there's nothing to lose,
+     so it asks nothing. For someone who has signed in (the owner's Help them sign in leaves a friend "waiting" for
+     days, with all their notes in the account) it's the same question as Help them sign in: the owner's password,
+     checked by the helper too (version 7: it asks `proof` of the owner for an account that has ever signed in). */
+  /* (1.22.6, round D, A3-01) The person `email` names when they're waiting and have signed in before (a new code
+     would replace the password they have now), else null. Read from the cloud again each time: the list on screen can
+     be days old (the PC app in the tray, a phone's home-screen app). The list on screen when the cloud can't be asked. */
+  async function signedInWaiting(email) {
+    const wanted = String(email || '').trim().toLowerCase();
+    let list = people || [];
+    try {
+      const fresh = await call('people');
+      if (fresh && Array.isArray(fresh.people)) list = people = fresh.people;
+    } catch (error) { /* the list on screen */ }
+    return list.find((one) => one && String(one.email || '').trim().toLowerCase() === wanted && one.state === 'waiting'
+      && one.signedIn) || null;
+  }
+  const notProven = (error) => !!error && error.code === 'not_proven';  // (the helper asked for the owner's password)
+
+  async function newCode(ui, person) {
+    const who = person.name || person.email;
+    const first = String(who).split(' ')[0] || 'them';
+    const ask = { name: person.name, email: person.email };
+    if (!person.signedIn && !(await signedInWaiting(person.email))) {
+      try {
+        show(await call('invite', ask));
+        return;
+      } catch (error) {
+        if (!notProven(error)) { V.problem(error); return; }  // (they signed in since: asked below, never "update")
+      }
+    }
+    const made = await proveSheet({ title: `New code for ${who}?`, ok: 'Make a code',
+      text: `${first} has signed in before, so a new code replaces the password they have now, and they're signed out until `
+        + 'they use it. Type your password to show it\'s you.',
+      run: (proofFields) => call('invite', { ...ask, ...proofFields }) });
+    if (!made) return;
+    show(made);
+    refresh(ui);
   }
 
   /* A person's own sheet: their e-mail, how they joined, their numbers (once the stats are in), New code and Remove. */
@@ -951,9 +1059,12 @@ V.invites = (() => {
         row('E-mail', person.email || ''),
         row(person.state === 'waiting' ? 'Waiting' : 'Joined', personWords(person)),
         numbers ? row('In their Wefty', numbers) : stats ? null : V.h('p.hint', { text: 'Their numbers show once the stats are counted.' }),
+        person.state === 'waiting' ? null : V.h('p.hint.person-help-hint', { text: 'Forgot their password, and Wefty\'s e-mail '
+          + 'doesn\'t reach them? Help them sign in gives them a new one-time code.' }),
         V.h('p.hint', { text: 'Removing someone deletes their account and everything in it: their notes, files and clipboard.' })),
       actions: [
-        person.state === 'waiting' ? { label: 'New code', onClick: () => { newCode(person); } } : null,
+        person.state === 'waiting' ? { label: 'New code', onClick: () => { newCode(ui, person); } }
+          : { label: 'Help them sign in', icon: 'key', onClick: () => { helpSignIn(ui, person); } },
         { label: 'Remove', kind: 'danger', icon: 'trash', onClick: () => { remove(ui, person); } },
         { label: 'Done' },
       ].filter(Boolean),
@@ -967,7 +1078,7 @@ V.invites = (() => {
     V.h('span.av', { text: letterOf(person), 'aria-hidden': 'true' }),
     V.h('div.setting-text', {}, V.h('strong', { text: name }), V.h('span', { text: personWords(person) })),
     V.h('div.setting-buttons', {},
-      person.state === 'waiting' ? V.button('New code', { kind: 'quiet', onClick: () => newCode(person) }) : null,
+      person.state === 'waiting' ? V.button('New code', { kind: 'quiet', onClick: () => newCode(ui, person) }) : null,
       V.iconButton('more', `${name}: numbers, new code or remove`, () => personSheet(ui, person), 'quiet')));
     return row;
   }
@@ -1065,7 +1176,9 @@ V.invites = (() => {
       says.push('invite from your phone too');
     } else if (state.how === 'pc' && Number(state.helper.version) < state.current) {
       more.push(lift(ui.line('Update the helper', `This Wefty has a newer helper for your cloud${Number(state.helper.version) < 6
-        ? ': it lets anyone sign up, and adds codes from another device and Delete my account' : ''}. Paste an access token to put it in.`,
+        ? ': it lets anyone sign up, and adds codes from another device and Delete my account'
+        : Number(state.helper.version) < PROOF_SINCE ? ': your cloud checks it\'s really you before a device is signed in or an '
+          + 'account deleted, and you can help a friend who forgot their password sign in' : ''}. Paste an access token to put it in.`,
         V.button('Update', { kind: 'primary', onClick: () => setUpSheet(ui, true) }))));
     }
     if (state.how === 'old') { more.push(updateLine(ui)); says.push('updates'); }

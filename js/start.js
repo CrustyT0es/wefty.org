@@ -509,8 +509,9 @@
     const input = V.h('input.field', attrs);
     return [V.h('label.label', {}, label, input), input];
   }
-  // (for the other parts' own gate screens: js/doors.js's sign-up and js/pair.js's code from another device)
-  V.gate = { screen, field };
+  // (for the other parts' own gate screens: js/doors.js's sign-up and js/pair.js's code from another device; and
+  // cloudNote for doors.js's new-password screen, 1.22.6)
+  V.gate = { screen, field, cloudNote };
   // (js/doors.js's screens that offer Sign in: "Already on Wefty?" after a sign-up)
   if (V.doors) V.doors.signInFrom(({ email, back, done }) => signInScreen(email, '', false, back).then(done));
 
@@ -778,8 +779,29 @@
       if (!same) invite.busy = (who && who.email) || 'someone else';
       return;  // (the same person, signed in here already: nothing to set up)
     }
+    // (1.22.6, ACC-07: the address this browser was using for that cloud before the link, see inviteIsMine)
+    invite.before = saved && saved.url === invite.url ? String(saved.email || '') : null;
+    invite.known = invite.before !== null && invite.before.toLowerCase() === email.toLowerCase();
     // (1.22.5: its cloud is kept once it's known to be all right, takeLinkCloud: asked first when it isn't Wefty's own)
     invite.config = { url: invite.url, key: invite.key, email };
+  }
+
+  /* (1.22.6, ACC-07) An invite signs this browser in to whatever account it names, and anyone can make a link like
+     one for their own account (its "code" is only a password in the codes' letters): opened unasked, a friend would
+     be writing in someone else's Wefty. So it asks "Sign in as <e-mail>?" first, unless that address is the one this
+     browser used for that cloud already, or one it asked an e-mail for just now (js/doors.js). True to go on. */
+  const INVITE_HINT = 'Only if this is your own e-mail address. If it isn\'t, tap No: in someone else\'s account, they '
+    + 'could read everything you write.';
+  async function inviteIsMine() {
+    if (!invite || invite.known || !V.doors || !V.doors.signInAs) return true;
+    if (V.doors.askedFor && V.doors.askedFor(invite.email, invite.url)) return true;
+    if (await V.doors.signInAs(invite.email, { hint: INVITE_HINT })) return true;
+    // (No: the invite's e-mail isn't left behind as this browser's)
+    try {
+      const saved = JSON.parse(localStorage.getItem('vault-config') || 'null');
+      if (saved && saved.url === invite.url) localStorage.setItem('vault-config', JSON.stringify({ ...saved, email: invite.before || '' }));
+    } catch (error) { /* a private window: nothing kept anyway */ }
+    return false;
   }
 
   /* A join QR code's link (js/access.js's joinLinkFor): #join= with the owner's cloud and a join code that anyone may
@@ -1131,8 +1153,10 @@
       removeItem: (key) => { kept.delete(key); } };
     let answer = null;
     try {
-      const client = window.supabase.createClient(pass.url, pass.key, { auth: { storage, storageKey, persistSession: true,
-        autoRefreshToken: false, detectSessionInUrl: false } });
+      // (1.22.6: with the same deadlines as the app's own requests, js/cloud.js: no answer is "couldn't reach")
+      const global = V.cloud && V.cloud.deadlineFetch ? { fetch: V.cloud.deadlineFetch } : undefined;
+      const client = window.supabase.createClient(pass.url, pass.key, { ...(global ? { global } : {}), auth: { storage,
+        storageKey, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
       answer = await client.auth.refreshSession({ refresh_token: pass.refresh });
       // (Without an answer in time, this icon renews from the first swap's token later: the cloud takes that one too.)
       if (answer && !answer.error && answer.data && answer.data.session) {
@@ -1919,8 +1943,10 @@
   const NO_JOINING = 'That cloud doesn\'t take join codes yet. Ask for a new code.';
 
   // What a friend is told about their own notes (the choose-password and join screens).
+  // A locked note's PIN is a short number (see lock.js WORDS and privacy.html), so this never says it hides anything
+  // from whoever runs the cloud.
   const PRIVATE = 'Your notes are only yours: nobody else using Wefty can see them. Whoever runs the cloud can see what\'s '
-    + 'stored in it, so keep secrets in a locked note (it\'s scrambled with your own PIN).';
+    + 'stored in it, so don\'t keep passwords in Wefty. A locked note keeps its words from anyone using your device.';
 
   /* Someone opened a join QR code's link: they make their own Vault in that cloud with their own name, e-mail and
      password (Vault's helper there checks the code and makes the account: vault/functions/vault-admin). The code and
@@ -1939,6 +1965,8 @@
         resolve('signed-in');
       } });
       instead.hidden = true;
+      let madeUp = '';  // (1.22.6, N9) one made-up password for every try on this screen, never a new one a tap
+      let unanswered = '';  // the e-mail of the last try whose answer never came (that try may have made the account)
       const go = V.button('Make my Wefty', { kind: 'primary wide-btn', onClick: async () => {
         problem.textContent = '';
         instead.hidden = true;
@@ -1954,9 +1982,23 @@
           // made up here, only for making the account, and the one picked goes only to the cloud's sign-in service,
           // once signed in (pickedPassword). Wefty's own cloud's helper is Wefty's: it's sent the one picked, as before.
           const other = !!join.other;
-          const helperPassword = other ? madeUpPassword() : passBox.value;
+          if (other && !madeUp) madeUp = madeUpPassword();
+          const helperPassword = other ? madeUp : passBox.value;
           const made = await askToJoin(name, email, helperPassword);
           if (made.error) {
+            // (1.22.6, N9) "already has a Wefty" right after a try whose answer never came: that try made it, with
+            // this screen's made-up password. Signed in with it, the one they picked is set as for any join.
+            if (made.exists && other && unanswered === email.toLowerCase()) {
+              let signed = false;
+              try { await V.cloud.signIn(email, helperPassword); signed = true; } catch (error) { /* not this screen's */ }
+              if (signed) {
+                join = null;
+                await pickedPassword({ email, helperPassword, picked: passBox.value, signed: true });
+                resolve('joined');
+                return;
+              }
+            }
+            unanswered = made.unanswered ? email.toLowerCase() : '';
             problem.textContent = made.error;
             instead.hidden = !made.exists;
             return;
@@ -2015,7 +2057,8 @@
     } catch (error) {
       // Nothing this page may read came back. When the cloud itself answers, it's the helper that's missing (a
       // function that isn't there answers 404 with no CORS); else it's the internet, or a network that blocks it.
-      return { error: navigator.onLine && await reachable() ? NO_JOINING : UNREACHABLE };
+      // (`unanswered`, 1.22.6: or the answer was lost on the way, after the account was made: see joinCodeScreen)
+      return { error: navigator.onLine && await reachable() ? NO_JOINING : UNREACHABLE, unanswered: true };
     } finally {
       clearTimeout(timer);
     }
@@ -2081,6 +2124,8 @@
     }
   }
 
+  const REOPEN_INVITE = 'Your cloud needs your invite code once more for that. Open your invite link again, then pick '
+    + 'your password.';
   /* A friend's first sign-in (or any later one before they did it): their own password, which ends the code.
      `joined` (1.22.5): an account just made in another's cloud, whose password is still the made-up one. The password
      now (`current`, else the invite's code), when it's known, goes along with the new one (V.cloud.changePassword). */
@@ -2098,19 +2143,28 @@
           return;
         }
         go.disabled = true;
+        const now = current || code || V.cloud.signedInCode();
         try {
-          await V.cloud.changePassword(passBox.value, { current: current || code || V.cloud.signedInCode() });
+          await V.cloud.changePassword(passBox.value, { current: now });
           V.toast(joined ? 'Password saved.' : 'Password saved. Your invite code doesn\'t work any more.');
           resolve();
         } catch (error) {
-          problem.textContent = /fetch|network|internet|offline/i.test(error.message || '')
-            ? 'Wefty can\'t reach the cloud right now. Check the internet, then try again.' : (error.message || String(error));
+          const said = error.message || String(error);
+          // (1.22.6, SEC-07-switch) A cloud that wants the password now for this, which is still the invite's code,
+          // while this page doesn't have it (Wefty was closed after the invite signed in): the invite link brings it.
+          problem.textContent = /fetch|network|internet|offline/i.test(said)
+            ? 'Wefty can\'t reach the cloud right now. Check the internet, then try again.'
+            : !now && !joined && /password you have now/i.test(said) ? REOPEN_INVITE : said;
         } finally {
           go.disabled = false;
         }
       } });
       againBox.addEventListener('keydown', (event) => { if (event.key === 'Enter') go.click(); });
+      // (1.22.6, SEC-02: a password picked here goes to this cloud, so a cloud that isn't Wefty's own is named, as on
+      // the sign-in screen)
+      const using = V.cloud.cloudConfig ? V.cloud.cloudConfig() : null;
       screen(V.welcome.dots('password'), V.h('h1', { text: 'Choose your own password' }),
+        using ? cloudNote(using.url) : null,
         V.h('p.muted', { text: `${name ? `Welcome, ${name}! ` : ''}${joined ? 'One last step: pick' : 'Your invite code only works once. Pick'} a password only you know: it's what you'll sign in with on your other devices.` }),
         passRow, againRow, problem, go,
         V.h('p.hint', { text: PRIVATE }),
@@ -2384,6 +2438,10 @@
 
   /* ---------------------------------------------------------------- off we go */
 
+  /* (1.22.6) What signing in again sends, on the sign-in screen after this device was signed out from elsewhere. */
+  const waitingLine = (n) => (n > 0 ? `${n === 1 ? '1 change' : `${n} changes`} made here ${n === 1 ? 'hasn\'t' : 'haven\'t'} `
+    + `been sent yet. Sign in again to send ${n === 1 ? 'it' : 'them'}.` : '');
+
   async function main() {
     buildShell();
     const { firstSync } = await V.cloud.start();
@@ -2445,9 +2503,35 @@
       if (V.push) V.push.start();  // (1.19: this device's notifications kept up, the study nudge's numbers kept)
     });
     V.on('badge', badge);
+    // (1.22.6, SEC-11 and SEC-17) Signed out from elsewhere (js/cloud.js says so only once the kept sign-in is gone,
+    // never for a renewal that couldn't get through): what this device kept of theirs goes at once, but for what only
+    // it has, which waits for them to sign in again (V.settings.forgetSent), and the sign-in screen says so. Once.
+    let signingIn = false;
     V.on('signed-out', async () => {
+      if (signingIn) return;
+      signingIn = true;
       const email = (V.data.user || {}).email || (V.config || {}).email || '';
-      await signInScreen(email);
+      // (1.22.6, round C, DEV2-01) Whatever was open (a note, the study screen, the note-taker's screen, a menu, a sheet)
+      // sits in #layers, above the sign-in screen, readable and editable by whoever sits down. The words typed in it are
+      // saved first (they stay this person's unsent change), then what this device kept goes, then this page starts again
+      // as it would at a start with no sign-in: every screen, timer and open box of the last person's is gone at once, and
+      // the sign-in screen (and the sheets it opens) is drawn by that start. The PC app keeps its own way (one person's PC).
+      const open = [...document.getElementById('layers').children];
+      try {
+        if (V.editor && V.editor.settled) await Promise.race([V.editor.settled(), new Promise((resolve) => setTimeout(resolve, 2500))]);
+      } catch (error) { /* (what couldn't be saved here is as lost as it was) */ }
+      const left = V.desktop || !V.settings.forgetSent ? 0 : await V.settings.forgetSent().catch(() => 0);
+      const endedAt = Number((() => { try { return sessionStorage.getItem('wefty-ended-at'); } catch (error) { return 0; } })()) || 0;
+      if (!V.desktop && Date.now() - endedAt > 60000) {  // (a second reload within a minute would be a loop: not then)
+        try { sessionStorage.setItem('wefty-ended-at', String(Date.now())); } catch (error) { /* (private window) */ }
+        if (V.lock && V.lock.forget) V.lock.forget();
+        // (the push subscription's own letting go may still be on its way: not cut off by the reload)
+        if (V.push && V.push.letGo) await Promise.race([V.push.letGo(), new Promise((resolve) => setTimeout(resolve, 1500))]).catch(() => 0);
+        location.reload();
+        return;
+      }
+      for (const el of open) el.remove();
+      await signInScreen(email, waitingLine(left));
       location.reload();
     });
     if (V.desktop) {
@@ -2563,11 +2647,21 @@
         V.config = { ...saved, phoneUrl: moving === 'ask' ? V.moved.address(APP) : APP };
         V.cloud.client(saved);
         let user = await V.cloud.user();
+        // (1.22.6, SEC-11 and SEC-17) Signed out from elsewhere while Wefty was closed (the cloud turned the kept sign-in
+        // down as this start renewed it): the copy here goes but for what only this device has, said below.
+        const left = user || !V.settings.forgetSent ? 0 : await V.settings.forgetSent({ started: true }).catch(() => 0);
+        // (1.22.6, round D) ...and this browser stops getting that person's notifications (js/push.js letGoHere)
+        if (!user && V.push && V.push.letGoHere) await V.push.letGoHere().catch(() => false);
         if (!user && join) {  // a join code: their own name, e-mail and password make their account
           joined = (await joinCodeScreen()) === 'joined';
           user = await V.cloud.user();
         }
         let note = '';
+        if (!user && invite && !(await inviteIsMine())) {  // (1.22.6, ACC-07: not their own: nobody signed in)
+          note = `That invite was for ${invite.email}, so nobody was signed in.`;
+          invite = null;
+          saved = JSON.parse(localStorage.getItem('vault-config') || 'null') || saved;
+        }
         if (!user && invite) {  // signed in by the invite's own code
           try {
             await V.cloud.signIn(invite.email, invite.code);
@@ -2583,7 +2677,7 @@
           await signInScreen((invite && invite.email) || saved.email || '',
             note || (door && door.note) || (['used', 'expired'].includes(passed) ? PASS_WORDS[passed]
               : passed === 'retry' ? 'Wefty couldn\'t reach the cloud to move your sign-in. Go back to the old Wefty and tap '
-                + 'Try again, or sign in here with your e-mail and password.' : ''), !note && passed === 'expired');
+                + 'Try again, or sign in here with your e-mail and password.' : waitingLine(left)), !note && passed === 'expired');
           user = await V.cloud.user();
         }
         V.data.user = user;

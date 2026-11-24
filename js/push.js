@@ -103,12 +103,13 @@ V.push = (() => {
 
   /* -- asking the helper (with this person's own sign-in, never a key) */
 
-  async function ask(action, args = {}) {
+  // (`pass`: the sign-in's own, taken before signing out forgets it: js/settings.js leave)
+  async function ask(action, args = {}, pass = '') {
     const control = new AbortController();
     const stop = setTimeout(() => control.abort(), waits.ask);
     let response;
     try {
-      const token = await V.cloud.accessToken();
+      const token = pass || await V.cloud.accessToken();
       response = await fetch(`${V.config.url}/functions/v1/${SLUG}`, { method: 'POST', signal: control.signal,
         headers: { apikey: V.config.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...args, action }) });
@@ -266,7 +267,7 @@ V.push = (() => {
      once the browser lets its subscription go, the push service refuses the address, and the helper forgets it at
      its next send (404/410) even if it's never told. Then the helper, as far as it gets: signing out gives this a few
      seconds at most (beforeSignOut), and a slow network must never leave the device getting someone's reminders. */
-  async function turnOff({ quietly = false } = {}) {
+  async function turnOff({ quietly = false, pass = '' } = {}) {
     if (busy && !quietly) return false;
     const mine = kept();
     busy = 'off';
@@ -279,7 +280,7 @@ V.push = (() => {
       write(KEPT, null);
       let told = !endpoint;
       if (endpoint && canAsk()) {
-        const got = await ask('push-unsubscribe', { endpoint }).catch(() => null);
+        const got = await ask('push-unsubscribe', { endpoint }, pass).catch(() => null);
         if (got && Array.isArray(got.devices)) { devices = got.devices; told = true; }
       }
       if (!told && devices) devices = devices.filter((one) => !one.here);  // (gone here; the helper forgets it later)
@@ -624,24 +625,77 @@ V.push = (() => {
   V.on('back', () => { if (started) { keepUp(); aheadSoon(); } });
   /* Signing out (Settings): this device's notifications off first, while the sign-in still works to tell the helper,
      for a few seconds at most (offline, the push service forgets the device once it's unsubscribed here). */
-  const beforeSignOut = () => (V.desktop || !kept() ? Promise.resolve(false)
-    : Promise.race([turnOff({ quietly: true }), new Promise((resolve) => setTimeout(() => resolve(false), 4000))]));
+  const beforeSignOut = ({ pass = '' } = {}) => (V.desktop || !kept() ? Promise.resolve(false)
+    : Promise.race([turnOff({ quietly: true, pass }), new Promise((resolve) => setTimeout(() => resolve(false), 4000))]));
   V.on('signing-out', () => {
     wrote = '';
     if (!V.desktop && kept()) turnOff({ quietly: true });  // (any other way out: as far as it gets)
   });
+  /* (1.22.6, DEV-10) Signing out, or the sign-in ended by itself: what Wefty put in this device's notification tray
+     goes too (a reminder with its note's title, "cards to study"), never left there for whoever picks the device up
+     next. A second and a half at most: nothing else waits on it. */
+  async function closeShown() {
+    if (V.desktop || !('serviceWorker' in navigator)) return;
+    const registered = await Promise.race([navigator.serviceWorker.getRegistration().catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 1500))]);
+    if (!registered || !registered.getNotifications) return;
+    for (const one of await registered.getNotifications().catch(() => [])) {
+      try { one.close(); } catch (error) { /* (gone already) */ }
+    }
+  }
   /* The sign-in ended by itself (a password changed, the session ended elsewhere: js/cloud.js): the helper can't be told
      without a sign-in, so this device lets its subscription go (the helper forgets it at its next send). What's kept
      stays, so the same person signing in again is signed up again by keepUp (no question: allowed already), and
      anyone else gets nothing of theirs. */
+  let letting = Promise.resolve();  // (1.22.6, round C: start.js starts the page again after a sign-out from elsewhere; it waits for this first)
   V.on('signed-out', () => {
     helper = null;
     devices = null;
     if (V.desktop) return;
-    registration().then((registered) => registered && registered.pushManager.getSubscription())
+    letting = registration().then((registered) => registered && registered.pushManager.getSubscription())
       .then((subscription) => subscription && subscription.unsubscribe()).catch(() => false);
   });
   V.on('push', () => { if (V.settings && V.settings.draw && V.tab && V.tab() === 'settings') V.settings.draw(); });
+  /* (1.22.6, round D, D3-05) The same at a start that finds nobody signed in while this device was signed up (the
+     sign-in ended while Wefty was closed: a new password elsewhere, the cloud ending it by itself): the browser's
+     subscription goes, so the helper's next send to it fails and it's dropped from the list. What's kept stays, so the
+     same person signing in again is signed up again by keepUp. Two seconds at most; never throws. */
+  async function letGoHere() {
+    if (V.desktop || me()) return false;
+    let stored = null;
+    try { stored = JSON.parse(read(KEPT) || 'null'); } catch (error) { stored = null; }
+    if (!stored || !stored.endpoint) return false;
+    const going = registration().then((registered) => registered && registered.pushManager.getSubscription())
+      .then((subscription) => !!subscription && subscription.unsubscribe()).catch(() => false);
+    letting = going;
+    return Promise.race([going, new Promise((resolve) => setTimeout(() => resolve(false), 2000))]);
+  }
+
+  /* (1.22.6, ACC-11) After "Sign out my other devices" (or a new password, which signs them out too): the account's
+     other devices stop getting its notifications at once. Their sign-ins are ended, but their rows would go on being
+     sent to (a lost phone's lock screen showing reminders and tests) until each opened Wefty again. This device's own
+     stays. The person's own rows, through the table itself (wefty_push.sql lets anyone remove their own); a cloud
+     without notifications, or no answer: nothing to do now. Their owner's other devices sign up again by themselves
+     when they're signed in again (keepUp). Never throws. */
+  async function dropOthers(owner) {
+    const who = owner || me();  // (round D: a new password picked before Wefty has started passes whose it is)
+    if (V.desktop || !who || !V.cloud || !V.cloud.sb) return false;
+    try {
+      let mine = null;
+      try {
+        const value = JSON.parse(read(KEPT) || 'null');
+        mine = value && value.user === who && typeof value.endpoint === 'string' ? value : null;
+      } catch (error) { mine = null; }
+      let ask = V.cloud.sb.from('push_devices').delete().eq('owner', who);
+      if (mine && mine.endpoint) ask = ask.neq('endpoint', mine.endpoint);
+      const { error } = await ask;
+      if (error) return false;
+      devices = null;
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
   if (!V.desktop) {
     window.addEventListener('hashchange', () => { hashTries = 0; fromHash(); });
     setTimeout(fromHash, 0);
@@ -658,5 +712,5 @@ V.push = (() => {
   if (V.today && V.today.addSection) V.today.addSection({ id: 'push', order: 42, column: 'left', build: offerCard });
 
   return { support, permission, check, prefs, page, summary, turnOn, turnOff, keepUp, keepAhead, offerCard, openPlace, start,
-    beforeSignOut, choices, waits, state: () => helper, devices: () => devices, kept };
+    beforeSignOut, closeShown, choices, waits, state: () => helper, devices: () => devices, kept, dropOthers, letGoHere, letGo: () => letting };
 })();

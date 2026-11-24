@@ -24,6 +24,9 @@ V.editor = (() => {
   let layer = null;
   let parts = {};
   let revealed = false;   // a locked note whose words are showing
+  // (1.22.6) The open locked note's flash cards' progress, which is kept in its seal beside its words, not in its row
+  // (js/lock.js tuck): read as the seal is opened, sealed again with every save while the words show.
+  let sealedCards = null;
   let base = null;        // the note as last loaded or saved here: what a change from elsewhere is told apart from
   let saving = 0;         // saves handed to the chain and not stored yet
   let savedWords = '';    // the words as last loaded, shown or saved here (a locked note's too, once open)
@@ -101,6 +104,7 @@ V.editor = (() => {
     if (!current) return chain;
     const words = serialize();
     const showing = revealed;
+    const cards = sealedCards;
     const body = current.locked ? '' : words;
     const fingerprint = JSON.stringify([current.id, current.title, body, current.folder_id, current.pinned,
       current.due, current.done, current.locked, current.attachments, current.locked && showing ? words : '',
@@ -108,7 +112,7 @@ V.editor = (() => {
     if (fingerprint === queued) return chain;
     queued = fingerprint;
     saving++;
-    chain = chain.then(() => store(current, body, words, showing, quiet)).catch((error) => {
+    chain = chain.then(() => store(current, body, words, showing, quiet, cards)).catch((error) => {
       queued = '';  // not saved: the next change tries again
       V.problem(error);
     }).finally(() => {
@@ -118,11 +122,14 @@ V.editor = (() => {
     return chain;
   }
 
-  async function store(current, body, words, showing, quiet = false) {
+  async function store(current, body, words, showing, quiet = false, cards = null) {
     const row = { ...current, body };
     // A locked note's words are sealed again only while they're showing; otherwise (its pin, folder or title
-    // changed from the locked face) its sealed words stay exactly as they were.
-    if (current.locked && showing) row.secret = await V.lock.encrypt(JSON.stringify({ body: words }));
+    // changed from the locked face) its sealed words stay exactly as they were. (1.22.6: its flash cards' progress is
+    // sealed with them.)
+    if (current.locked && showing) {
+      row.secret = await V.lock.encrypt(JSON.stringify(cards && Object.keys(cards).length ? { body: words, cards } : { body: words }));
+    }
     const saved = await V.cloud.save('notes', row, { quiet });
     if (note && note.id === saved.id) {
       base = saved;
@@ -2652,6 +2659,15 @@ V.editor = (() => {
   }
 
   const goingUp = new Set();  // { el, picture, id }: what's on its way to the cloud, shown while it goes
+  // (1.22.6, N11) The path each file goes up to in each note, picked once: Try again after an upload whose answer
+  // never came goes to the same one (written over), never a second copy that no note holds. Let go of once it's in.
+  const pathsOf = new WeakMap();  // a File -> { [note id]: its path }
+  function pathFor(file, user, id, ending) {
+    let paths = pathsOf.get(file);
+    if (!paths) { paths = {}; pathsOf.set(file, paths); }
+    if (!paths[id]) paths[id] = `${user.id}/notes/${id}/${V.uuid()}${ending ? '.' + ending.toLowerCase() : ''}`;
+    return paths[id];
+  }
 
   async function addEach(items, user, id) {
     for (const { file, extra } of items) {
@@ -2668,7 +2684,7 @@ V.editor = (() => {
         const small = picture ? await shrink(file)
           : { blob: file, type: file.type || V.format.typeOf(file.name) || 'application/octet-stream', name: file.name || 'file' };
         const ending = small.type === 'image/jpeg' ? 'jpg' : (/\.([a-z0-9]{1,10})$/i.exec(small.name) || [])[1];
-        const path = `${user.id}/notes/${id}/${V.uuid()}${ending ? '.' + ending.toLowerCase() : ''}`;
+        const path = pathFor(file, user, id, ending);
         await V.cloud.upload(path, small.blob, { mime: small.type, onProgress: (share) => { fill.style.width = Math.round(share * 100) + '%'; } });
         // Kept on this device too (so it shows offline), unless it's big; a full device only goes without that copy
         // (it used to leave a picture that went up out of the note, and Try again sent it twice, DATA-10).
@@ -2676,6 +2692,7 @@ V.editor = (() => {
         const item = { path, name: small.name, mime: small.type, size: small.blob.size, ...extra };
         if (picture) { item.w = small.w || 0; item.h = small.h || 0; }
         await attach(id, item);
+        delete (pathsOf.get(file) || {})[id];  // (in the note now: the same file added again is a picture of its own)
       } catch (error) {
         const again = note && note.id === id;
         if (error && error.full) { V.problem(error); continue; }  // (out of room: js/send.js's V.storage says so)
@@ -3651,10 +3668,11 @@ V.editor = (() => {
     // me's questions and answers kept for its cards (extra.quiz, js/learn.js).
     if (V.history && V.history.locking) await V.history.locking(id).catch(() => {});
     note.locked = true;
-    if (note.extra && 'quiz' in note.extra) {
-      const { quiz, ...rest } = note.extra;
-      note.extra = rest;
-    }
+    // (1.22.6) ... and its flash cards' progress goes into the seal with its words (each card's code is a short hash
+    // of a word of the note: js/lock.js tuck), and the print of the note as it was goes too.
+    const tucked = V.lock.tuck({}, note.extra);
+    sealedCards = tucked.inside.cards || null;
+    note.extra = tucked.extra;
     revealed = true;
     quietClipboard(true);
     await save();
@@ -3678,12 +3696,18 @@ V.editor = (() => {
       blocks = parse(opened.body || '');
       savedWords = serialize();
       remember(savedWords);
+      // (1.22.6) What an older Wefty left of its words in the row (its flash cards' codes) goes into the seal.
+      const extra = note.extra || {};
+      const left = 'cards' in extra || 'quiz' in extra;
+      const tucked = V.lock.tuck(opened, left ? extra : {});
+      sealedCards = tucked.inside.cards || null;
+      if (left) note.extra = tucked.extra;
       revealed = true;
       queued = '';
       quietClipboard(true);
       drawBody();
       resetHistory();
-      if (sealed.old) save();  // (sealed again with the PIN in use now)
+      if (sealed.old || left) save();  // (sealed again with the PIN in use now)
     } catch (error) {
       V.problem(error);
     }
@@ -3713,6 +3737,12 @@ V.editor = (() => {
     if (!revealed) return;
     note.locked = false;
     note.secret = null;
+    // (1.22.6) Its flash cards' progress comes out of the seal with the words (the cards still in them).
+    if (sealedCards && V.study) {
+      const words = serialize();
+      note.extra = V.lock.untuck({ cards: sealedCards }, note.extra, (cards) => V.study.prune(cards, V.study.cards(words)));
+    }
+    sealedCards = null;
     revealed = false;
     quietClipboard(false);
     await save();
@@ -4011,6 +4041,7 @@ V.editor = (() => {
      together with another device's) the other device's version, so the merged words are saved. */
   function load(found, from = found) {
     if (revealed) quietClipboard(false);
+    if (!note || note.id !== found.id) sealedCards = null;
     note = { ...found };
     base = from;
     revealed = false;
@@ -4285,7 +4316,12 @@ V.editor = (() => {
     const changedHere = saveSoon.pending() || base !== from.base || !sameAs(note, base) || (mine !== null && mine !== from.words);
     let theirWords = theirs.locked ? null : theirs.body || '';
     if (theirs.locked && (revealed || changedHere) && V.lock.unlocked()) {
-      try { theirWords = JSON.parse(await V.lock.decrypt(theirs.secret)).body || ''; } catch (error) { theirWords = null; }
+      try {
+        const inside = JSON.parse(await V.lock.decrypt(theirs.secret)) || {};
+        theirWords = inside.body || '';
+        // (1.22.6: the flash cards' progress their seal holds is the one sealed again from here on)
+        if (inside.cards && typeof inside.cards === 'object') sealedCards = { ...(sealedCards || {}), ...inside.cards };
+      } catch (error) { theirWords = null; }
     }
     if (!note) return;
     if (!changedHere || mine === null) {

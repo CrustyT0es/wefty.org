@@ -94,11 +94,17 @@ V.aiCards = (() => {
     return `Skipped ${list}.`;
   }
 
-  /* The notes in these folders (ids) that can be read; the others counted in `skipped`. */
+  /* Friends' feedback (1.22.6, js/organise.js keptOut): a folder's or a test's go never reads it (it's other people's
+     words, and they'd go to the AI), and doesn't count it either. One note's own Make flash cards, picked by hand,
+     still can. */
+  const FEEDBACK = 'Feedback from your friends is kept out of AI, so Wefty doesn\'t make flash cards from it.';
+
+  /* The notes in these folders (ids) that can be read; the others counted in `skipped` (friends' feedback left out). */
   function inFolders(ids, skipped, except) {
     const out = [];
+    const closed = O().feedbackFolders();
     for (const row of V.data.notes.values()) {
-      if (row._purge || !ids.has(row.folder_id) || except.has(row.id)) continue;
+      if (row._purge || !ids.has(row.folder_id) || except.has(row.id) || O().keptOut(row, closed)) continue;
       const why = skipWhy(row);
       if (why) { skipped[why] += 1; continue; }
       out.push(row);
@@ -428,8 +434,9 @@ V.aiCards = (() => {
      for that test's #tags instead (extra.ai_cards.test), never the folder's own. */
   function studyNoteIn(folder, title, test = '') {
     const ours = (n) => isStudy(n) && n.extra.ai_cards.folder === folder.id && (n.extra.ai_cards.test || '') === test;
+    const closed = O().feedbackFolders();
     const fits = [...V.data.notes.values()].filter((n) => !n._purge && n.folder_id === folder.id && !skipWhy(n)
-      && !listening(n.id) && (ours(n) || (squash(n.title) === squash(title) && (!isStudy(n) || ours(n)))));
+      && !listening(n.id) && !O().keptOut(n, closed) && (ours(n) || (squash(n.title) === squash(title) && (!isStudy(n) || ours(n)))));
     fits.sort((a, b) => Number(ours(b)) - Number(ours(a)) || (V.editedAt(b) || '').localeCompare(V.editedAt(a) || ''));
     return fits[0] || null;
   }
@@ -449,6 +456,7 @@ V.aiCards = (() => {
   function folderScope(folderId) {
     const folder = liveFolder(folderId);
     if (!folder) no('That folder isn\'t there any more.');
+    if (O().feedbackFolders().has(folder.id)) no(FEEDBACK);
     const target = studyTarget(folder);
     const skipped = noneSkipped();
     const rows = inFolders(new Set([folder.id, ...O().inside(folder.id)]), skipped, new Set(target.id ? [target.id] : []));
@@ -470,7 +478,8 @@ V.aiCards = (() => {
     const name = V.review.testName(note);
     const covers = V.review.coversOf(note);
     if (!covers.length) no(`Say what ${name} covers first: its Test button picks the folders and #tags.`);
-    const folders = covers.filter((c) => !c.startsWith('#')).map(liveFolder).filter(Boolean);
+    const closed = O().feedbackFolders();
+    const folders = covers.filter((c) => !c.startsWith('#')).map(liveFolder).filter((f) => f && !closed.has(f.id));
     const tags = covers.filter((c) => c.startsWith('#')).map((c) => c.slice(1));
     const outer = folders.filter((f) => !folders.some((g) => g.id !== f.id && O().inside(g.id).has(f.id)));
     const skipped = noneSkipped();
@@ -490,7 +499,7 @@ V.aiCards = (() => {
     if (tags.length) {
       const tagged = [];
       for (const row of V.data.notes.values()) {
-        if (row._purge || counted.has(row.id) || targets.some((t) => t.ids.has(row.folder_id))) continue;
+        if (row._purge || counted.has(row.id) || targets.some((t) => t.ids.has(row.folder_id)) || O().keptOut(row, closed)) continue;
         if (!O().tagsOf({ ...titled(row), body: wordsOf(row) || '' }).some((t) => tags.includes(t.key))) continue;
         const why = skipWhy(row);
         if (why) { skipped[why] += 1; continue; }

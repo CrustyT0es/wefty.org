@@ -396,6 +396,11 @@ V.learn = (() => {
   const isObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   const rowOf = (id) => (V.editor && V.editor.openId() === id && V.editor.current() ? V.editor.current() : V.data.notes.get(id));
   const lockedCard = (card) => { const row = rowOf(card.note) || V.data.notes.get(card.note); return !row || !!row.locked; };
+  /* Whether a card's words may go to the AI: never a locked note's, and never friends' feedback's (1.22.6,
+     js/organise.js keptOut: a deck isn't a note picked by hand). The quiz itself still asks them, with the deck's own
+     wrong answers. */
+  const aiMayRead = (card) => !lockedCard(card)
+    && !(V.organise && V.organise.keptOut && V.organise.keptOut(V.data.notes.get(card.note)));
 
   /* Whether the AI may help here now: the switch on, and the brain it would use set up (a look at the keys first,
      when none was made yet). */
@@ -462,7 +467,7 @@ V.learn = (() => {
   /* The wrong answers kept for `card`, or []. */
   const keptWrongs = (card) => entryFor(card) || [];
   /* Whether the AI still has to be asked about `card` (or is being asked now). */
-  const needsWrongs = (card) => !!card.key && !lockedCard(card) && entryFor(card) === null;
+  const needsWrongs = (card) => !!card.key && aiMayRead(card) && entryFor(card) === null;
 
   /* The wrong answers into their notes (one quiet save a note; a note locked or gone meanwhile is left alone). */
   async function keepWrongs(byNote) {
@@ -561,7 +566,7 @@ V.learn = (() => {
 
   /* The AI's look at a typed answer the check here turned down: { right, why }, or null (no AI, no answer in time). */
   async function checkTyped(card, typed) {
-    if (lockedCard(card)) return null;
+    if (!aiMayRead(card)) return null;
     const key = `${card.key}|${face(card.answer)}|${fold(typed)}`;
     if (verdicts.has(key)) return verdicts.get(key);
     const ctl = new AbortController();
@@ -1217,6 +1222,6 @@ V.learn = (() => {
   }
 
   return { fold, distance, slack, check, wrongOnes, wrongFor, forNote, forDeck, start, GROUP, plain, face, alternatives,
-    tokens, forms, shapeOf, readCard, TYPE_WORDS, testMe, hasCards, goodWrongs, keptWrongs, needsWrongs, waits,
+    tokens, forms, shapeOf, readCard, TYPE_WORDS, testMe, hasCards, goodWrongs, keptWrongs, needsWrongs, aiMayRead, waits,
     forget: () => { made.clear(); pending.clear(); verdicts.clear(); } };
 })();

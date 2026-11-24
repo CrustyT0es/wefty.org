@@ -39,6 +39,8 @@
       : 'Your notes, files and clipboard are yours alone.'), words: ['account', 'email', 'e-mail', 'signed in', 'privacy', 'who'] },
     { page: 'account', key: 'change-password', name: 'Change password', hint: 'For signing in on a new device. It isn\'t your locked-notes PIN.',
       words: ['password', 'forgot', 'sign in'] },
+    { page: 'account', key: 'sign-out-others', name: 'Sign out my other devices', hint: 'Ends every other sign-in of your account.',
+      words: ['sign out', 'other devices', 'lost phone', 'stolen', 'log out everywhere', 'everywhere'], shown: () => V.cloud.canSignOutOthers() },
     { page: 'account', key: 'sign-out', name: 'Sign out', hint: 'Your notes stay safe in the cloud.', words: ['sign out', 'log out', 'logout', 'leave'] },
     // (1.21: the data's own two, beside the account)
     { page: 'account', key: 'export-everything', name: 'Export everything', hint: 'Every note, folder and chat in one ZIP, to keep or take elsewhere.',
