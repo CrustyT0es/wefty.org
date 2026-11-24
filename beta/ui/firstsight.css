@@ -1,0 +1,192 @@
+/* Wefty 2.0 "see it first" (lane S0). What the owner needs at 320 x 610 must not wait for its wave: each block below is
+   the smallest layout rule that puts one needed thing whole, uncovered and 44 px in sight. Layout only (no colour, no
+   surface of its own, no type size: those are the kit's). Each block names its defect and the lane whose real layout
+   replaces it; that lane deletes the block when it lands, and this file goes when the last block has gone. Linked last
+   of the ui/ files, so it wins by order inside @layer ui. Tests: tests/test_wefty_20_firstsight.py, one per block. */
+@layer ui {
+
+  /* ---- [D02] Test me: all four choices in sight before a pick (the 4th sat under the foot). The question's card sizes
+     to its words instead of standing 160 px tall round a one-line term. Replaced by E1 (2.7's Test me). */
+  .study[data-mode="learn"] .learn-card { min-height: 0; }
+
+  /* ---- [D01] Test me: after an answer the verdict and its Continue stay in sight, held at the bottom of the question's
+     scroller (they were built under its fold: Continue at y 666 of 610). It names the right answer, so the choices it
+     lies over can be scrolled to; the panel is solid under its tint (the screen's own --bg: the study card's base lets
+     3 % through, and the faded choices' words showed through it). Replaced by E1. */
+  .study[data-mode="learn"] .learn-feedback { position: sticky; bottom: 0; background-color: var(--bg); }
+  /* (the choices not picked step back by colour, never by opacity (a see-through panel), and take a little less room, so
+     every choice fits above the verdict on the owner's 320 x 610: js/learn.js scrolls them in, the right one lit green) */
+  .study[data-mode="learn"] .learn-option.faded { opacity: 1; min-height: 44px; padding-block: 4px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--g-ring); }
+
+  /* ---- [text_cut] The study screen's and Test me's title: whole (it was "Test me: Funct..."). The study screen's title
+     ("Flash cards", a deck's name) stays left of the screen's buttons and wraps there, so the card and Skip's toast keep
+     the room under the head; on a phone Test me's ("Test me: <deck>", always long) has the whole row under the buttons,
+     on as many lines as it needs. Replaced by E1 (an intended cut made on the string). */
+  .study-head .study-title { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; min-width: 0; }
+  @media (max-width: 699px) {
+    .study[data-mode="learn"] > .study-head { flex-wrap: wrap; justify-content: flex-end; }
+    .study[data-mode="learn"] > .study-head > .study-title { order: 1; flex: 1 1 100%; }
+  }
+
+  /* ---- [text_cut, 1.22.6 #7 #8, TS-13] A sheet's title: whole, wrapping under itself ("Sign out and lose chang...",
+     "Sign out your other devi...", a note's name over its menu). Replaced by A2 (the sheet's head). */
+  .sheet-head h2 { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; min-width: 0; }
+  /* (anywhere, not break-word: in the head's flex row only "anywhere" lets one word longer than the sheet break, so a
+     friend's 70-letter word in an announcement's title wraps inside a 360 px phone instead of pushing the page wide) */
+
+  /* ---- [D17] The note-taker listening: Pocket mode in sight. Its button comes right under the words (the paragraph about
+     it, the background line and the small print follow), and the words give up its room so their newest line still ends
+     at the fold. A phone only (the tip is a phone's). Replaced by E3 (Pocket in the class's bar). */
+  .nt-live > .nt-pocket-tip { display: contents; }
+  .nt-live > .nt-pocket-tip::before { content: none; }
+  .nt-live > .nt-pocket-tip > p, .nt-live > .nt-bg, .nt-live > .nt-small { order: 1; }
+  .nt-live:has(> .nt-pocket-tip) { --s0-pocket: 56px; }
+  .nt-live > .nt-words {
+    --g-nt-room: calc(100cqh - var(--g-nt-above) - var(--g-nt-warn, 0px) - var(--g-nt-air, 0px) - var(--s0-pocket, 0px));
+  }
+
+  /* ---- [in_sight, text_cut] The note-taker's bar: Stop a whole 44 px target (it was 43 wide), the class's name whole
+     on up to two lines (it was "Biology: Photosynth..."). Replaced by E3. */
+  .nt-bar .nt-stop { min-width: 44px; }
+  .nt-bar > .nt-title { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
+
+  /* ---- [D21] The note-taker's start screen: every switch above Start. The picture sits beside the heading and the
+     paragraph about it, with the small print, comes after the switches (all still on the screen, one scroll down).
+     A phone only, and only one too short for both switches above Start as it was (412 x 860 kept the old order, all in
+     sight). Replaced by E3 (2.8's start screen). */
+  @media (max-width: 699px) and (max-height: 799px) {
+    .nt-ready { grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; }
+    .nt-ready > * { grid-column: 1 / -1; }
+    .nt-ready > .nt-hero { grid-column: 1; margin-block: 0; }
+    .nt-ready > .label { margin-top: var(--s0-nt-gap); }
+    .nt-ready { --s0-nt-gap: 12px; }
+    .nt-ready > .nt-hero + h3 { grid-column: 2; align-self: center; }
+    .nt-ready > .nt-lead, .nt-ready > .nt-facts { order: 1; }
+  }
+
+  /* ---- [in_sight] A toast's action: a 44 px target (Undo was 38 tall). Replaced by A2 (the toast). */
+  .toast-action { min-height: 44px; }
+
+  /* ---- [in_sight] Chat's message box: 44 px tall at rest (it was 40). Replaced by C4/the dock's Chat box. One line is
+     its 22 px with 22 px of room round it (12 above, 10 below: the words centred in the 46 px field js/chat.js `grow`
+     makes), so the room alone is the 44 and every line more is a whole 22 px (a min-height over the words' own height
+     made the first step 12). */
+  .chat-input { min-height: 44px; padding-block: var(--s3) 10px; }
+
+  /* ---- [text_cut] A segmented control's words whole ("System" was 3 px short). Replaced by the kit's segmented. */
+  .segmented button { padding-inline: var(--s0-seg-pad); }
+  .segmented { --s0-seg-pad: 4px; }
+
+  /* ---- [in_sight] A switch is a 44 px target: the track stays 44 x 26, drawn inside a box with a transparent band
+     9 px tall above and below it (44 x 44; its row is not a label, so the switch alone is what a finger finds). No band
+     at its sides, so the box still ends on the row's edge with the other controls. The corners are worked out from the
+     track's height and the band (13 / 22 outside, so the track inside is a pill), never written as a radius; the
+     lit track (::before) is its own pill. The keyboard's ring goes round the 44 x 44 box, 2 px off it, never across the
+     track. Replaced by the kit's switch row. */
+  input.switch {
+    --s0-switch-air: 9px; --s0-switch-track: 26px;
+    --s0-switch-round: calc(var(--s0-switch-track) / 2) / calc(var(--s0-switch-track) / 2 + var(--s0-switch-air));
+    height: calc(var(--s0-switch-track) + 2 * var(--s0-switch-air));
+    border-block: var(--s0-switch-air) solid transparent; border-inline-width: 0; background-clip: padding-box;
+    border-radius: var(--s0-switch-round);
+  }
+  input.switch::before { border-radius: var(--r-full); }
+
+  /* ---- [text_cut, NE-30] A card's title: whole, on as many lines as it needs ("Biology class: Photosynthes..." in a
+     folder). Replaced by D1 (the Notes list). */
+  .card .card-title { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
+
+  /* ---- [TS-19] Today's week strip at 320: two whole days and the third's own padding as its edge, never a "We".
+     Replaced by C2 (2.2's strip: 140 x 52 cells). */
+  @media (max-width: 380px) {
+    .page.today .wday { width: 140px; min-width: 140px; }
+  }
+
+  /* ---- [TS-19] Share's line under its title ("Between your phone, PC and Chrom..."): whole. Replaced by B3 (the head). */
+  .app-head .head-sub { white-space: normal; overflow: visible; text-overflow: clip; }
+
+  /* ---- [NE-18] A note's folder pill names its folder ("Biol...", "No fol..."): at 320 the bar's buttons sit edge to
+     edge (still 44 px each) and the pill's own padding is trimmed, so a name of about ten letters shows whole.
+     Replaced by D3a (the folder leaves the bar). */
+  @media (max-width: 380px) {
+    .editor-bar { gap: 0; padding-inline: 4px; }
+    .editor-bar .folder-pick { padding-inline: 10px 26px; background-position: right 6px center; }
+  }
+
+  /* ---- [D06] The Flash cards page: the + never lies on a test's Study button. On a phone a test's row keeps the +'s
+     column clear: its words, and Study under them, stay left of the +. Replaced by E2 (the Study tab, with no + over
+     it). The owner's width only: wider phones keep every row's button on one right edge. */
+  @media (max-width: 380px) {
+    .list-column[data-place^="review|"] .test-row { grid-template-columns: minmax(0, 1fr); padding-right: var(--s0-plus-room); }
+    .list-column[data-place^="review|"] .test-row > .deck-go { justify-self: start; margin-left: var(--s0-test-indent); }
+    .list-column[data-place^="review|"] { --s0-plus-room: 64px; --s0-test-indent: 42px; }
+  }
+
+  /* ---- [D05] The study screen: a toast (Skip topic's Undo) never lies on the three answers, the card or Skip topic.
+     On a phone it comes in over the topic line it is about, left of Skip topic (so topics can be skipped one after
+     another), for its few seconds; a little tighter than other toasts, so two lines of words and Undo end above the
+     card (the topic line and the count are 104 px from the head to the card). Test me's title has its own row there, so
+     on Test me the toast lies on the title instead. Replaced by E1/A2 (Skip needs no toast: it can undo itself in
+     sight). */
+  @media (max-width: 699px) {
+    #layers:has(> .study-layer:not(.leaving)) ~ #toasts {
+      top: calc(var(--s0-study-head) + var(--safe-top)); bottom: auto; left: var(--s0-gutter); transform: none;
+      width: calc(100% - 2 * var(--s0-gutter) - var(--s0-skip-room));
+    }
+    #layers:has(> .study-layer:not(.leaving)) ~ #toasts > .toast:not(.msg-card) {
+      row-gap: var(--s0-study-toast-gap); padding-block: var(--s0-study-toast-pad);
+    }
+    #toasts { --s0-study-head: 54px; --s0-gutter: var(--x0); --s0-skip-room: 118px; --s0-study-toast-gap: 2px; --s0-study-toast-pad: 6px; }
+  }
+  /* (On the Chromebook the study screen is a 640 px dialog in the middle and toasts sit at the bottom right, on its
+     I know it: there the toast goes in the room right of the dialog. Under 1100 px there is no such room.) */
+  @media (min-width: 1100px) {
+    #layers:has(> .study-layer:not(.leaving)) ~ #toasts {
+      left: calc(50% + var(--s0-study-half) + var(--s0-wide-gutter)); right: auto; transform: none;
+      width: min(var(--s0-toast-most), calc(50% - var(--s0-study-half) - 2 * var(--s0-wide-gutter)));
+    }
+    #toasts { --s0-study-half: 320px; --s0-wide-gutter: 16px; --s0-toast-most: 400px; }
+  }
+
+  /* ---- [1.22.6 #7, #5] A sheet's buttons on a phone: each as wide as its words or more, never clipped ("Sign out
+     anyway" was cut to its half), and a row that wraps fills its line instead of hanging ragged on the right (the
+     person sheet). Buttons that fit share their line in equal widths, as two always did (Cancel and Save). Replaced by
+     A2 (the sheet's foot). */
+  @media (max-width: 699px) {
+    .sheet-actions > .btn { flex: 1 1 0; min-width: fit-content; }
+  }
+
+  /* ---- [1.22.6 #2] Friends: a waiting friend's row keeps its words readable; New code and the dots go under them
+     when the row is narrow (the words were broken a letter-pair a line in 45 px). Replaced by E6 (Settings). */
+  .invite-person { flex-wrap: wrap; }
+  .invite-person > .setting-text { flex: 1 1 var(--s0-person-words); }
+  .invite-person { --s0-person-words: 160px; }
+
+  /* ---- [1.22.6 #4] Settings > AI, the recordings waiting: the buttons go under the words and wrap there, never past
+     the card ("Delete" ran off the screen). Replaced by E6. */
+  .nt-waiting-line { flex-wrap: wrap; }
+  .nt-waiting-line > .setting-text { flex: 1 1 100%; }
+  .nt-waiting-line > .setting-buttons { flex: 1 1 auto; justify-content: flex-end; }
+
+  /* ---- [1.22.6 #3] The note-taker's AI listening question: each answer as wide as its words ("Use AI listening" was
+     cut in its half). Replaced by E3. */
+  .nt-ai-answers > .btn { flex: 1 1 auto; }
+
+  /* ---- [1.22.6 #9] A toast with a long sentence: its words keep a readable width and its action goes under them
+     when both don't fit (after Sign out my other devices the words stood in a 110 px column, eight lines tall, over
+     the Account card). Replaced by A2 (the toast). */
+  .toast:not(.msg-card) { flex-wrap: wrap; }
+  .toast:not(.msg-card) > span:not(.icon) { flex: 1 1 var(--s0-toast-words); }
+  .toast:not(.msg-card) > .toast-action { margin-left: auto; }
+  #toasts { --s0-toast-words: 160px; }
+
+  /* ---- [1.22.6 #6] "New code for ..." (Help them sign in, New code): the one-time code and Copy link / Copy code come
+     before the QR code (they were under the sheet's fold, with only the QR and Done in sight). Replaced by E6. */
+  .sheet-body:has(> .connect > .invite-code-box) { display: flex; flex-direction: column; --s0-qr-last: 1; }
+  .sheet-body > .connect { order: var(--s0-qr-last, 0); }
+  .connect > .invite-code-box { order: -1; }
+
+  /* ---- [1.22.6 #10] "Is it really you?": E-mail me a code is a 44 px target (it was 42 tall). Replaced by the kit's
+     text button. */
+  .itsyou > .itsyou-email { min-height: 44px; }
+}

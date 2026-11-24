@@ -1,0 +1,382 @@
+@layer ui {
+/* Wefty 2.0: every token, in one file (vault/web/ui/README.txt says the rules). The look brief, section 1, is the source of
+   the names and the values; where it gives none, the design language does. The only colour, radius, type and curve
+   literals of the ui layer live here.
+
+   Order: the two value sets' shared part (surfaces, ink, gradients, shape, space, type, elevation, the page, motion),
+   then each theme (images can't use light-dark()), Pure black, the two value sets' "new" halves (html[data-surfaces],
+   html[data-springs]), lite, calm, and last the older glass names, each an alias of the new token that means the same
+   thing (so the areas that still read them follow; their own numbers are gone from glass/glass.css and
+   glass/overlays.css). "As before" is the default and is what ships; "new" is under the owner's two switches
+   (js/theme.js V.theme.values), off by default.
+
+   Every value here is set on html in the ui layer, so it beats classic's :root and glass's html blocks for the same name
+   whatever their selectors; an area's own local value on an element (the study screen's --page) still wins below it. */
+
+/* ================================================================== shared by both sets */
+
+html {
+  /* ---- SOLID surfaces (alpha 1): the canvas, full-screen layers, sheets, dialogs, menus, toasts, the strip under the dock */
+  --solid-canvas: light-dark(#efe9ff, #0b0918);
+  --solid-sheet: light-dark(#faf7ff, #1e163a);
+  --solid-float: light-dark(#fcfaff, #231b42);
+  --solid-toast: light-dark(#221a42, #281e48);
+  --solid-bar: light-dark(#faf8ff, #16102a);
+  --solid-viewer: #05040a;
+  /* the phone's bars: js/theme.js is their one writer (inline on html, from the time of day, a note open over all, a
+     reading tint, a scrim); these are what they are before it has run */
+  --canvas-top: var(--solid-canvas);
+  --canvas-foot: var(--solid-canvas);
+  /* ---- GLASS (see-through, no blur; only on a solid): quiet buttons, chips, fields, the sunken track */
+  --glass-quiet: light-dark(rgba(110, 80, 200, .08), rgba(255, 255, 255, .07));
+  --glass-field: light-dark(rgba(255, 255, 255, .72), rgba(255, 255, 255, .06));
+  --glass-field-on: light-dark(rgba(255, 255, 255, .92), rgba(255, 255, 255, .09));
+  --glass-sunken: light-dark(rgba(110, 80, 200, .07), rgba(0, 0, 0, .28));
+  --glass-lift: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .085));  /* a row lit under a pointer or a finger */
+  /* ---- edges: the 1 px light along a top, the hairline round a thing, the masked light edge of a card */
+  --rim-top: light-dark(#ffffff, rgba(255, 255, 255, .14));
+  --rim-hair: light-dark(rgba(110, 80, 200, .13), rgba(255, 255, 255, .07));
+  --line: light-dark(rgba(110, 80, 200, .16), rgba(255, 255, 255, .10));
+  --line-soft: light-dark(rgba(110, 80, 200, .10), rgba(255, 255, 255, .07));
+  --line-strong: light-dark(rgba(110, 80, 200, .30), rgba(255, 255, 255, .20));
+  --scrim: light-dark(rgba(40, 24, 90, .34), rgba(6, 4, 16, .6));  /* the only part of an overlay that fades */
+
+  /* ---- ink (words and marks); on bare canvas the dimmest words are --text-2, --muted only on a surface */
+  --text: light-dark(#1b1533, #f1edfa);
+  --text-2: light-dark(#3d3560, #cfc8e8);
+  --muted: light-dark(#4f4875, #aba2cf);
+  --placeholder: light-dark(#6b6490, #a298c8);
+  --faint: light-dark(#8f88b0, #7e76a6);  /* never words */
+  --control: light-dark(#6b6490, #9b93c4);
+  --accent: light-dark(#6b47d6, #b2a4ee);
+  --accent-ink: light-dark(#4b2bb8, #d7ccff);
+  --on-accent: light-dark(#ffffff, #1b0f3d);
+  --focus: light-dark(#5b36c2, #d7ccff);
+  --toast-ink: #f5f6f8;
+  /* meaning, by weight: ink for a menu row, wash + rim + ink for a tag, the solid red only on a confirm's Delete */
+  --danger: light-dark(#a0233a, #ffa3a3);
+  --danger-solid: light-dark(#c2334a, #d23b52);
+  --on-danger-solid: #ffffff;
+  --wash-danger: light-dark(rgba(176, 42, 64, .11), rgba(255, 120, 140, .14));
+  --rim-danger: light-dark(rgba(194, 51, 74, .35), rgba(255, 141, 156, .45));
+  --warn: light-dark(#9a5505, #ffc96a);
+  --wash-warn: light-dark(rgba(154, 85, 5, .12), rgba(255, 201, 106, .13));
+  --rim-warn: light-dark(rgba(138, 75, 0, .30), rgba(255, 201, 106, .40));
+  --ok: light-dark(#0f7845, #6fd8a4);
+  --wash-ok: light-dark(rgba(15, 120, 69, .12), rgba(111, 216, 164, .13));
+  --rim-ok: light-dark(rgba(11, 107, 60, .30), rgba(111, 216, 164, .40));
+  --wash-accent: light-dark(rgba(124, 91, 224, .08), rgba(150, 108, 240, .12));
+  --accent-soft: light-dark(rgba(124, 91, 224, .14), rgba(150, 108, 240, .28));
+  --rim-accent: light-dark(rgba(124, 91, 224, .40), rgba(214, 196, 255, .38));  /* the tonal button's ring: --accent at 40 % */
+
+  /* ---- the one violet ramp, its gloss, the picked pill, the badge (the logos keep their own: --brand, --glow) */
+  --brand-a: #8658e2;
+  --brand-b: #5547dc;
+  --grad-brand: linear-gradient(150deg, var(--brand-a), var(--brand-b));  /* white on it: 4.66 at its light end */
+  --grad-gloss: linear-gradient(180deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, 0) 28%);
+  --depth-primary: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 -10px 16px -8px rgba(40, 12, 120, .5),
+    0 10px 22px -4px var(--glow);
+  --glow: light-dark(rgba(118, 74, 220, .32), rgba(118, 74, 220, .5));
+  --brand: light-dark(#6a45c9, #7b52db);  /* the mark's colour: frozen with the logos */
+  --picked-ring: light-dark(transparent, rgba(214, 196, 255, .30));
+  --picked-edge: light-dark(rgba(255, 255, 255, .35), rgba(214, 196, 255, .28));
+  --grad-badge: linear-gradient(165deg, #8c66f0 0%, #7149e0 55%, #5b34c8 100%);
+  --depth-badge: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 -2px 5px rgba(48, 18, 140, .35),
+    0 2px 8px light-dark(rgba(106, 69, 201, .35), rgba(118, 74, 220, .5));
+  --badge-ink: #ffffff;
+  --badge-ink-shadow: 0 1px 1px rgba(40, 16, 110, .45);
+  --on-brand: #ffffff;
+  --gloss-sweep: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, .38) 50%, rgba(255, 255, 255, 0) 65%);
+  /* the marks drawn by mask: a tick, the menus' wave, a drop-down's chevron */
+  --mark-tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+  --mark-wave: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='6' viewBox='0 0 12 6'%3E%3Cpath d='M0 3Q3 .2 6 3T12 3' fill='none' stroke='%23000' stroke-width='1.1' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mask-edge: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);  /* (with mask-composite exclude: a 1 px frame) */
+  --mask-goes-on: linear-gradient(to bottom, #000 calc(100% - 26px), rgb(0 0 0 / .45) calc(100% - 10px), transparent);  /* (a list cut on purpose: its last row fades, so it reads as going on) */
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b6490' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6.5 9.5 5.5 5.5 5.5-5.5'/%3E%3C/svg%3E");
+
+  /* ---- shape: radii, space, targets */
+  --r8: 8px; --r12: 12px; --r16: 16px; --r22: 22px; --r28: 28px; --r-full: 999px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px; --s12: 48px;
+  --hit: 36px;  /* 44 wherever any pointer is coarse (below) */
+  --field-h: 48px;
+  --btn-h: 44px;
+  --btn-h-sheet: 48px;
+  --switch-w: 44px; --switch-h: 26px; --switch-thumb: 18px;
+  --tick-box: 24px;
+  --tick-mark: 14px;
+  --field-pad: 14px;
+  --badge-pad: 6px;
+  --toast-h: 52px;
+  --chip-h: 36px;
+  --tag-h: 24px;
+  --badge-h: 20px;
+  --row-h: 52px; --row-h-2: 64px; --row-h-fine: 44px;
+  --grabber-w: 40px; --grabber-h: 5px;
+  --edge-field: 1.5px;
+  --ring-w: 2px; --ring-gap: 2px;
+
+  /* ---- the page (brief 1.3): the one left edge, the head row, the dock, the rail */
+  --gutter: 16px;  /* 12 under 340 px (below) */
+  --x0: var(--gutter);
+  --rail: 76px;
+  --head-h: 52px;
+  --dock-h: 64px;
+  --dock-inset: 12px;
+  --dock: calc(var(--dock-h) + var(--dock-inset) + var(--safe-bottom, 0px));  /* what the dock claims from the foot */
+  --toast-gap: 8px;  /* a toast's bottom edge, above whatever the foot claims */
+  --sheet-most: calc(100% - var(--head-h) - var(--safe-top, 0px));  /* 558 on the owner's 610 */
+  --menu-most-w: 296px;
+  --dialog-most: 602px;
+
+  /* ---- type: nine sizes by role (font: var(--t-x) var(--font)); titles with var(--font-display) */
+  --t-display: 700 30px/36px; --ls-display: -.025em;
+  --t-title: 700 24px/30px; --ls-title: -.02em;
+  --t-title-2: 700 20px/26px; --ls-title-2: -.02em;
+  --t-head: 700 18px/24px; --ls-head: -.01em;
+  --t-body: 400 16px/24px;
+  --t-label: 600 15px/20px;
+  --t-sub: 400 14px/20px;
+  --t-meta: 500 13px/18px;
+  --t-micro: 600 12px/16px;
+  --t-tile: 500 11px/14px; --ls-tile: -.01em;  /* Today's five tile labels under 340 px, exactly as they are */
+  --w-regular: 400; --w-medium: 500; --w-semi: 600; --w-bold: 700;
+  --w-row: var(--w-medium);  /* a row's or a menu row's title */
+
+  /* ---- layers: no z-index number outside this file */
+  --z-under: -1; --z-base: 0; --z-raise: 1; --z-raise-2: 2;
+
+  /* ---- motion: durations (both sets), easings, the springs (the "as before" strings; "new" below) */
+  --d-press: 90ms; --d-fade: 120ms; --d-exit: 160ms; --d-swap: 180ms; --d-enter: 240ms; --d-stagger: 40ms;
+  --d-scrim-in: 240ms; --d-scrim-out: 170ms; --d-menu-out: 140ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-in: cubic-bezier(.5, 0, .8, .4);
+  --ease-inout: cubic-bezier(.4, 0, .2, 1);
+  --ease-linear: linear;
+  /* as before: today's curves and lengths */
+  --spring-tap: cubic-bezier(.34, 1.45, .64, 1); --d-tap: 320ms;
+  --spring-pill: cubic-bezier(.25, 1.18, .35, 1); --d-pill: 460ms;
+  --spring-screen: cubic-bezier(.25, 1.18, .35, 1); --d-screen: 460ms;
+  --spring-settle: cubic-bezier(.2, .8, .2, 1); --d-settle: 320ms;
+  /* a sheet keeps today's .433 s spring (stiffness 520, damping 36) in both sets */
+  --spring-sheet: linear(0, 0.0766, 0.2216, 0.3858, 0.5413, 0.6746, 0.7812, 0.8617, 0.9195, 0.9588, 0.984, 0.999, 1.0069, 1.0102, 1.0108, 1.0099, 1.0083, 1.0065, 1.0048, 1.0034, 1.0023, 1.0014, 1.0008, 1.0004, 1.0002, 1, 1);
+  --d-sheet: 433ms;
+  --ease-sheet-out: cubic-bezier(.4, 0, .9, .45);
+  --d-sheet-out: 170ms;
+
+  /* ---- the "as before" half of the two value sets: bars, cards, sheen, shadows, the + */
+  --frost-bar: light-dark(rgba(255, 255, 255, .55), rgba(24, 18, 46, .5));
+  --frost-filter: blur(22px) saturate(170%);
+  --r-plus: 20px;
+  --e-drop-card: 0 14px 34px light-dark(rgba(98, 60, 210, .18), rgba(4, 2, 14, .45));
+  --e-drop-float: 0 16px 40px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .6));
+  --e-drop-sheet: 0 -18px 50px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .55));
+  --e-1: inset 0 1px 0 var(--rim-top), inset 0 0 0 1px var(--rim-hair);  /* chips, fields, quiet buttons */
+  --e-2: inset 0 1px 0 var(--rim-top), var(--e-drop-card);  /* cards */
+  --e-3: var(--e-1), var(--e-drop-float);  /* the dock, menus, pills, dialogs */
+  --e-4: inset 0 1px 0 var(--rim-top), var(--e-drop-sheet);  /* a phone's sheet: no rim down the screen's own edges */
+  --e-toast: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 0 0 1px light-dark(rgba(214, 196, 255, .3), rgba(214, 196, 255, .25)), 0 10px 26px rgba(0, 0, 0, .45);
+  --e-danger: inset 0 1px 0 rgba(255, 255, 255, .34), inset 0 -8px 14px -8px rgba(90, 10, 30, .45), 0 10px 22px -6px rgba(210, 59, 82, .5);
+  --e-switch-on: inset 0 1px 0 rgba(255, 255, 255, .3), 0 4px 12px var(--glow);
+  --e-thumb: 0 1px 3px rgba(20, 8, 60, .35);
+  --sheen: linear-gradient(transparent, transparent);
+  --glass-light: linear-gradient(transparent, transparent);
+}
+
+/* The two of the owner's screens are under 340 px wide: the gutter and the dock's inset are both 12 there, so the mark, the
+   title, the chips, the cards and the dock share their two edges. From 900 px the content starts beside the rail. */
+@media (max-width: 339px) { html { --gutter: 12px; } }
+@media (min-width: 900px) { html { --x0: calc(var(--rail) + 24px); } }
+@media (any-pointer: coarse) { html { --hit: 44px; } }
+@media (pointer: fine) { html { --row-h: var(--row-h-fine); } }
+
+/* ================================================================== per theme (images and shadows can't use light-dark()) */
+
+html[data-theme="dark"] {
+  /* a card: its fill over a floor of the canvas, so --muted reads 4.6 or more over the aurora's brightest spot */
+  --card-floor: linear-gradient(rgba(11, 9, 24, .7), rgba(11, 9, 24, .7));
+  --glass-card: linear-gradient(155deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .025) 55%, rgba(255, 255, 255, .045)), var(--card-floor);
+  --rim-edge: linear-gradient(140deg, rgba(255, 255, 255, .36), rgba(255, 255, 255, .05) 34%, rgba(255, 255, 255, .03) 66%, rgba(186, 160, 255, .34));
+  --grad-picked: linear-gradient(150deg, rgba(150, 108, 240, .38), rgba(98, 66, 200, .22));
+  --grad-tonal: linear-gradient(150deg, rgba(150, 108, 240, .38), rgba(98, 66, 200, .22));  /* the tonal button's soft violet */
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c7bff0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6.5 9.5 5.5 5.5 5.5-5.5'/%3E%3C/svg%3E");
+}
+html[data-theme="light"] {
+  --card-floor: linear-gradient(transparent, transparent);  /* (light: the card's own white under it is floor enough: --muted reads 4.6 over the aurora) */
+  --glass-card: linear-gradient(155deg, rgba(255, 255, 255, .74), rgba(255, 255, 255, .44) 55%, rgba(255, 255, 255, .58)), var(--card-floor);
+  --rim-edge: linear-gradient(140deg, rgba(255, 255, 255, 1), rgba(200, 180, 255, .35) 34%, rgba(200, 180, 255, .25) 66%, rgba(150, 110, 240, .45));
+  --grad-picked: linear-gradient(150deg, #8358e8, #5b36c2);
+  --grad-tonal: linear-gradient(150deg, rgba(124, 91, 224, .2), rgba(98, 66, 200, .12));
+  --e-drop-card: 0 1px 2px rgba(60, 40, 140, .06), 0 16px 40px rgba(98, 60, 210, .18);
+}
+
+/* Pure black (only while dark shows: js/theme.js): the canvas and the solids step down to black; cards, edges and lines stay. */
+html[data-black] {
+  --solid-canvas: light-dark(#efe9ff, #000000);
+  --solid-sheet: light-dark(#faf7ff, #0e0b1a);
+  --solid-float: light-dark(#fcfaff, #130f24);
+  --solid-bar: light-dark(#faf8ff, #06050e);
+  --frost-bar: light-dark(rgba(255, 255, 255, .55), rgba(10, 8, 20, .62));
+  --glass-field: light-dark(rgba(255, 255, 255, .72), rgba(255, 255, 255, .055));
+  --glass-sunken: light-dark(rgba(110, 80, 200, .07), rgba(0, 0, 0, .5));
+  --text: light-dark(#1b1533, #ece8f6);
+  --card-floor: linear-gradient(rgba(0, 0, 0, .7), rgba(0, 0, 0, .7));
+  --glass-card: linear-gradient(155deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .025) 55%, rgba(255, 255, 255, .045)), var(--card-floor);
+}
+
+/* ================================================================== the "new" halves (the owner's Q6; off by default) */
+
+html[data-surfaces="new"] {
+  --frost-bar: light-dark(rgba(250, 248, 255, .70), rgba(20, 15, 40, .66));
+  --frost-filter: blur(24px) saturate(160%);
+  --r-plus: var(--r16);
+  --sheen: linear-gradient(180deg, light-dark(rgba(255, 255, 255, .7), rgba(255, 255, 255, .055)), rgba(255, 255, 255, 0) 44%);
+  --glass-light: radial-gradient(120% 90% at 50% -30%, light-dark(rgba(138, 108, 240, .12), rgba(138, 108, 240, .20)), rgba(138, 108, 240, 0) 62%);
+}
+html[data-surfaces="new"][data-theme="dark"] { --card-floor: linear-gradient(rgba(11, 9, 24, .76), rgba(11, 9, 24, .76)); }
+html[data-surfaces="new"][data-theme="light"] { --card-floor: linear-gradient(rgba(239, 233, 255, .66), rgba(239, 233, 255, .66)); }
+html[data-surfaces="new"][data-black] {
+  --frost-bar: light-dark(rgba(250, 248, 255, .70), rgba(8, 7, 16, .72));
+  --glass-card: linear-gradient(155deg, rgba(170, 150, 255, .115), rgba(170, 150, 255, .05) 55%, rgba(170, 150, 255, .07)), var(--card-floor);
+  --rim-edge: linear-gradient(150deg, rgba(255, 255, 255, .30), rgba(255, 255, 255, .05) 36%, rgba(255, 255, 255, 0) 64%, rgba(170, 150, 255, .22));
+  --e-drop-card: 0 0 0 transparent; --e-drop-float: 0 0 0 transparent; --e-drop-sheet: 0 0 0 transparent;
+}
+/* the springs as the look brief has them (1.8: mass 1, linear() strings of 30 steps, made by tests/test_wefty_20_kit.py) */
+html[data-springs="new"] {
+  --spring-tap: linear(0, 0.052, 0.178, 0.34, 0.51, 0.669, 0.805, 0.914, 0.994, 1.047, 1.078, 1.09, 1.09, 1.081, 1.067, 1.052, 1.037, 1.023, 1.012, 1.004, 0.998, 0.994, 0.992, 0.992, 0.992, 0.993, 0.995, 0.996, 0.997, 0.998, 1);
+  --d-tap: 390ms;  /* k 700, d 32: 9 % past */
+  --spring-pill: linear(0, 0.034, 0.119, 0.228, 0.347, 0.467, 0.575, 0.672, 0.756, 0.824, 0.879, 0.923, 0.955, 0.978, 0.995, 1.006, 1.013, 1.016, 1.017, 1.017, 1.016, 1.014, 1.012, 1.01, 1.008, 1.006, 1.004, 1.003, 1.002, 1.001, 1);
+  --d-pill: 370ms;  /* k 520, d 36 */
+  --spring-screen: linear(0, 0.037, 0.123, 0.233, 0.35, 0.464, 0.568, 0.659, 0.736, 0.8, 0.852, 0.893, 0.924, 0.948, 0.966, 0.979, 0.988, 0.994, 0.999, 1.001, 1.003, 1.003, 1.004, 1.003, 1.003, 1.003, 1.002, 1.002, 1.002, 1.001, 1);
+  --d-screen: 450ms;  /* k 380, d 34 */
+  --spring-settle: linear(0, 0.043, 0.136, 0.252, 0.369, 0.476, 0.574, 0.657, 0.725, 0.783, 0.83, 0.866, 0.896, 0.919, 0.938, 0.952, 0.963, 0.972, 0.978, 0.984, 0.987, 0.99, 0.993, 0.994, 0.996, 0.997, 0.998, 0.998, 0.999, 0.999, 1);
+  --d-settle: 320ms;  /* k 900, d 60: no overshoot */
+}
+
+/* ================================================================== lite and calm */
+
+/* Lite is the same design with fewer effects, never fewer moves: stiffer springs (k x 1.6, d x 1.3), enter in 200 ms. */
+html.lite { --d-enter: 200ms; --d-tap: 220ms; --d-pill: 300ms; --d-screen: 300ms; --d-settle: 260ms; }
+html.lite[data-springs="new"] {
+  --spring-tap: linear(0, 0.05, 0.169, 0.324, 0.487, 0.641, 0.775, 0.884, 0.966, 1.024, 1.059, 1.077, 1.082, 1.078, 1.068, 1.055, 1.042, 1.029, 1.018, 1.009, 1.003, 0.998, 0.995, 0.994, 0.993, 0.994, 0.994, 0.996, 0.997, 0.998, 1);
+  --d-tap: 300ms;
+  --spring-pill: linear(0, 0.035, 0.121, 0.23, 0.347, 0.466, 0.573, 0.667, 0.75, 0.817, 0.871, 0.914, 0.946, 0.969, 0.987, 0.998, 1.005, 1.01, 1.012, 1.012, 1.012, 1.011, 1.009, 1.008, 1.007, 1.005, 1.004, 1.003, 1.002, 1.002, 1);
+  --d-pill: 295ms;
+  --spring-screen: linear(0, 0.033, 0.112, 0.214, 0.323, 0.43, 0.529, 0.618, 0.694, 0.759, 0.813, 0.857, 0.893, 0.921, 0.943, 0.959, 0.972, 0.981, 0.988, 0.993, 0.996, 0.998, 1, 1.001, 1.001, 1.002, 1.002, 1.002, 1.001, 1.001, 1);
+  --d-screen: 337ms;
+  --spring-settle: linear(0, 0.046, 0.141, 0.259, 0.377, 0.483, 0.579, 0.661, 0.727, 0.783, 0.829, 0.864, 0.894, 0.917, 0.934, 0.949, 0.96, 0.969, 0.976, 0.981, 0.985, 0.989, 0.991, 0.993, 0.995, 0.996, 0.997, 0.998, 0.998, 0.999, 1);
+  --d-settle: 260ms;
+}
+/* Calm: no travel and no scale; every change a fade of 120 ms or less (drags still follow the finger). */
+html.calm {
+  --spring-tap: var(--ease-out); --spring-pill: var(--ease-out); --spring-screen: var(--ease-out); --spring-settle: var(--ease-out);
+  --d-tap: var(--d-fade); --d-pill: var(--d-fade); --d-screen: var(--d-fade); --d-settle: var(--d-fade);
+  --d-enter: var(--d-fade); --d-exit: var(--d-fade); --d-swap: var(--d-fade); --d-scrim-in: var(--d-fade); --d-scrim-out: var(--d-fade);
+}
+
+/* ================================================================== the older names, read by the areas */
+
+/* Each is the new token that means the same thing. A name with no new meaning keeps its own value here, so the token
+   blocks of glass/glass.css and glass/overlays.css could go: one number for each thing. */
+html {
+  /* surfaces (the app's own names) */
+  --bg: var(--solid-canvas);
+  --surface: light-dark(#f7f3ff, #151029);
+  --surface-2: light-dark(rgba(110, 80, 200, .09), rgba(255, 255, 255, .07));
+  --card: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .065));
+  --page: light-dark(rgba(255, 255, 255, .78), rgba(255, 255, 255, .07));
+  --field: var(--glass-field);
+  --sunken: var(--glass-sunken);
+  --raised: var(--solid-float);
+  --selected: light-dark(#ffffff, rgba(255, 255, 255, .16));
+  --thread: light-dark(rgba(110, 80, 200, .22), rgba(190, 170, 255, .28));
+  --edge-hi: light-dark(transparent, rgba(255, 255, 255, .10));
+  /* the main button and the accent */
+  --primary: var(--brand);
+  --primary-hover: light-dark(#5b36c2, #8a62e6);
+  --primary-press: light-dark(#4a2aa3, #6a45c9);
+  --on-primary: var(--on-brand);
+  --accent-hover: light-dark(#5b36c2, #c2b6f4);
+  --accent-press: light-dark(#4a2aa3, #a294e6);
+  --accent-wash: var(--wash-accent);
+  --accent-line: var(--rim-accent);
+  --accent-2: light-dark(#a590ee, #9c82ec);
+  --accent-3: light-dark(#cfc4f7, #6a45c9);
+  /* meaning */
+  --danger-soft: var(--wash-danger);
+  --warn-soft: var(--wash-warn);
+  --ok-soft: var(--wash-ok);
+  --danger-fill: var(--danger-solid);
+  --on-danger-fill: var(--on-danger-solid);
+  /* what floats */
+  --toast: var(--solid-toast);
+  --toast-edge: light-dark(rgba(214, 196, 255, .3), rgba(214, 196, 255, .25));
+  --shadow-1: 0 1px 2px light-dark(rgba(60, 40, 140, .10), rgba(0, 0, 0, .5));
+  --shadow-2: 0 8px 22px light-dark(rgba(76, 52, 160, .14), rgba(4, 2, 14, .5));
+  --shadow-3: var(--e-drop-float);
+  --shadow-fab: 0 10px 24px var(--glow);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent);
+  /* shape and motion (glass's own values for the app's names) */
+  --r-sm: var(--r8); --r-md: var(--r16); --r-lg: var(--r22); --r-xl: var(--r28);
+  --ease-spring: var(--spring-tap);
+  --d-1: .12s; --d-2: .2s; --d-3: .32s;
+  --d-slide: .46s;
+  --ease: var(--ease-out);
+  --spring: var(--spring-tap);
+  /* glass's own names */
+  --g-ease: var(--ease-out);
+  --g-spring: var(--spring-tap);
+  --g-slide: var(--spring-pill);
+  --g-in: var(--ease-in);
+  --g-hi: var(--rim-top);
+  --g-ring: var(--rim-hair);
+  --g-bar: var(--frost-bar);
+  --g-bar-solid: var(--solid-bar);
+  --g-blur: var(--frost-filter);
+  --g-grad: var(--grad-brand);
+  --g-glow: var(--glow);
+  --g-gloss: var(--grad-gloss);
+  --g-primary-depth: var(--depth-primary);
+  --g-badge-fill: var(--grad-badge);
+  --g-badge-depth: var(--depth-badge);
+  --g-tab-edge: var(--picked-edge);
+  --g-pill-fill: linear-gradient(150deg, rgba(150, 108, 240, .55), rgba(98, 66, 200, .38));
+  --g-pill-ring: rgba(214, 196, 255, .45);
+  --g-pill-glow: 0 10px 26px rgba(98, 66, 200, .45);
+  --g-float: var(--solid-float);
+  --g-sheet: var(--solid-sheet);
+  --g-solid: var(--solid-sheet);
+  --g-sheet-spring: var(--spring-sheet);
+  --g-lift-soft: var(--glass-lift);
+  --g-wave: var(--mark-wave);
+  --g-tick: var(--mark-tick);
+  --g-fill: var(--glass-card);
+  --g-edge: var(--rim-edge);
+  --g-shadow: var(--e-drop-card);
+  --g-tab-fill: var(--grad-picked);
+  --g-grad-soft: var(--grad-tonal);
+}
+html[data-theme="dark"] {
+  --g-shadow-hi: 0 22px 48px rgba(4, 2, 14, .55);
+}
+html[data-theme="light"] {
+  --g-shadow-hi: 0 22px 48px rgba(76, 52, 160, .26);
+  --g-pill-fill: linear-gradient(150deg, #8358e8, #5b36c2);
+  --g-pill-ring: transparent;
+  --g-pill-glow: 0 10px 24px rgba(110, 70, 220, .38);
+}
+html[data-black] {
+  --surface: light-dark(#f7f3ff, #060510);
+  --page: light-dark(rgba(255, 255, 255, .78), rgba(255, 255, 255, .06));
+  --card: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .06));
+}
+/* The edge light's pictures (ui/edge.css, lane A4). Defined on #g-edge itself, not html: they read the thread's colours,
+   --ge-rgb and --ge-hi, which #g-edge's data-tone changes (a custom property's var() is resolved where it is defined). The
+   mask is alpha only: brightest at the page's very edge, gone --ge-soft inside it. */
+html #g-edge {
+  --edge-mask: linear-gradient(to bottom, #000, rgb(0 0 0 / .35) 35%, transparent);
+  --edge-comet: linear-gradient(to right, rgb(var(--ge-rgb) / 0) 72%, rgb(var(--ge-rgb) / .5) 89.4%, rgb(var(--ge-rgb) / .95) 96.9%,
+    rgb(var(--ge-hi) / 1) 99.6%, rgb(var(--ge-hi) / 0));
+  --edge-comet-loop: linear-gradient(to right, rgb(var(--ge-rgb) / 0) 79.4%, rgb(var(--ge-rgb) / .45) 93.3%, rgb(var(--ge-rgb) / .9) 97.8%,
+    rgb(var(--ge-hi) / .95) 99.6%, rgb(var(--ge-hi) / 0));
+}
+}

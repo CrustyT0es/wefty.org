@@ -1,0 +1,601 @@
+/* Wefty 2.0 "glass": the shell. Owns the frame js/start.js builds (nav.tabs, the tab buttons, the rail), the aurora behind
+   it, and V.glass. (2.0: glass is the only look, so nothing here is ever switched off again.)
+
+   What it does:
+     - the aurora: three tint layers (morning, day, night) behind the app, cross-faded by the local hour (html[data-tod]);
+     - the sliding indicator behind the tab you are on (one element moved with transform, with the board's little
+       stretch), on the phone's floating bar and on the Chromebook's rail alike;
+     - the weft that passes between tabs: the thread under the tab you leave is drawn out towards the tab you are going
+       to, and the thread under the new tab is drawn in from the side you came from (the board's w-in / w-out logic and
+       timing). It starts the moment a tab is tapped, not when the screen has been drawn;
+     - badges that pop when a number appears or changes;
+     - V.glass: surface(el) (the board's glass on any element), tod() / setTod(), enabled().
+   (Its frame-by-frame costs: a tab tapped moves the indicator in the tap's own task and nothing else; js/start.js draws the screen after.) */
+'use strict';
+
+(() => {
+const V = (window.V = window.V || {});
+const root = document.documentElement;
+const EASE = 'cubic-bezier(.2,.8,.2,1)';
+const EXIT = 'cubic-bezier(.5,0,.8,.4)';
+const HAS_WAAPI = typeof Element !== 'undefined' && typeof Element.prototype.animate === 'function';
+
+const on = () => !!(V.look && V.look.isGlass());
+const calm = () => root.classList.contains('calm');
+const lite = () => root.classList.contains('lite');
+
+let aurora = null;
+let slide = null;
+let nav = null;
+let index = -1;          // the tab that shows as on, by its place in the bar
+let flip = 0;            // alternates, so the indicator's stretch can run again
+let todTimer = 0;
+let todOverride = '';
+let resizer = null;
+let observer = null;     // a new nav.tabs in #app
+let badgeWatch = null;   // a number changing in a badge
+let weftLength = 24;
+
+/* -- time of day: the aurora's tint */
+function hourOf() {
+  const h = new Date().getHours();
+  return h >= 5 && h < 12 ? 'morning' : h >= 12 && h < 18 ? 'day' : 'night';
+}
+function tod(value) {
+  if (value === undefined) return root.dataset.tod || hourOf();
+  todOverride = ['morning', 'day', 'night'].includes(value) ? value : '';
+  root.dataset.tod = todOverride || hourOf();
+  return root.dataset.tod;
+}
+function tickTod() { root.dataset.tod = todOverride || hourOf(); }
+
+/* -- the aurora */
+function makeAurora() {
+  if (aurora && aurora.isConnected) return;
+  aurora = document.createElement('div');
+  aurora.id = 'g-aurora';
+  aurora.setAttribute('aria-hidden', 'true');
+  for (const cls of ['tl-m', 'tl-d', 'tl-n']) {
+    const layer = document.createElement('div');
+    layer.className = `tl ${cls}`;
+    aurora.appendChild(layer);
+  }
+  document.body.insertBefore(aurora, document.body.firstChild);
+}
+
+/* -- the tab bar / rail */
+const tabsOf = () => (nav ? [...nav.querySelectorAll(':scope > .tab')] : []);
+const pathOf = (tab) => (tab ? tab.querySelector('.weave path') : null);
+
+function measureWeft() {
+  const path = pathOf(tabsOf()[0]);
+  if (!path) return;
+  let length = 0;
+  try { length = Math.ceil(path.getTotalLength()); } catch (error) { length = 0; }
+  if (length > 4) { weftLength = length; nav.style.setProperty('--g-weft', String(length)); }
+}
+
+/* Put the indicator under the tab that is on (no animation when `still`). Nothing is on (Settings on a phone hides the
+   bar; wide, Settings has no tab): the indicator waits out of sight. */
+function place(still) {
+  if (!nav || !slide) return;
+  const tabs = tabsOf();
+  const now = tabs.findIndex((tab) => tab.classList.contains('on'));
+  if (now < 0 || !nav.offsetWidth) {
+    slide.style.opacity = '0';
+    return;
+  }
+  const tab = tabs[now];
+  if (still) slide.classList.add('g-still');
+  slide.style.opacity = '1';
+  slide.style.width = `${tab.offsetWidth}px`;
+  slide.style.height = `${tab.offsetHeight}px`;
+  slide.style.transform = `translate3d(${tab.offsetLeft}px,${tab.offsetTop}px,0)`;
+  if (still) {
+    void slide.offsetWidth;  // (settle at once, then let it slide again)
+    requestAnimationFrame(() => slide && slide.classList.remove('g-still'));
+  }
+}
+
+/* The weft passes from the tab left to the tab arrived at: out of the old one towards the new, into the new one from
+   the side it came from. Restartable (a newer pass cancels the older), and left alone in calm (the CSS state is final). */
+function pass(from, to) {
+  const tabs = tabsOf();
+  if (from === to || !tabs[to]) return;
+  if (calm() || !HAS_WAAPI) return;
+  const dir = from < 0 ? 0 : to > from ? 1 : -1;
+  const L = weftLength;
+  const goes = pathOf(tabs[from]);
+  const comes = pathOf(tabs[to]);
+  const quick = lite();
+  if (goes && dir) {
+    goes.getAnimations().forEach((a) => a.cancel());
+    const out = goes.animate([{ strokeDashoffset: 0 }, { strokeDashoffset: -dir * L }], { duration: quick ? 1 : 240, easing: EXIT, fill: 'both' });
+    const release = () => { try { out.cancel(); } catch (error) { /* gone */ } };
+    out.finished.then(release, release);
+  }
+  if (comes) {
+    comes.getAnimations().forEach((a) => a.cancel());
+    comes.animate([{ strokeDashoffset: (dir || 1) * L }, { strokeDashoffset: 0 }], { duration: quick ? 120 : 400, delay: quick ? 0 : 140, easing: EASE, fill: 'backwards' });
+  }
+}
+
+/* The indicator's little stretch as it lands (the board's), alternating two names so it can run again at once. */
+function stretch() {
+  if (!slide || calm() || lite()) return;
+  flip ^= 1;
+  slide.classList.remove('g-sa', 'g-sb');
+  slide.classList.add(flip ? 'g-sa' : 'g-sb');
+}
+
+/* The words under the pill. A tab's text is white while the pill is behind it: the tab left keeps its white a moment (the
+   pill hasn't moved off it yet), and the tabs the pill sweeps past light up for as long as it takes to cross them, so
+   dark words never sit on the purple (they did, in light). */
+const lit = new Map();  // tab -> timers
+function light(tab, wait, ms) {
+  for (const id of lit.get(tab) || []) clearTimeout(id);
+  const on = setTimeout(() => tab.classList.add('g-over'), wait);
+  const off = setTimeout(() => { tab.classList.remove('g-over'); lit.delete(tab); }, wait + ms);
+  lit.set(tab, [on, off]);
+}
+function words(from, to) {
+  if (calm() || from < 0) return;
+  const tabs = tabsOf();
+  const lo = Math.min(from, to), hi = Math.max(from, to);
+  // (the pill springs across in about .3 s: a tab it passes is under it for the middle of that)
+  for (let i = lo + 1; i < hi; i++) light(tabs[i], lite() ? 20 : 80 + Math.abs(i - from) * 40, lite() ? 120 : 170);
+}
+
+/* Show tab `to` (its index) as current: the indicator, the weft, the stretch. */
+function go(to, early) {
+  if (to === index) { if (!early) place(false); return; }
+  const from = index;
+  index = to;
+  if (to < 0) { place(true); return; }
+  if (from < 0) { place(true); return; }
+  const tabs = tabsOf();
+  if (early) {
+    // (the tab was tapped: the screen has not been drawn yet, so the tab's own class is still the old one)
+    const tab = tabs[to];
+    slide.style.opacity = '1';
+    slide.style.width = `${tab.offsetWidth}px`;
+    slide.style.height = `${tab.offsetHeight}px`;
+    slide.style.transform = `translate3d(${tab.offsetLeft}px,${tab.offsetTop}px,0)`;
+  } else {
+    place(false);
+  }
+  stretch();
+  pass(from, to);
+  words(from, to);
+}
+
+function decorate() {
+  const found = document.querySelector('#app > nav.tabs');
+  if (found === nav) return;
+  undecorate();
+  nav = found;
+  if (!nav) return;
+  slide = document.createElement('span');
+  slide.className = 'g-tabslide g-still';
+  slide.setAttribute('aria-hidden', 'true');
+  slide.appendChild(document.createElement('i'));
+  nav.insertBefore(slide, nav.firstChild);
+  measureWeft();
+  index = tabsOf().findIndex((tab) => tab.classList.contains('on'));
+  place(true);
+  nav.addEventListener('click', tapped, true);
+  if (window.ResizeObserver) {
+    resizer = new ResizeObserver(() => { measureWeft(); place(true); });
+    resizer.observe(nav);
+  }
+  badgeWatch = new MutationObserver(badges);
+  badgeWatch.observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'], attributeOldValue: true });
+}
+
+function undecorate() {
+  if (nav) {
+    nav.removeEventListener('click', tapped, true);
+    nav.style.removeProperty('--g-weft');
+    for (const path of nav.querySelectorAll('.weave path')) path.getAnimations().forEach((a) => a.cancel());
+    for (const tab of nav.querySelectorAll('.tab')) tab.classList.remove('g-over');
+  }
+  for (const timers of lit.values()) timers.forEach(clearTimeout);
+  lit.clear();
+  if (resizer) { resizer.disconnect(); resizer = null; }
+  if (badgeWatch) { badgeWatch.disconnect(); badgeWatch = null; }
+  if (slide) slide.remove();
+  slide = null;
+  nav = null;
+  index = -1;
+}
+
+/* A tab tapped: the indicator and the weft answer at once. start.js draws the screen after (and says 'tab'). */
+function tapped(event) {
+  const tab = event.target && event.target.closest && event.target.closest('.tab');
+  if (!tab || !nav || !on()) return;
+  const to = tabsOf().indexOf(tab);
+  if (to >= 0 && to !== index) go(to, true);
+}
+
+/* A badge's number changing pops it (appearing is the stylesheet's). */
+let popped = new WeakMap();
+function badges(records) {
+  if (calm() || !HAS_WAAPI) return;
+  const seen = new Set();
+  for (const record of records) {
+    const badge = record.target && (record.target.nodeType === 1 ? record.target : record.target.parentElement);
+    const mark = badge && badge.closest && badge.closest('.badge');
+    if (!mark || seen.has(mark)) continue;
+    // (round 4) Gone (its number read): it pops out, a copy of it shrinking away where it was, instead of vanishing.
+    if (record.attributeName === 'hidden') {
+      if (mark.hidden && record.oldValue === null && !calm()) { seen.add(mark); popOut(mark); }
+      continue;
+    }
+    if (mark.hidden) continue;
+    if (mark.textContent) mark.dataset.gLast = mark.textContent;
+    seen.add(mark);
+    const before = popped.get(mark);
+    if (before) before.cancel();
+    popped.set(mark, mark.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.3)', offset: 0.35 }, { transform: 'scale(1)' }],
+      { duration: lite() ? 160 : 420, easing: 'cubic-bezier(.34,1.45,.64,1)' }));
+  }
+}
+
+/* The copy is the badge as it looked, and no badge itself: it takes the badge's whole look (as the browser worked it out
+   for a badge in that place) on itself, loses the class, and comes after the real one. js/start.js writes each new count
+   into the first .badge of its tab: while the copy was one, put before the real badge, a count that came as it shrank
+   (something sent here just as the last was seen) went into the copy and was thrown away with it, and the tab showed
+   nothing new until something else changed. */
+function popOut(mark) {
+  const parent = mark.parentElement;
+  if (!parent || !HAS_WAAPI) return;
+  const copy = mark.cloneNode(true);
+  copy.hidden = false;
+  copy.removeAttribute('id');
+  copy.setAttribute('aria-hidden', 'true');
+  copy.textContent = mark.dataset.gLast || '';
+  copy.style.animation = 'none';
+  copy.style.pointerEvents = 'none';
+  parent.insertBefore(copy, mark.nextSibling);
+  // (read while it's still a badge, and set in the same task: nothing is painted in between)
+  const look = getComputedStyle(copy);
+  const kept = [];
+  for (const name of look) kept.push([name, look.getPropertyValue(name)]);
+  copy.className = 'g-badge-out';
+  for (const [name, value] of kept) copy.style.setProperty(name, value);
+  const gone = () => copy.remove();
+  const a = copy.animate([{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(1.12)', opacity: 1, offset: 0.25 }, { transform: 'scale(0)', opacity: 0 }],
+    { duration: lite() ? 140 : 300, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' });
+  a.finished.then(gone, gone);
+  setTimeout(gone, 600);
+}
+
+/* -- the aurora rests when nothing happens: after 8 s without a touch, key or scroll the drift stops (html.g-idle), so a
+   page sitting open doesn't recompute the tab bar's blur every frame; any input starts it again. It also stands still
+   while a page is scrolling and while a sheet is open (glass.css), the two times the bars behind it are busiest. */
+/* (round 4, a big chat in the preview was slow: a class on <html> going on and off, at every scroll and every focus, made the
+   browser look over every element of the page again, 18,000 of them in a long chat, 400 ms at a time on a slow phone.
+   Only the aurora reads these three, so they go on the aurora itself: g-idle, g-scrolling and g-field.) */
+const NOWHERE = document.createElement('i');
+const aura = () => document.getElementById('g-aurora') || NOWHERE;
+let idleMs = 8000;
+let idleTimer = 0;
+let lastInput = 0;
+const WAKE = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll'];
+/* (2.0 speed) An input only notes its time; the one timer looks when it is due and waits again for what is left, so typing
+   never sets a timer per second, and a page clock held still (a test's) can never make it rest mid-typing. Never while a
+   box has the typing: its drift is already paused there (g-field), and g-idle drops the aurora's layer, which the next
+   letter or tap had to make and paint again (a whole frame's work in Full, and the one layout of the whole page while
+   typing in a long chat, tests/test_wefty_1222_typing.py). */
+const clock = () => performance.now();
+function rest() {
+  const left = idleMs - (clock() - lastInput);
+  const typing = aura().classList.contains('g-field');
+  idleTimer = left > 16 || typing ? setTimeout(rest, Math.max(left, typing ? idleMs : 16)) : 0;
+  if (!idleTimer) aura().classList.add('g-idle');
+}
+function wake() {
+  lastInput = clock();
+  if (aura().classList.contains('g-idle')) aura().classList.remove('g-idle');
+  if (!idleTimer) rest();
+}
+let scrollTimer = 0;
+function scrolling() {
+  if (!aura().classList.contains('g-scrolling')) aura().classList.add('g-scrolling');
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(() => aura().classList.remove('g-scrolling'), 180);
+}
+/* (2.0: the look is never switched off any more, so what used to undo all this, with the look, is gone) */
+function watchIdle() {
+  for (const type of WAKE) window.addEventListener(type, wake, { passive: true, capture: true });
+  window.addEventListener('scroll', scrolling, { passive: true, capture: true });
+  wake();
+}
+
+/* -- what's open over the app, as classes on the few things that change with it (round 4: these were html:has() and
+   body:has() rules, and in a long chat every letter typed had the browser look over the whole page again for them, 18,000
+   elements and 400 ms a letter on a slow phone): the aurora rests under a sheet or a layer (.g-under) (the toasts' slot
+   over a sheet or a note's question is ui/overlay.js's since 2.0), the page under a listening note-taker with the tabs in reach isn't drawn (#app.g-nt-below), and the round + goes while a note
+   grows out of its card (#app.g-ed-window). Set only when one changes. */
+function overState() {
+  const layers = document.getElementById('layers');
+  if (!layers) return;
+  const glassOn = on();
+  const flag = (el, cls, value) => { if (el && el.classList.contains(cls) !== value) el.classList.toggle(cls, value); };
+  flag(aura(), 'g-under', glassOn && !!layers.querySelector(':scope > .layer:not(.menu-layer)'));
+  const app = document.getElementById('app');
+  flag(app, 'g-nt-below', glassOn && !!layers.querySelector(':scope > .nt-layer.shown[data-tabs=below]'));
+  flag(app, 'g-ed-window', glassOn && !!layers.querySelector('.editor-layer.g-window'));
+}
+const overSoon = (() => { let queued = false; return () => { if (queued) return; queued = true; queueMicrotask(() => { queued = false; overState(); }); }; })();
+function watchOver() {
+  const layers = document.getElementById('layers');
+  if (!layers || layers.dataset.gOver) return;
+  layers.dataset.gOver = '1';
+  new MutationObserver(overSoon).observe(layers, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-tabs'] });
+  overState();
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchOver, { once: true }); else watchOver();
+
+/* -- the frame-drop monitor starts once Wefty has settled (its first sync done, or a few seconds), not in the cold start's
+   busy boot, which would make a quick device look slow and leave it lite for a week. */
+let settleTimer = 0;
+let settled = false;
+function settle() {
+  if (settled) return;
+  settled = true;
+  clearTimeout(settleTimer);
+  setTimeout(() => { if (on() && V.motion && V.motion.watch) V.motion.watch(5); }, 2500);
+}
+
+/* -- on and off */
+function enable() {
+  if (!document.body) return;
+  tickTod();
+  makeAurora();
+  if (!todTimer) todTimer = setInterval(tickTod, 60000);
+  decorate();
+  if (!observer) {
+    const app = document.getElementById('app');
+    if (app) {
+      observer = new MutationObserver(() => { if (on()) decorate(); });
+      observer.observe(app, { childList: true });
+    }
+  }
+  watchIdle();
+  if (!settled && !settleTimer) settleTimer = setTimeout(settle, 12000);  // (the first 'synced' says it sooner)
+}
+V.on('status', (value) => { if (on() && (value === 'synced' || value === 'offline' || value === 'held')) settle(); });
+/* (round 4, the owner's Today just after a tab switch, with a glass disc left beside the search button) Leaving a screen takes
+   every moving copy of a part of it away at once, in the task that draws the next one: the words flying into a sent message,
+   a menu fading, a tile shrinking away, sparks, a peek, Notes' search capsule. (A copy that carries one screen into the next,
+   Settings' and a swipe's, is that move itself, and stays.) */
+const SCREEN_COPIES = '.g-fly-words, .g-fly-shape, .g-menu-going, .g-tile-gone, .g-spark-host, .g-peek, .gn-morph, .gn-help-ghost, .g-ghost-row';
+const dropCopies = () => document.querySelectorAll(SCREEN_COPIES).forEach((el) => { if (!el.closest('main.view')) el.remove(); });
+V.on('screen-leaving', ({ view } = {}) => {  // (2.0 speed: copies go with the old screen; touch-action said ahead)
+  if (!on()) return; dropCopies();
+  if (V.motion && V.motion.pull && V.motion.pull.ahead) V.motion.pull.ahead(document.querySelector('#app > main.view'), view === 'today' ? !(V.wide && V.wide()) : /^(send|files|clips|settings)$/.test(view || '') && finger());
+});
+V.on('tab', () => {
+  if (!on()) return;
+  dropCopies();
+  decorate();
+  if (nav) go(tabsOf().findIndex((tab) => tab.classList.contains('on')), false);
+});
+V.on('animations', () => { if (on() && nav) place(true); });
+V.on('theme', () => { if (on() && nav) place(true); });
+// A wide screen and a narrow one lay the bar out differently (a rail, a floating bar): the indicator follows.
+window.addEventListener('resize', () => { if (on() && nav) place(true); });
+/* ---- round-2 fixes (R2-10): a pressed primary (and the round +) gets .g-sweep for .7 s, so its sheen sweeps across once
+   even under a finger (a quick tap ends :active before the sweep is half way). glass.css draws it; nothing in lite or calm. */
+const sweeping = new WeakMap();
+document.addEventListener('pointerdown', (event) => {
+  if (!on() || root.classList.contains('lite') || root.classList.contains('calm')) return;
+  const button = event.target && event.target.closest && event.target.closest('.btn.primary, .fab');
+  if (!button || button.disabled) return;
+  clearTimeout(sweeping.get(button));
+  button.classList.remove('g-sweep');
+  const start = () => {
+    button.classList.add('g-sweep');
+    sweeping.set(button, setTimeout(() => { button.classList.remove('g-sweep'); sweeping.delete(button); }, 760));
+  };
+  // (a sweep already running starts again from the left: one frame without the class first)
+  if (sweeping.has(button)) requestAnimationFrame(() => requestAnimationFrame(start));
+  else start();
+}, true);
+/* (A screen drawn after a tab tap is a long frame: the new screen's entrance animations would wait for the frame after it
+   to begin, so a frame or two showed almost nothing between the two screens. Each one that is still waiting starts at
+   the frame the tap was handled in, so the first frame of the new screen is already partly risen in; never ui/tabs.js's.) */
+function startWaiting() {
+  if (!on() || !document.timeline || document.timeline.currentTime == null) return;
+  const view = document.querySelector('main.view');
+  if (!view || typeof view.getAnimations !== 'function') return;
+  const t = document.timeline.currentTime;
+  for (const a of view.getAnimations({ subtree: true })) {
+    try { if (a.pending && a.playState === 'running' && a.startTime == null && !String(a.id).startsWith('ui-tab-')) a.startTime = t; } catch (error) { /* fine */ }
+  }
+}
+V.on('tab', () => { if (on()) Promise.resolve().then(startWaiting); });
+/* ---- end of the round-2 fixes block */
+
+/* ---- the 2.0 hotfix (the owner's first look) */
+
+/* Which way the keyboard got somewhere: html.g-kbd while the keys are moving round the screen (Tab, or the arrows outside
+   a text field), gone at the next press of a finger, a pen or the mouse. A text field shows no ring of its own on a tap
+   or a click (glass.css: the caret says where the typing goes), and a clear rounded one for the keyboard. */
+const TEXT_ENTRY = 'textarea, select, [contenteditable]:not([contenteditable="false"]), input:not([type=checkbox]):not([type=radio])'
+  + ':not([type=button]):not([type=submit]):not([type=reset]):not([type=range]):not([type=color]):not([type=file]):not([type=image])';
+const MOVES = new Set(['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
+document.addEventListener('keydown', (event) => {
+  if (!on() || !MOVES.has(event.key) || event.ctrlKey || event.metaKey || event.altKey) return;
+  const t = event.target;
+  if (event.key !== 'Tab' && t && t.closest && t.closest(TEXT_ENTRY)) return;  // (the arrows in a field move its caret)
+  root.classList.add('g-kbd');
+}, true);
+const pointed = () => root.classList.remove('g-kbd');
+for (const type of ['pointerdown', 'mousedown', 'touchstart']) document.addEventListener(type, pointed, { capture: true, passive: true });
+
+/* A phone's on-screen keyboard (html.g-typing, --kb) is ui/dock.js's now: the one visualViewport reader. */
+
+/* Pull to sync, on every main screen (the owner: "I can sync from any screen"). One behaviour: V.motion.pull on the screen's
+   own scroller, its glass pill, and syncNow(): one sync at a time (a pull while one runs shows its spinner until it is done),
+   then "Synced" with a tick and the edge light, or the app's own state in words ("You're offline", "Couldn't sync"). Today and
+   Notes bind it on their own scrollers (glass/today.js, glass/notes.js); the shell binds it everywhere else: Share's three
+   parts, the Chat list (never inside a conversation, where pulling is for reading what came before), Settings' home and its
+   pages. A phone's (a finger's) only, as Today's and Notes' are; never in classic. */
+let syncing = null;
+function outcome(failed) {
+  const status = V.cloud && V.cloud.status;
+  if (status === 'offline' || (typeof navigator !== 'undefined' && navigator.onLine === false)) return 'offline';
+  if (failed || /^(error|asleep|signed-out)$/.test(String(status || ''))) return 'error';
+  return 'synced';
+}
+function syncNow() {
+  if (syncing) return syncing;
+  let result = null;
+  try { result = V.cloud && V.cloud.sync ? V.cloud.sync() : null; } catch (error) { result = Promise.reject(error); }
+  syncing = Promise.resolve(result).then(() => outcome(false), () => outcome(true)).then((how) => {
+    syncing = null;
+    try { V.emit('edge', how === 'synced' ? 'synced' : 'error'); } catch (error) { /* nobody is listening */ }
+    return how;
+  });
+  return syncing;
+}
+/* `scroller` gets the pull (its pill made here unless it has one), `wrap` is what moves with the finger. */
+function pullSync(scroller, { wrap = null, allow = null, pill = true } = {}) {
+  if (!scroller || !V.motion || !V.motion.pull) return { destroy() {} };
+  let made = null;
+  if (pill && !scroller.querySelector(':scope > .g-pull-hint')) {
+    made = document.createElement('div');
+    made.className = 'g-pull-hint g-pull-pill';
+    made.setAttribute('aria-hidden', 'true');
+    scroller.insertBefore(made, scroller.firstChild);
+  }
+  const handle = V.motion.pull(scroller, { wrap, allow, onRelease: (over) => { syncNow().then((how) => over(how)); } });
+  return { destroy() { handle.destroy(); if (made) made.remove(); }, refresh() { if (handle.refresh) handle.refresh(); } };
+}
+
+const PULLED = /^(send|files|clips|claude|settings)$/;
+let pulling = null;   // { scroller, handle }
+let pullWatch = null;
+const finger = () => { try { return matchMedia('(pointer: coarse)').matches && !(V.wide && V.wide()); } catch (error) { return false; } };
+/* The scroller of the screen showing, or null where the shell gives no pull. */
+function pullScroller() {
+  const main = document.querySelector('#app > main.view');
+  if (!main || !PULLED.test(main.dataset.tab || '')) return null;
+  if (main.dataset.tab !== 'claude') return main;
+  const app = main.querySelector('.chat-app');
+  if (!app || app.classList.contains('showing-chat')) return null;  // (a conversation: never)
+  const side = app.querySelector('.chat-side');
+  return side && /(auto|scroll)/.test(getComputedStyle(side).overflowY) ? side : app.querySelector('.chat-list');
+}
+function unpull() {
+  if (pulling) { pulling.handle.destroy(); pulling = null; }
+}
+function repull() {
+  if (!on() || !finger()) { unpull(); return; }
+  const scroller = pullScroller();
+  // (the same screen drawn again, a sync's redraw of Settings say: the pull stays, its pill and state put back)
+  if (pulling && pulling.scroller === scroller && scroller) { pulling.handle.refresh(); return; }
+  unpull();
+  if (!scroller) return;
+  const main = scroller.matches('main.view');
+  const wrap = main ? () => [...scroller.children].find((el) => !el.classList.contains('g-pull-hint') && !el.classList.contains('fab') && el.tagName !== 'SPAN') || null : null;
+  const handle = pullSync(scroller, { wrap });
+  pulling = { scroller, handle, hint: scroller.querySelector(':scope > .g-pull-hint') };
+}
+const repullSoon = (() => { let queued = false; return () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; repull(); }); }; })();
+let chatWatch = null;
+function watchPull() {
+  if (typeof MutationObserver !== 'function') return;
+  const main = document.querySelector('#app > main.view');
+  if (!main) return;
+  // (a screen drawn again: the pull follows; a chat opened or closed on a phone, too)
+  if (!pullWatch) {
+    pullWatch = new MutationObserver(repullSoon);
+    pullWatch.observe(main, { childList: true });
+  }
+  if (!chatWatch) chatWatch = new MutationObserver(repullSoon);
+  chatWatch.disconnect();
+  const app = main.dataset.tab === 'claude' ? main.querySelector('.chat-app') : null;
+  if (app) chatWatch.observe(app, { attributes: true, attributeFilter: ['class'] });
+}
+/* The phone's system bars (the owner: "keep the purple flow behind the notifications and the Samsung buttons"). A web page
+   can't draw behind Android's status bar, but it can colour it: in glass the theme-color is the colour of the canvas's top
+   edge (the aurora's tint of the time of day, worked out from its gradients for a phone's screen: a deep violet in dark, its
+   light top in light, black in Pure black), or a full-screen note's own top while one is open on a phone. An installed app's
+   navigation bar takes it too. Followed live: the tint, the theme, the look, a note opening or closing. Classic's own
+   colours (js/theme.js) are put back when the look is switched off. (Only the real phone can show the bars themselves.) */
+const BAR_TOPS = {
+  dark: { morning: '#25152d', day: '#1e1537', night: '#140e2b', note: '#21193f' },
+  light: { morning: '#f1def8', day: '#e4d8ff', night: '#e1d9ff', note: '#f3ebfe' },
+};
+let barsOwned = false;
+function barColour() {
+  if (root.hasAttribute('data-black')) return '#000000';
+  const theme = root.dataset.theme === 'light' ? 'light' : 'dark';
+  const phone = !(V.wide && V.wide());
+  if (phone && document.querySelector('#layers > .editor-layer.shown, #layers > .layer.ink-layer')) return BAR_TOPS[theme].note;
+  return BAR_TOPS[theme][root.dataset.tod || hourOf()] || BAR_TOPS[theme].day;
+}
+function paintBars() {
+  if (!on()) {
+    root.style.removeProperty('--g-bar-top');
+    if (barsOwned) {
+      barsOwned = false;
+      try { if (V.theme && V.theme.set) V.theme.set(V.theme.choice()); } catch (error) { /* (they stay until the next change) */ }
+    }
+    return;
+  }
+  const colour = barColour();
+  barsOwned = true;
+  for (const meta of document.querySelectorAll('meta[name=theme-color]')) if (meta.content !== colour) meta.content = colour;
+  // (round 4: the canvas starts in exactly this colour under the status bar and melts into the aurora: glass.css body::after)
+  if (root.style.getPropertyValue('--g-bar-top') !== colour) root.style.setProperty('--g-bar-top', colour);
+}
+const paintBarsSoon = (() => { let queued = false; return () => { if (queued) return; queued = true; Promise.resolve().then(() => { queued = false; paintBars(); }); }; })();
+if (typeof MutationObserver === 'function') {
+  // (js/theme.js writes its own colour at each change of theme: glass's is put back over it; and the tint of the day, or a
+  // note opening over everything, changes it)
+  new MutationObserver(() => { if (on() || barsOwned) paintBarsSoon(); })
+    .observe(root, { attributes: true, attributeFilter: ['data-tod', 'data-theme', 'data-black', 'data-look'] });
+  const watchBars = () => {
+    const head = document.head;
+    if (head) new MutationObserver(() => { if (on()) paintBarsSoon(); }).observe(head, { subtree: true, attributes: true, attributeFilter: ['content'] });
+    const layers = document.getElementById('layers');
+    // (a layer coming or going, or shown: the note's .shown comes a frame after it is put in)
+    if (layers) {
+      new MutationObserver((records) => {
+        if (on() && records.some((r) => r.type === 'childList' || r.target.parentNode === layers)) paintBarsSoon();
+      }).observe(layers, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+    paintBars();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchBars, { once: true }); else watchBars();
+}
+V.on('theme', paintBarsSoon);
+if (V.onWide) V.onWide(paintBarsSoon);
+
+V.on('tab', () => { if (on()) { requestAnimationFrame(watchPull); repullSoon(); } else unpull(); });
+window.addEventListener('resize', repullSoon);
+/* ---- end of the 2.0 hotfix block */
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enable, { once: true });
+else enable();
+
+V.glass = {
+  enabled: on,
+  /* Pull to sync (the 2.0 hotfix): syncNow() syncs, one at a time ('synced' | 'offline' | 'error'); pullSync(scroller, { wrap })
+     gives a scroller the pull with its pill. */
+  syncNow,
+  pullSync,
+  tod,
+  setTod: tod,
+  /* How long the aurora drifts with nothing touched, in ms (8 s; the tests shorten it). */
+  idleAfter(ms) { if (ms > 0) { idleMs = ms; clearTimeout(idleTimer); idleTimer = 0; if (on()) wake(); } return idleMs; },
+  /* The board's glass on any element (rounded, soft fill, the light edge, the drop shadow). */
+  surface(el, { sheen = false } = {}) {
+    if (el) { el.classList.add('g'); if (sheen) el.classList.add('sheen'); }
+    return el;
+  },
+};
+})();

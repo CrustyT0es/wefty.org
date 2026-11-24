@@ -1,0 +1,180 @@
+@layer ui {
+/* Wefty 2.0, ui/: the dock (lane B2; the look brief 2.1). One object at a phone's foot: FROST, radius 28, 12 px in from
+   the sides and 12 px above the foot (plus the safe area), 64 tall. It holds the four tabs (each 56 at 320 px, the picked
+   one a 52 px pill that slides: glass/shell.js) and the + after them, every gap in the row the same 2 px. Under it, the strip: the 12 px (plus the
+   safe area) to the screen's foot is the solid canvas (--canvas-foot), the colour Android's navigation bar takes from the
+   manifest, so the Samsung's buttons never meet a second colour; a phone's sheet ends on it. Over the content, 56 px of
+   fog before the dock (0 %, 12 % at 40 %, 60 % of the canvas at the dock's top, 100 % at its foot), so nothing readable
+   sits under or through the bar (only its last 16 px dim: a row resting whole above that reads at full contrast). Wide (a Chromebook, the PC app): the rail, with the + under the mark.
+
+   Where each thing is comes from the tokens alone (--dock-h, --dock-inset, --dock, --safe-bottom), so it is right in the
+   first frame and never measured: ui/dock.js only reads the keyboard (--kb, html.g-typing) and keeps the bars a screen
+   registers. The + is two nodes in one place: the dock's own (.dock-plus, in nav.tabs) on every tab root but Notes,
+   where Notes' own .fab (it stays in Notes' main.view) is placed on the same spot; exactly one is painted at a time. */
+
+html {
+  --plus: 56px;          /* the + (the main button's gradient and gloss; round as today in "as before": --r-plus) */
+  --dock-pad: var(--s1); /* the dock's inside edge: the tabs' and the +'s */
+  --fog-h: 56px;         /* the fog before the dock */
+  --fog-at-dock: 60%;    /* how much of the canvas the fog has reached at the dock's top (94 % in lite) */
+  --fog-fade: var(--s4); /* the part of the fog that dims: only its last 16 px, where a row is cut by the dock's top anyway,
+                            so a row resting whole above it reads at full contrast (the gate's contrast check) */
+  --tab-gap: calc(var(--s1) / 2);  /* between the tabs and before the +: one even rhythm across the bar (row_line) */
+  --strip: calc(var(--dock-inset) + var(--safe-bottom, 0px));  /* the solid strip under the dock */
+  --kb: 0px;             /* the keyboard's height over the page (ui/dock.js; an iPhone's, where the page isn't resized) */
+}
+html.lite { --fog-at-dock: 94%; }
+
+/* ================================================================== a phone: the dock */
+
+@media (max-width: 899px) {
+  /* The screens end at the dock's top: nothing scrolls under the dock or the strip (no words read through the frost, no
+     card under the +). Their last 56 px are fogged, and a list ends with that much room, so its last row is clear. */
+  #app.ready:not(.gate):not([data-view=settings]) > main.view {
+    margin-bottom: var(--dock); padding-bottom: var(--fog-h); scroll-padding-bottom: var(--fog-h);
+  }
+  html.g-typing #app.ready:not(.gate) > main.view { margin-bottom: 0; padding-bottom: 0; }
+  #app.ready:not(.gate) > main.view[data-tab=notes] { padding-bottom: 0; }
+  /* (Chat's box is its own foot, floating over the conversation: it sits right over the dock, a gap of its own 10 px
+     padding and 2 px, the dock's own 12 px rhythm, with no fog between, so the screen has no empty band under the box) */
+  #app.ready:not(.gate) > main.view[data-tab=claude] { padding-bottom: calc(var(--s1) / 2); scroll-padding-bottom: 0; }
+  #app.ready:not(.gate) > main.view[data-tab=notes] .list-column { scroll-padding-bottom: var(--fog-h); }
+  #app.ready:not(.gate) > main.view:has(.files-main.picking) { scroll-padding-bottom: 190px; }  /* (Drive's pick bar, as glass had it) */
+  /* (the tour's offer: over the dock, where a toast goes) */
+  .tour-offer { bottom: calc(var(--dock) + var(--toast-gap)); }
+  /* Notes' pick bar takes the dock's place while picking: on the strip, the dock's width, solid ground (no words read
+     through it), over the dock, which it covers whole (no :has() on #app: it would be matched again on every change in
+     the screen, a tab's draw included). (Notes' list keeps glass's 170 px under
+     its last card: the room the pick bar needs. Placed inside main.view, which ends at the dock's top, the bar rode
+     up by the dock's height over the list, the dock still showing under it.) */
+  .notes-layout > .pick-bar {
+    position: fixed; left: var(--dock-inset); right: var(--dock-inset); bottom: var(--strip);
+    background: var(--glass-light), var(--sheen), var(--solid-bar); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+
+  #app.ready:not(.gate) > nav.tabs {
+    left: var(--dock-inset); right: var(--dock-inset); bottom: var(--strip);
+    height: var(--dock-h); min-height: 0; padding: var(--dock-pad); padding-right: calc(var(--dock-pad) + var(--plus) + var(--tab-gap));
+    gap: var(--tab-gap); align-items: center; border-radius: var(--r28);
+    background: var(--frost-bar); -webkit-backdrop-filter: var(--frost-filter); backdrop-filter: var(--frost-filter);
+    /* (its rims and no drop shadow: the fog under it is the canvas, and a shadow would fall into the strip and the
+       gutters, which stay the bar's one colour with no step) */
+    box-shadow: var(--e-1);
+  }
+  html.lite #app.ready:not(.gate) > nav.tabs { background: var(--glass-light), var(--sheen), var(--solid-bar); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #app.ready:not(.gate) > nav.tabs > .tab {
+    flex: 1 1 0; height: calc(var(--dock-h) - var(--dock-pad) * 2); min-height: 0; border-radius: var(--r22);
+    font: var(--t-micro) var(--font); font-weight: var(--w-medium);  /* (tab names: 12/16 500) */
+  }
+  #app.ready:not(.gate) > nav.tabs > .tab.on .tab-label { font-weight: var(--w-semi); }
+  /* the picked pill: the tab's width, 52 tall, radius 22 (glass/shell.js moves it) */
+  #app.ready:not(.gate) > nav.tabs > .g-tabslide i {
+    width: 100%; height: calc(var(--dock-h) - var(--dock-pad) * 3); border-radius: var(--r22);
+    box-shadow: inset 0 1px 0 var(--picked-edge), inset 0 0 0 1px var(--picked-ring);  /* (no drop: it would fall into the strip) */
+  }
+
+  /* The +: the dock's own, at its right end... */
+  #app.ready:not(.gate) > nav.tabs > .dock-plus {
+    position: absolute; top: var(--dock-pad); right: var(--dock-pad); margin: 0;
+  }
+  /* ...and on Notes, Notes' own on the same spot (the dock's goes: one + in every frame) */
+  #app.ready[data-view=notes] > nav.tabs > .dock-plus { visibility: hidden; }
+  #app.ready:not(.gate) > main.view[data-tab=notes] > .fab {
+    position: fixed; right: calc(var(--dock-inset) + var(--dock-pad)); bottom: calc(var(--strip) + var(--dock-pad)); left: auto; top: auto;
+  }
+
+  /* The keyboard up (html.g-typing, ui/dock.js): the dock leaves (glass.css slides it away, its pin
+     test_the_tab_bar_slides_away_while_the_keyboard_is_up_and_comes_back) and Notes' + leaves with it. */
+  html.g-typing #app.ready:not(.gate) > main.view[data-tab=notes] > .fab {
+    bottom: calc(var(--strip) + var(--dock-pad)); translate: 0 calc(100% + var(--dock) + var(--s2)); opacity: 0; pointer-events: none;
+    transition: translate var(--d-exit) var(--ease-in), opacity var(--d-fade) var(--ease-out);
+  }
+  html.g-typing.calm #app.ready:not(.gate) > main.view[data-tab=notes] > .fab { translate: none; }
+
+  /* The fog, and the strip under the dock: one layer from 56 px over the dock to the screen's foot, under the dock, over
+     the content, never hit. Settings (no dock) keeps only the strip. */
+  #app.ready:not(.gate)::after {
+    content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--fog-h) + var(--dock-h) + var(--strip));
+    pointer-events: none; opacity: 1;
+    background: linear-gradient(to bottom,
+      transparent 0,
+      transparent calc(var(--fog-h) - var(--fog-fade)),
+      color-mix(in srgb, var(--canvas-foot) var(--fog-at-dock), transparent) var(--fog-h),
+      var(--canvas-foot) calc(var(--fog-h) + var(--dock-h)),
+      var(--canvas-foot));
+  }
+  #app.ready[data-view=settings]::after { height: var(--strip); background: var(--canvas-foot); }
+  #app.ready[data-view=claude]::after {
+    height: calc(var(--dock-h) + var(--strip));
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--canvas-foot) var(--fog-at-dock), transparent), var(--canvas-foot));
+  }
+  html.g-typing #app.ready:not(.gate)::after { opacity: 0; }
+
+  /* A phone's sheet ends on the strip: its scrim and its panel stop at the strip's top, so the strip (the navigation
+     bar's colour) is never scrimmed or covered. An iPhone's sheet runs to the foot (its own fill under the home bar). */
+  @supports not (-webkit-touch-callout: none) {
+    .layer.ui-host { bottom: var(--strip); --safe-bottom: 0px; }
+    .layer.ui-host > .ui-scrim { bottom: var(--strip); }
+    /* (its filler under it, the kit's, would paint the strip: the strip is the canvas's own colour, which is what shows
+       past the top of the sheet's spring anyway) */
+    @media (max-width: 699px) {
+      .layer.ui-host > .sheet:not(.help-sheet) { box-shadow: var(--e-4); clip-path: inset(calc(var(--dock-h) * -2) calc(var(--dock-h) * -2) 0); }
+    }
+  }
+
+  /* A screen's own bar rides the keys where the page is not resized for them (an iPhone): 8 px above them. */
+  html[data-kb] :is(.editor-layer.shown .editor-tools, .chat-composer, .layer.study-layer .study-foot, [data-dock-bar]):not(nav.tabs) {
+    translate: 0 calc(var(--kb) * -1);
+  }
+}
+
+/* The + itself (both widths): the main button's gradient and gloss, 56 square. */
+.dock-plus {
+  display: grid; place-items: center; flex: none; width: var(--plus); height: var(--plus); padding: 0; border: 0;
+  border-radius: var(--r-plus); color: var(--on-brand); background: var(--grad-gloss), var(--grad-brand); box-shadow: var(--depth-primary);
+  cursor: pointer;
+}
+/* (the +'s glow stays on the dock: never into the strip under it or the gutter beside it) */
+@media (max-width: 899px) {
+  #app.ready:not(.gate) > nav.tabs > .dock-plus, #app.ready:not(.gate) > main.view[data-tab=notes] > .fab {
+    clip-path: inset(calc(var(--plus) * -1) calc(var(--dock-pad) * -1) calc(var(--dock-pad) * -1) calc(var(--plus) * -1) round var(--r-plus));
+  }
+}
+.dock-plus .icon { width: 26px; height: 26px; }
+@media (max-width: 899px) {
+  #app.ready:not(.gate) > main.view[data-tab=notes] > .fab {
+    width: var(--plus); height: var(--plus); border-radius: var(--r-plus); background: var(--grad-gloss), var(--grad-brand);
+    box-shadow: var(--depth-primary);
+  }
+}
+
+/* ================================================================== wide: the rail, the + under the mark */
+
+@media (min-width: 900px) {
+  #app.ready:not(.gate) > nav.tabs > .dock-plus { order: 0; margin: 0 0 var(--s2); }
+  /* (on Notes the rail's + stays: hidden there it left a hole under the mark that came back on every other tab, critic 2's
+     must-fix 5; the rail is the app's own, as its tabs are, and Notes' own New note is the screen's one) */
+  #app.ready:not(.gate) > nav.tabs > .rail-home { order: -1; }
+  #app.ready:not(.gate) > nav.tabs > :is(.tab, .rail-spacer, .rail-me, .g-tabslide) { order: 1; }
+  /* The toasts' slot: from the content's left edge, 24 px over the foot; every scroller keeps 84 px under its last row
+     so it can be scrolled clear of them. */
+  #toasts { left: var(--x0); right: auto; bottom: var(--s6); }
+  /* (where Notes shows its folder column, the content starts at the list: a toast at x 100 sat on the folders' Archive
+     and Trash, and the brief wants no toast on a button. It starts over the list, which keeps its room under its last
+     row, as wide as the list's narrowest) */
+  @media (min-width: 1200px) {
+    #app.ready[data-view=notes] ~ #toasts { left: calc(var(--rail) + 236px + var(--s4)); width: 300px; }
+  }
+  @media (min-width: 1440px) {
+    #app.ready[data-view=notes] ~ #toasts { left: calc(var(--rail) + 252px + var(--s4)); }
+  }
+  /* (Chat's conversation scrolls in its own column over its box, which sits at the foot: a toast rises over the box,
+     as on a phone; padding main.view floated the box 84 px over the foot) */
+  #app.ready:not(.gate) > main.view:not([data-tab=notes]):not([data-tab=settings]):not([data-tab=claude]),
+  #app.ready:not(.gate) > main.view[data-tab=notes] .list-column,
+  /* (Settings scrolls in its two panes: padding main.view ended both 84 px over the window's foot, cut mid-card) */
+  #app.ready:not(.gate) > main.view[data-tab=settings] .settings-wide > :is(.set-side, .set-main) {
+    padding-bottom: calc(var(--toast-h) + var(--s6) + var(--s2));
+  }
+}
+}

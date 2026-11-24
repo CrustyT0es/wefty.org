@@ -1,0 +1,179 @@
+/* Wefty 2.0: the header and the short screens (wave B3; LOOK-BRIEF 2.1 "Header").
+
+   One header on Today, Share, Chat and Settings (V.appHead, js/util.js) and Notes' own head (.list-title) lined up to it
+   by CSS alone:
+   - --x0 (ui/tokens.css) is the one left edge: every title, chip row, first card and section starts on it. A phone's
+     screens are padded by it; from 900 px the content starts beside the rail at x 100 (the Chromebook's one row), a
+     second pane (Notes' list, a Settings page, Today's right column) keeps its own edge.
+   - A phone's header is one row, --head-h tall under the notch (--safe-top): the title (or Today's mark) on --x0, its
+     round buttons and your picture on the right edge. A screen with a Back arrow (Settings) keeps the arrow on its own
+     row above the big title.
+   - It stays when the page scrolls (sticky) and collapses on the page's own scroll timeline, never a script per frame:
+     the frost comes up under it (and under the status bar), the thread and the line under the title go, the title
+     shrinks where it stands (one title in every frame: the same node, never a copy), and its circles keep their size.
+     Today's row (the mark, search, ⋯, the picture) never changes: only its frost comes up.
+   Where the browser has no scroll timelines the header is simply sticky and frosted. At time scale 0 (html.instant) a
+   scroll timeline keeps a length (0 s would leave it collapsed at once): see @layer force at the end. */
+
+@layer ui {
+
+html { --head-title-size: 28px; --head-title-line: 34px; }
+
+/* One title size on every screen and both widths: Notes' own, 28/34 (glass/notes.css shrinks it to fit a long folder's
+   name on a phone). */
+main.view header.app-head.page-head .head-title h1 {
+  margin: 0; padding: 0; font: var(--t-display) var(--font-display); letter-spacing: var(--ls-display);
+  font-size: var(--head-title-size); line-height: var(--head-title-line);
+}
+
+/* ================================================================== a phone */
+@media (max-width: 899px) {
+  /* ---- the one left edge */
+  main.view > .page,
+  main.view .notes-layout > .list-column,
+  main.view .chat-app > .chat-side { padding-inline: var(--x0); }
+  main.view > .page > .section,
+  main.view .today-sec-head,
+  main.view .list-column .list-section { margin-inline: 0; padding-inline: 0; }
+  main.view .list-section > .list-go { margin-inline-start: 0; padding-inline-start: 0; }
+  /* (Notes' chips scroll edge to edge, the first one on --x0) */
+  main.view .list-column > .chips { margin-inline: calc(-1 * var(--x0)); padding-inline: var(--x0); }
+  /* (Today's week strip the same: classic's 16 px bleed ran 4 px past a 320 px screen's 12 px gutter) */
+  main.view > .page.today .today-week-days { margin-inline: calc(-1 * var(--x0)); padding-inline: var(--x0); scroll-padding-inline: var(--x0); }
+
+  /* ---- the row */
+  main.view :is(header.app-head.page-head, .list-column > .list-title) {
+    position: sticky; top: 0; z-index: var(--z-raise-2);
+    margin-inline: calc(-1 * var(--x0)); padding-inline: var(--x0);
+    padding-top: var(--safe-top); padding-bottom: var(--head-foot, 0px); min-height: calc(var(--head-h) + var(--safe-top) + var(--head-foot, 0px));
+    align-items: center;
+  }
+  main.view :is(header.app-head.page-head, .list-column > .list-title):has(> .head-me) {
+    padding-top: var(--safe-top); padding-right: calc(var(--x0) + var(--hit) + 8px);
+    min-height: calc(var(--head-h) + var(--safe-top) + var(--head-foot, 0px)); align-items: center;
+  }
+  main.view :is(header.app-head.page-head, .list-column > .list-title) > .head-me {
+    position: absolute; top: calc(var(--safe-top) + (var(--head-h) - var(--hit)) / 2); right: var(--x0); margin: 0;
+  }
+  main.view header.app-head.page-head:has(> .head-me) > :is(.icon-btn, .head-home, .btn),
+  main.view .list-column > .list-title:has(> .head-me) > :is(.list-tools, .title-back) { align-self: center; }
+  main.view header.app-head.page-head .head-title { padding: 0; }
+  /* (a title with a line under it (Share's) keeps its place in the row, the line under the row: centred together, the
+     title sat 9 px higher than on every other screen and jumped on every switch to Share and back) */
+  main.view header.app-head.page-head:has(.head-sub) { align-items: flex-start; }
+  main.view header.app-head.page-head:has(.head-sub) .head-title { padding-top: calc((var(--head-h) - var(--head-title-line)) / 2); }
+  main.view .list-column > .list-title h1 { margin: 0; padding: 0; }
+  main.view .list-column > .list-title .title-stack { min-height: var(--hit); }
+  /* (Notes keeps its thread under the row: room for it under the row's --head-h) */
+  main.view .list-column > .list-title { --head-foot: 24px; }
+  /* (Notes' row is a grid in a folder: its crumbs' row and the title under it. Its 44 px controls sit in the head-h row's
+     middle, as your picture does, and a folder's name starts under them) */
+  html main.view .list-column > .list-title,
+  html main.view .list-column > .list-title:has(> .head-me) {
+    padding-top: calc(var(--safe-top) + (var(--head-h) - var(--hit)) / 2);
+    padding-bottom: calc(var(--head-foot) + (var(--head-h) - var(--hit)) / 2);
+  }
+
+  /* ---- Settings: the Back arrow on its own row, the big title under it on --x0. Stuck, the header keeps only one
+     row: it sticks a row high (top: -head-h), the arrow comes down into the row that stays and the title moves
+     beside it, smaller (below, on the scroll timeline). */
+  main.view :is(.settings-home, .settings-sub) > header.app-head.page-head {
+    top: calc(-1 * var(--head-h)); flex-wrap: wrap; row-gap: 0; padding-bottom: 0;
+    min-height: calc(var(--head-h) * 2 + var(--safe-top));
+  }
+  main.view :is(.settings-home, .settings-sub) > header.app-head > .head-back { margin-left: calc((var(--hit) - 24px) / -2); }
+  main.view :is(.settings-home, .settings-sub) > header.app-head > .head-title {
+    flex: 1 0 100%; padding: 0; min-height: var(--head-h); display: flex; align-items: center;
+  }
+
+  /* ---- the frost: under the row (and the status bar above it), only once the page has moved */
+  main.view :is(header.app-head.page-head, .list-column > .list-title)::before {
+    content: ""; position: absolute; inset: 0; z-index: var(--z-under); pointer-events: none;
+    background: color-mix(in srgb, var(--solid-canvas) 95%, transparent); -webkit-backdrop-filter: var(--frost-filter); backdrop-filter: var(--frost-filter);
+    box-shadow: inset 0 -1px 0 var(--rim-hair); opacity: 0;
+  }
+  main.view :is(.settings-home, .settings-sub) > header.app-head::before { top: var(--head-h); }
+  html.lite main.view :is(header.app-head.page-head, .list-column > .list-title)::before {
+    background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}
+
+/* ---- the collapse, on the page's own scroll timeline (the compositor's: no script per frame). One title in every
+   frame: the h1 shrinks where it stands (its left edge kept), the circles keep their size. */
+@supports (animation-timeline: scroll()) {
+  @media (max-width: 899px) {
+    main.view :is(header.app-head.page-head, .list-column > .list-title)::before {
+      animation: ui-head-frost var(--ease-linear) both; animation-timeline: scroll(nearest block); animation-range: 0px 24px;
+    }
+    main.view header.app-head.page-head .head-title h1,
+    main.view .list-column > .list-title .title-line h1 {
+      transform-origin: 0 50%; animation: ui-head-title var(--ease-linear) both; animation-timeline: scroll(nearest block);
+      animation-range: 0px 40px;
+    }
+    main.view header.app-head.page-head .head-sub {
+      animation: ui-head-sub var(--ease-linear) both; animation-timeline: scroll(nearest block); animation-range: 0px 24px;
+    }
+    main.view :is(.settings-home, .settings-sub) > header.app-head::before { animation-range: calc(var(--head-h) - 16px) var(--head-h); }
+    main.view :is(.settings-home, .settings-sub) > header.app-head > .head-back {
+      animation: ui-head-back var(--ease-linear) both; animation-timeline: scroll(nearest block); animation-range: 0px var(--head-h);
+    }
+    main.view :is(.settings-home, .settings-sub) > header.app-head .head-title h1 {
+      animation-name: ui-head-beside; animation-range: 0px var(--head-h);
+    }
+  }
+  @keyframes ui-head-frost { to { opacity: 1; } }
+  @keyframes ui-head-title { to { scale: .8; } }
+  @keyframes ui-head-sub { to { opacity: 0; } }
+  @keyframes ui-head-back { to { translate: 0 var(--head-h); } }
+  @keyframes ui-head-beside { to { translate: calc(var(--hit) + 4px) 0; scale: .74; } }
+}
+
+/* (under 340 px the gutter is 12: Flash cards' count keeps inside it, on its icon's corner) */
+@media (max-width: 339px) {
+  main.view > .page.today .today-tile .tile-count { right: calc(var(--x0) / -3); }
+}
+/* (the last quick action's name, when it is wider than its tile, runs over the gap on its left, never past the gutter:
+   centred on its tile while it fits. Its words are left to right whatever the line's direction) */
+@media (max-width: 899px) {
+  main.view > .page.today .today-tile:last-child .tile-label { direction: rtl; min-width: 0; }
+}
+
+/* ================================================================== wide: the Chromebook's one row at x 100 */
+@media (min-width: 900px) {
+  main.view > .page.today.wide { max-width: none; margin-inline: 0; padding-inline: calc(var(--x0) - var(--rail)); }
+  main.view > .page:not(.today):not(.settings) { margin-inline: 0; padding-inline: calc(var(--x0) - var(--rail)); }
+  main.view > .page > .section,
+  main.view .today-sec-head,
+  main.view .set-main > .set-title { margin-inline: 0; padding-inline: 0; }
+  main.view .chat-side,
+  main.view .settings-wide > .set-side { padding-inline-start: calc(var(--x0) - var(--rail)); }
+  /* (Notes' list is a second pane, whose own edge is where its rows stand: the search box, New note, the title, the
+     sections and the cards (each 4 px in from the list, round 2's R2-12, the list itself 4 px wider each side)) */
+  main.view .notes-layout > .list-column { padding-inline: 14px; }
+  main.view .list-column > :is(.list-title, .list-head) { padding-inline: 0; }
+  main.view .list-column > .list { margin-inline: -4px; }
+  main.view .list-column .list-section { margin-inline: 4px; padding-inline: 0; }
+  main.view .list-section > .list-go { margin-inline-start: 0; padding-inline-start: 0; }
+}
+
+}
+
+/* At time scale 0 (the test profile) every duration is 0 s, and calm's and the system's reduced motion .01 ms; a scroll
+   timeline with no length sits at its end at once (collapsed with nothing scrolled): these keep a length, which on a
+   scroll timeline is only a share of the scroll (a collapse follows the finger, so calm keeps it too). */
+@layer force {
+@supports (animation-timeline: scroll()) {
+  @media (max-width: 899px) {
+    html main.view :is(header.app-head.page-head, .list-column > .list-title)::before,
+    html main.view header.app-head.page-head :is(.head-title h1, .head-sub, .head-back),
+    html main.view .list-column > .list-title .title-line h1 { animation-duration: 1s !important; animation-delay: 0s !important; }
+  }
+}
+}
+
+/* A tab's old screen, held under the new one while it comes in (ui/tabs.js aside(): its own nodes in a second main.view
+   of the old tab, so they look as they did), never hit; gone with the new one's arrival. (In @layer ui, as the gate's lint
+   asks: nothing outside it sets main.view's z-index.) */
+@layer ui {
+#app > main.view.ui-tab-old { z-index: var(--z-under); pointer-events: none; }
+}

@@ -1,0 +1,51 @@
+@layer ui {
+/* Wefty 2.0, lane A4: the W's turn at the start, without its hesitation (F9, OWN-46: the owner's "a little stiff" and "it
+   hesitates when spinning"). index.html's gs-turn was sampled from springs at even steps of time: the turn slowed almost to a
+   stop as it swung past and came back (0.7 degrees a frame for 300 ms), then sped up again, then stopped: a hesitation.
+   wy-turn is the very same keyframes (the same poses, so the same path and the same W), only placed at other moments: each
+   keyframe at the time a smooth fall of speed reaches it (speed ~ (t + .1) * (1 - t)^2.5 over the .9 s, worked out from
+   the angle each step turns), so the W turns fastest at the start and slows down all the way to its one rest, at about .8 s,
+   never slowing and speeding up again. How long the W shows, its sway after and how it leaves are unchanged here (it
+   leaves where it is: glass/loading.js). Nothing else in the splash is touched. */
+@keyframes wy-turn {
+  0% { transform: translateY(13%) rotateY(-80deg) rotateX(20deg) rotateZ(-10deg) scale(.74); }
+  5.23% { transform: translateY(13%) rotateY(-72.4deg) rotateX(20deg) rotateZ(-10deg) scale(.74); }
+  10.69% { transform: translateY(13%) rotateY(-62.6deg) rotateX(20deg) rotateZ(-10deg) scale(.74); }
+  16.01% { transform: translateY(12.9%) rotateY(-51.9deg) rotateX(19.9deg) rotateZ(-10deg) scale(.754); }
+  21.21% { transform: translateY(12.1%) rotateY(-40.9deg) rotateX(19.2deg) rotateZ(-9.8deg) scale(.785); }
+  26.14% { transform: translateY(10.6%) rotateY(-30.4deg) rotateX(17.8deg) rotateZ(-9.2deg) scale(.826); }
+  30.86% { transform: translateY(8.7%) rotateY(-20.7deg) rotateX(15.8deg) rotateZ(-8.3deg) scale(.873); }
+  35.25% { transform: translateY(6.5%) rotateY(-12.3deg) rotateX(13.4deg) rotateZ(-7.3deg) scale(.92); }
+  39.31% { transform: translateY(4.3%) rotateY(-5.2deg) rotateX(10.9deg) rotateZ(-6.1deg) scale(.964); }
+  43.03% { transform: translateY(2.3%) rotateY(.5deg) rotateX(8.2deg) rotateZ(-4.8deg) scale(1.002); }
+  46.29% { transform: translateY(.5%) rotateY(4.8deg) rotateX(5.7deg) rotateZ(-3.5deg) scale(1.032); }
+  49.1% { transform: translateY(-.9%) rotateY(7.8deg) rotateX(3.3deg) rotateZ(-2.3deg) scale(1.053); }
+  51.47% { transform: translateY(-2%) rotateY(9.7deg) rotateX(1.1deg) rotateZ(-1.2deg) scale(1.066); }
+  53.41% { transform: translateY(-2.6%) rotateY(10.6deg) rotateX(-.8deg) rotateZ(-.2deg) scale(1.071); }
+  54.92% { transform: translateY(-3%) rotateY(10.7deg) rotateX(-2.3deg) rotateZ(.6deg) scale(1.07); }
+  56.3% { transform: translateY(-3%) rotateY(10.2deg) rotateX(-3.5deg) rotateZ(1.3deg) scale(1.063); }
+  57.57% { transform: translateY(-2.8%) rotateY(9.3deg) rotateX(-4.3deg) rotateZ(1.8deg) scale(1.053); }
+  58.97% { transform: translateY(-2.5%) rotateY(8.1deg) rotateX(-4.8deg) rotateZ(2.2deg) scale(1.04); }
+  60.48% { transform: translateY(-2%) rotateY(6.8deg) rotateX(-5.1deg) rotateZ(2.4deg) scale(1.027); }
+  62.18% { transform: translateY(-1.5%) rotateY(5.4deg) rotateX(-5deg) rotateZ(2.5deg) scale(1.015); }
+  64.08% { transform: translateY(-1%) rotateY(4deg) rotateX(-4.8deg) rotateZ(2.5deg) scale(1.003); }
+  65.98% { transform: translateY(-.5%) rotateY(2.8deg) rotateX(-4.4deg) rotateZ(2.4deg) scale(.994); }
+  68.15% { transform: translateY(-.1%) rotateY(1.7deg) rotateX(-3.8deg) rotateZ(2.2deg) scale(.987); }
+  70.48% { transform: translateY(.2%) rotateY(.8deg) rotateX(-3.1deg) rotateZ(1.9deg) scale(.983); }
+  73.63% { transform: translateY(.4%) rotateY(0deg) rotateX(-2.2deg) rotateZ(1.4deg) scale(.983); }
+  77.12% { transform: translateY(.4%) rotateY(-.4deg) rotateX(-1.3deg) rotateZ(.9deg) scale(.986); }
+  80.74% { transform: translateY(.4%) rotateY(-.5deg) rotateX(-.6deg) rotateZ(.5deg) scale(.991); }
+  84.19% { transform: translateY(.2%) rotateY(-.4deg) rotateX(-.2deg) rotateZ(.2deg) scale(.995); }
+  87.54% { transform: translateY(.1%) rotateY(-.2deg) rotateX(0deg) rotateZ(.1deg) scale(.998); }
+  90.38% { transform: translateY(0%) rotateY(-.1deg) rotateX(0deg) rotateZ(0deg) scale(1); }
+  100% { transform: translateY(0%) rotateY(0deg) rotateX(0deg) rotateZ(0deg) scale(1); }
+}
+}
+/* (index.html's own rules for the logo are in the page, unlayered: only an !important one here, in the force layer, can
+   name another set of keyframes. Lite keeps its shorter turn, calm and the system's "less motion" none, as before.) */
+@layer force {
+html #g-splash .gs-logo { animation: wy-turn .9s var(--ease-linear) both, gs-sway 6s var(--ease-linear) .9s infinite !important; }
+html.lite #g-splash .gs-logo { animation: wy-turn .6s var(--ease-linear) both !important; }
+html.calm #g-splash .gs-logo { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { html #g-splash .gs-logo { animation: none !important; } }
+}
