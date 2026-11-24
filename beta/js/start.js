@@ -323,6 +323,9 @@
     const covered = coveredTap;
     coveredTap = false;
     if (shown && NAV_OF[current] !== id && !covered && glassTab()) {
+      // (2.0, the tab's arrival: the old screen starts going in this task, on the compositor, while the new one is
+      // drawn as before; ui/tabs.js)
+      if (V.tabMove) { try { V.tabMove.leave(NAV_OF[current], id); } catch (error) { console.error(error); } }
       afterPaint(() => { tapDraw = true; try { V.go(id); } finally { tapDraw = false; } });
       return;
     }
@@ -333,6 +336,9 @@
       if (module && typeof module.again === 'function' && module.again() !== false) return;
     } catch (error) { console.error(error); }
     if (shell.view.scrollTop > 0) shell.view.scrollTo({ top: 0, behavior: smoothly() });
+    // (2.0: tapped again while it is still coming in, it is already arriving at its top: drawn afresh now, the arrival
+    // would be cut to its end in one frame)
+    else if (V.tabMove && V.tabMove.moving()) return;
     else V.go(current, { top: true });
   }
 
@@ -348,6 +354,9 @@
     // still clean; set after the new screen went in, it had to be laid out in the middle of being drawn, then again by
     // the frame. Any other draw, which may scroll to something itself (Settings' row asked for), as before.)
     const early = tapDraw && !instant();
+    // (2.0, a tab's arrival: the old screen's own nodes go under the new one while it comes in, ui/tabs.js; first,
+    // while the layout is still the frame's and their scroll places can be read for nothing)
+    if (tapDraw && V.tabMove && V.tabMove.aside) { try { V.tabMove.aside(shell.view, scrolledIn(shell.view)); } catch (error) { console.error(error); } }
     if (early && shell.view.scrollTop !== 0) shell.view.scrollTop = 0;
     shell.view.dataset.tab = view;
     shell.view.dataset.nav = NAV_OF[view];
@@ -384,6 +393,7 @@
     }
     badge();
     // (the new screen's own arrival, glass/loading.js, before anything else that hears 'tab')
+    if (V.tabMove) { try { V.tabMove.drawn(); } catch (error) { console.error(error); } }
     if (V.loading && typeof V.loading.arrive === 'function') {
       try { V.loading.arrive(current); } catch (error) { console.error(error); }
     }
@@ -519,6 +529,13 @@
     V.go('today', { top: true });
   }
 
+  /* The dock's + (2.0, ui/dock.css places it: at the dock's right end on a phone, under the mark on the rail). It is the
+     + of every tab root but Notes, whose own (.fab, in Notes' screen) takes its place there: one + at a time. */
+  function plus() {
+    return V.h('button.dock-plus', { type: 'button', 'aria-label': 'New note', title: V.appShortcuts ? 'New note (Ctrl+N)' : 'New note',
+      onclick: () => { if (V.notes && V.notes.chooseTemplate) V.notes.chooseTemplate({ fresh: true }); } }, V.icon('plus'));
+  }
+
   function buildShell() {
     let me = null;
     try { me = V.profileButton('rail-me'); } catch (error) { console.error(error); }
@@ -531,7 +548,7 @@
         // (Chat's dot while an answer is written and another screen shows; what it and the badge say, for a screen reader)
         id === 'claude' ? V.h('span.tab-dot', { hidden: true, 'aria-hidden': 'true', title: 'Writing an answer' }) : null),
       V.weave('tab-weave'), V.h('span.tab-label', { text: label }), id === 'claude' ? V.h('span.sr-only.tab-said') : null)),
-      V.h('span.rail-spacer'), me);
+      plus(), V.h('span.rail-spacer'), me);
     const view = V.h('main.view');
     shell = { nav, view, me };
     V.clear(app, nav, view);

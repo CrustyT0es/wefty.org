@@ -1690,7 +1690,9 @@ V.files = (() => {
           if (id && !lazy.queue.includes(id)) lazy.queue.push(id);
         }
         pump();
-      }, { rootMargin: '160px 0px' });
+      // (scrollMargin: the 160 px ahead also inside the screen's own scroller, which since 2.0's dock ends at the dock's
+      // top; a browser without it ignores it and makes a preview once its row is in sight)
+      }, { rootMargin: '160px 0px', scrollMargin: '160px 0px' });
     }
     lazy.observer.observe(el);
   }

@@ -442,7 +442,7 @@ let transitions = 0;
    nothing starts blank, and what is hidden on it (the pull's pill, the slim bar before a scroll) stays hidden. */
 const SLIDE_FROM = 0.6;
 function slide(was, view) {
-  if (!HAS_WAAPI) return;
+  if (!HAS_WAAPI || (V.tabMove && V.tabMove.moving())) return;  // (a tab's own arrival moves the screen: ui/tabs.js)
   const main = document.querySelector('main.view');
   if (!main) return;
   for (const item of [...main.children]) {

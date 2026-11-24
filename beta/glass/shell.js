@@ -405,14 +405,14 @@ document.addEventListener('pointerdown', (event) => {
 }, true);
 /* (A screen drawn after a tab tap is a long frame: the new screen's entrance animations would wait for the frame after it
    to begin, so a frame or two showed almost nothing between the two screens. Each one that is still waiting starts at
-   the frame the tap was handled in, so the first frame of the new screen is already partly risen in.) */
+   the frame the tap was handled in, so the first frame of the new screen is already partly risen in; never ui/tabs.js's.) */
 function startWaiting() {
   if (!on() || !document.timeline || document.timeline.currentTime == null) return;
   const view = document.querySelector('main.view');
   if (!view || typeof view.getAnimations !== 'function') return;
   const t = document.timeline.currentTime;
   for (const a of view.getAnimations({ subtree: true })) {
-    try { if (a.pending && a.playState === 'running' && a.startTime == null) a.startTime = t; } catch (error) { /* fine */ }
+    try { if (a.pending && a.playState === 'running' && a.startTime == null && !String(a.id).startsWith('ui-tab-')) a.startTime = t; } catch (error) { /* fine */ }
   }
 }
 V.on('tab', () => { if (on()) Promise.resolve().then(startWaiting); });
@@ -435,40 +435,7 @@ document.addEventListener('keydown', (event) => {
 const pointed = () => root.classList.remove('g-kbd');
 for (const type of ['pointerdown', 'mousedown', 'touchstart']) document.addEventListener(type, pointed, { capture: true, passive: true });
 
-/* A phone's on-screen keyboard: html.g-typing while a text field has the typing and the screen has got shorter than it was
-   (the keyboard took the room: Wefty asks for the page to be resized, interactive-widget=resizes-content, and an iPhone
-   shrinks only the visual viewport). glass.css slides the floating tab bar down out of the way, and back when the keyboard
-   goes (Android's Back puts the keyboard away and leaves the field focused: the height says so). */
-const KEYBOARD = 120;      // px the screen must lose before it counts as a keyboard (a phone's is 250 or more)
-let tallest = 0;
-let tallestFor = 0;        // the width `tallest` was measured at (a turned phone starts again)
-const touchy = () => { try { return window.matchMedia('(pointer: coarse)').matches; } catch (error) { return false; } };
-function screenHeight() {
-  const vv = window.visualViewport;
-  return Math.round(vv ? Math.min(window.innerHeight, vv.height * (vv.scale || 1)) : window.innerHeight);
-}
-function typingNow() {
-  const el = document.activeElement;
-  return !!(el && el !== document.body && el.matches && el.matches(TEXT_ENTRY) && !el.disabled && !el.readOnly);
-}
-function checkTyping() {
-  // (a text box has the focus: the aurora's drift is paused meanwhile, glass.css; the owner's typing lag, 1.22.2)
-  if (on() && typingNow() !== aura().classList.contains('g-field')) aura().classList.toggle('g-field', typingNow());
-  else if (!on()) aura().classList.remove('g-field');
-  if (!on() || !touchy()) { root.classList.remove('g-typing'); return; }
-  const height = screenHeight();
-  const width = window.innerWidth;
-  if (width !== tallestFor) { tallestFor = width; tallest = 0; }
-  if (height > tallest) tallest = height;
-  const typing = typingNow() && tallest - height >= KEYBOARD;
-  if (root.classList.contains('g-typing') !== typing) root.classList.toggle('g-typing', typing);
-}
-const checkSoon = () => requestAnimationFrame(checkTyping);
-document.addEventListener('focusin', checkSoon, true);
-document.addEventListener('focusout', () => setTimeout(checkTyping, 60), true);  // (focus moving to another field: no flicker)
-window.addEventListener('resize', checkTyping);
-if (window.visualViewport) window.visualViewport.addEventListener('resize', checkTyping);
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkTyping, { once: true }); else checkTyping();
+/* A phone's on-screen keyboard (html.g-typing, --kb) is ui/dock.js's now: the one visualViewport reader. */
 
 /* Pull to sync, on every main screen (the owner: "I can sync from any screen"). One behaviour: V.motion.pull on the screen's
    own scroller, its glass pill, and syncNow(): one sync at a time (a pull while one runs shows its spinner until it is done),

@@ -118,9 +118,24 @@ function afterMove(animation, ms, fn) {
 
 /* ------------------------------------------------------------------ the stack: Esc closes only the topmost */
 
-const stack = [];  // { node, close(how) }, oldest first
-function push(node, close) { const entry = { node, close }; stack.push(entry); return entry; }
-function drop(entry) { const i = stack.indexOf(entry); if (i >= 0) stack.splice(i, 1); }
+const stack = [];  // { node, close(how), back }, oldest first
+/* (lane B1) Each one is registered with V.back too (ui/nav.js: Back, a swipe and the focus going home), keeping its own
+   Esc here; the sheets the sign-in, sign-out and password code opens never are (V.back.fenced). */
+function push(node, close, kind = 'sheet') {
+  const entry = { node, close, back: null };
+  stack.push(entry);
+  const B = V.back;
+  if (B && B.push && !(kind === 'sheet' && B.fenced && B.fenced(node))) {
+    try { entry.back = B.push((how) => entry.close(how), { node, kind, esc: false,
+      opener: document.activeElement && document.activeElement !== document.body ? null : asker() }); } catch (error) { console.error(error); }
+  }
+  return entry;
+}
+function drop(entry) {
+  const i = stack.indexOf(entry);
+  if (i >= 0) stack.splice(i, 1);
+  if (entry && entry.back) { const back = entry.back; entry.back = null; try { back.done(); } catch (error) { console.error(error); } }
+}
 /* Whether `node` is the topmost open overlay (a sheet, a menu, an open drop-down list). */
 function isTop(node) {
   for (let i = stack.length - 1; i >= 0; i--) {
@@ -234,7 +249,7 @@ function sheet(wrap, panel, { close, dismissable = true } = {}) {
   }
   const ctl = { wrap, panel, scrim, close, dismissable, leaving: false, flick: null, entry: null, opened: null };
   sheets.set(panel, ctl);
-  ctl.entry = push(panel, (how) => close(how));
+  ctl.entry = push(panel, (how) => close(how), 'sheet');
   // Its entrance: a phone's sheet rises from below the screen at opacity 1; a dialog grows from what asked.
   let length = 0;
   if (!calm()) {
@@ -465,7 +480,10 @@ document.addEventListener('keydown', (event) => {
 /* What the foot of the screen claims, as the top edge of the highest thing there (page px): the tab bar on a phone, a
    full-screen note's tools and the question it asks over them, Chat's typing box, a study screen's answers. null: none. */
 const FOOT = ['#app > nav.tabs', '.editor-layer.shown:not(.g-leaving) .editor-tools', '.editor-layer.shown:not(.g-leaving) .editor-ask .ask-card',
-  '.chat-composer > :not([hidden])', '.layer.study-layer:not(.leaving) .study-foot', '.layer.study-layer:not(.leaving) .study-answers'];
+  '.chat-composer > :not([hidden])', '.layer.study-layer:not(.leaving) .study-foot', '.layer.study-layer:not(.leaving) .study-answers',
+  // (Notes' pick bar, ui/dock.js's 'pick': since it covers the dock whole on a phone, a toast's place over the dock lay
+  // on its top row, the X, "1 picked" and Pick all: critic 2's must-fix 3)
+  '.pick-bar'];
 /* How far down a thing is drawn from where it rests (screen px): the translate and transform of it and of what holds it. */
 function moved(el) {
   let dy = 0;
@@ -701,7 +719,7 @@ function menu(wrap, list, anchor, opts, close) {
     const a = box(anchor, 1);
     if (a.width * a.height < innerWidth * innerHeight * 0.4) { entry.lifted = anchor; try { motion().lift(anchor, true); } catch (error) { console.error(error); } }
   }
-  entry.entry = push(list, (how) => close(how));
+  entry.entry = push(list, (how) => close(how), 'menu');
   menus.add(entry);
   return entry;
 }
@@ -892,8 +910,13 @@ function longMenu(anchor, items, options = {}) {
   // (the title cut to one line first: the list's room is what the head leaves)
   cutTitle(panel.querySelector(':scope > .sheet-head h2'));
   fitLong(panel);
-  try { history.pushState({ ...(history.state || {}), vault: 'menu-sheet' }, ''); stepped = true; } catch (error) { /* no Back step */ }
-  window.addEventListener('popstate', back);
+  // (lane B1: its Back is V.back's one guard step, as every sheet's; Back closes it as Esc did. Without ui/nav.js, its own step.)
+  const reg = sheets.get(panel) && sheets.get(panel).entry && sheets.get(panel).entry.back;
+  if (reg && reg.setClose) reg.setClose(() => closeWith('escape'));
+  else {
+    try { history.pushState({ ...(history.state || {}), vault: 'menu-sheet' }, ''); stepped = true; } catch (error) { /* no Back step */ }
+    window.addEventListener('popstate', back);
+  }
   // (the keyboard: on its first item, as a menu's)
   requestAnimationFrame(() => { const first = panel.querySelector('button:not([disabled]), input:not([disabled])'); if (first && byKeyboard()) first.focus(); });
   return { close: () => closeWith('item'), el: panel };

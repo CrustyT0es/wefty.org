@@ -136,7 +136,7 @@
     #layers:has(> .study-layer:not(.leaving)) ~ #toasts > .toast:not(.msg-card) {
       row-gap: var(--s0-study-toast-gap); padding-block: var(--s0-study-toast-pad);
     }
-    #toasts { --s0-study-head: 54px; --s0-gutter: 16px; --s0-skip-room: 118px; --s0-study-toast-gap: 2px; --s0-study-toast-pad: 6px; }
+    #toasts { --s0-study-head: 54px; --s0-gutter: var(--x0); --s0-skip-room: 118px; --s0-study-toast-gap: 2px; --s0-study-toast-pad: 6px; }
   }
   /* (On the Chromebook the study screen is a 640 px dialog in the middle and toasts sit at the bottom right, on its
      I know it: there the toast goes in the room right of the dialog. Under 1100 px there is no such room.) */

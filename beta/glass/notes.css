@@ -399,8 +399,7 @@ html .pick-bar {
 }
 @keyframes gn-bar-in { from { opacity: 0; transform: translateY(14px) scale(.98); } }
 html.lite .pick-bar { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
-/* (a phone: over the floating tab bar, in its place, while picking) */
-@media (max-width: 899px) { html .pick-bar { left: 12px; right: 12px; bottom: calc(14px + var(--safe-bottom)); z-index: 7; } }
+/* (a phone: in the dock's place while picking, ui/dock.css) */
 html .pick-count { font: 600 15px/20px var(--font); }
 html .pick-all, html .pick-export { color: var(--accent-ink); border-radius: 13px; transition: transform var(--d-press) var(--g-ease); }
 html .pick-action { border-radius: 15px; color: var(--text-2); transition: transform var(--d-press) var(--g-ease); }

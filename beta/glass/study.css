@@ -6,7 +6,7 @@
    V.motion's helpers instead of writing your own; nothing here changes the classic look.
 
    From the boards GlassReview and GlassTestMe. One set of edges for the whole study screen:
-     --st-gut   the room at the sides (16 px on a phone, as Today's; 24 px in the dialog)
+     --st-gut   the room at the sides (--x0 on a phone, as every screen's: 12 under 340 px, else 16; 24 px in the dialog)
      --st-gap   between the answers, and between the rows of Learn
      --st-h     the height of the three answers (and Back beside them): never changes from card to card
      --st-r     the corners of the answers and Learn's choices; the cards themselves are --st-card-r
@@ -16,7 +16,7 @@
 /* ================================================================== the screen: its own canvas, its own aurora */
 
 html .study-layer {
-  --st-gut: 16px; --st-gap: 10px; --st-h: 72px; --st-r: 20px; --st-card-r: 30px;
+  --st-gut: var(--x0); --st-gap: 10px; --st-h: 72px; --st-r: 20px; --st-card-r: 30px;
   --st-chip: light-dark(rgba(255, 255, 255, .62), rgba(255, 255, 255, .07));
   --st-chip-edge: light-dark(rgba(255, 255, 255, .95), rgba(255, 255, 255, .12));
   --st-ok-ink: light-dark(#0f6b3f, #c9f3dd);

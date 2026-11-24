@@ -1,0 +1,16 @@
+/* Wefty 2.0, ui/: the full-screen layer's geometry (lane B1, ui/nav.js's V.layer) and the stage that holds a copy of
+   the thing a layer grows from. No colour of its own: the layer is the page's own surface. */
+@layer ui {
+  .ui-layer {
+    position: fixed; inset: 0; overflow: hidden;
+    background: var(--bg);
+    transform-origin: 0 0;
+    contain: layout paint;
+  }
+  .ui-layer-screen { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; }
+  .ui-layer[data-ui="leaving"] { pointer-events: none; }
+  /* with nothing to grow from it slides in over a dim: the scrim, lighter */
+  .ui-scrim.ui-layer-dim[data-ui="open"] { opacity: .6; }
+  .ui-stage { position: fixed; inset: 0; pointer-events: none; }
+  .ui-stage > .ui-ghost { position: fixed; margin: 0; box-sizing: border-box; }
+}

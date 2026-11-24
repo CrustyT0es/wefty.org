@@ -597,35 +597,16 @@ function panelChanged() {
   }
 }
 
-/* -- the slim bar the greeting folds into (a phone), and the pull to sync */
+/* -- the greeting folding away as a phone's Today scrolls, and the pull to sync */
 function topBar(p) {
   if (shrinkHandle) { shrinkHandle.destroy(); shrinkHandle = null; }
   if (V.wide && V.wide()) return;
   const hello = p.querySelector('.today-hello');
   const m = motion();
   if (!hello || !m) return;
-  const wrap = document.createElement('div');
-  wrap.className = 'g-tbar-wrap';
-  const bar = document.createElement('button');
-  bar.type = 'button';
-  bar.className = 'g-tbar g-bar';
-  bar.tabIndex = -1;
-  bar.setAttribute('aria-label', 'Back to the top');
-  const mark = V.mark ? V.mark(26, 'g-tbar-mark', { colour: true }) : null;
-  const name = document.createElement('span');
-  name.className = 'g-tbar-t';
-  name.textContent = 'Today';
-  const date = document.createElement('span');
-  date.className = 'g-tbar-d';
-  const dateText = p.querySelector('.today-date');
-  date.textContent = dateText ? dateText.textContent.replace(/^[A-Za-z]+, /, (day) => day.slice(0, 3) + ', ') : '';
-  if (mark) bar.append(mark);
-  bar.append(name, date);
-  bar.addEventListener('click', () => { if (view) view.scrollTo({ top: 0, behavior: calm() ? 'auto' : 'smooth' }); });
-  wrap.appendChild(bar);
-  // (beside the page, not in it: the page's own children are the same in every look)
-  view.insertBefore(wrap, p);
-  shrinkHandle = m.shrink(view, hello, { bar });
+  // (wave B: a phone's Today has its one header row, sticky and frosted (ui/screen.css): the greeting folds away under
+  // it and no second bar comes; the slim bar with its own mark and date sat over the row, two headers at once)
+  shrinkHandle = m.shrink(view, hello);
 }
 function pullToSync(p) {
   if (pullHandle) { pullHandle.destroy(); pullHandle = null; }

@@ -487,8 +487,18 @@ V.notes = (() => {
   /* The picked cards marked where they are (nothing redrawn, so a finger still on a card stays on it), the folds'
      counts of what's picked inside them, the Select button and the bar. */
   const foldIds = new WeakMap();  // a fold's head: the ids of the notes under it
+  function reslotToasts() {
+    const box = document.getElementById('toasts');
+    if (!box || !box.querySelector(':scope > .toast') || !(V.overlay && V.overlay.slot) || typeof requestAnimationFrame !== 'function') return;
+    const go = () => { try { V.overlay.slot(box); } catch (error) { console.error(error); } };
+    // (the test profile, time scale 0: in this task, as every move there)
+    if (V.look && V.look.timeScale && V.look.timeScale() === 0) go(); else requestAnimationFrame(go);
+  }
   function showPicked() {
     if (!parts) return;
+    // (the pick bar coming or going under a toast already up: the toast goes over it, placed in the next frame, never
+    // read mid-change; critic 2's must-fix 3)
+    if (parts.layout.classList.contains('selecting') !== picking) reslotToasts();
     parts.layout.classList.toggle('selecting', picking);
     parts.list.classList.toggle('picking', picking);
     parts.fab.hidden = picking;

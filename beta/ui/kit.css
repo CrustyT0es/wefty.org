@@ -579,7 +579,6 @@ html .aic-fields textarea.field { border-radius: revert-layer; }
 html .aic-top .aic-all { color: revert-layer; }
 html .page.today .test-go .btn { border-radius: revert-layer; }
 html .page.today .today-quiz { color: revert-layer; }
-html main.view[data-tab="today"] .g-tbar:focus-visible { outline-offset: revert-layer; }
 /* ---- end of what is given back */
 
 } /* @layer kit */

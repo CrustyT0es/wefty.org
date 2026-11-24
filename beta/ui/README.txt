@@ -32,10 +32,18 @@ this before adding to it. The look brief (section 1) and `PLAN.md` say what it l
 | `edge.css` | speed lane (A4) | the edge light: four square strips and the comet that slides along them (`.ge-strip`, `.ge-comet`) |
 | `start.css` | speed lane (A4) | the W's turn to one rest (`wy-turn`, in `@layer force` as index.html's splash CSS is unlayered); in the head, before the splash paints |
 | `firstsight.css` | first-sight lane (S0) | what must be in sight now, deleted piece by piece as the real layouts land |
+| `nav.js` | Back and the layer (B1) | `V.back` (one guard step: Back, Esc, the scrim, the X and a swipe close the one topmost thing; focus home) and `V.layer` (1.8's full-screen row) |
+| `nav.css` | Back and the layer (B1) | the layer's and `#stage`'s geometry |
+| `screen.css` | the header (B3) | `--x0`, a phone's one sticky header row and its collapse on the page's own scroll timeline, the Chromebook's edge at x 100 |
+| `dock.js` | the dock (B2) | `V.dock`: the one visualViewport reader (`g-typing`, `--kb`), the bars' table and claims |
+| `dock.css` | the dock (B2) | the dock, the fog, the strip, the + placed by the dock, the toast slot |
+| `tabs.js` | tab transition lane (wave B) | `V.tabMove`: a tab's arrival (the old screen fades on the compositor from the tap, the new one rises 8 px from the pill's side; js/start.js's tapped() and show() call `leave` and `drawn`) |
 
 Load order in `index.html` (the integrator's): the sheets after `glass/swipeback.css` as `tokens.css`, `kit.css`,
-`overlay.css`, then the lanes' own (`edge.css`, `start.css`, ...), with `firstsight.css` always LAST of all the
-stylesheets; `motion.js` right after `js/util.js` (before `glass/motion.js`, which adds to `V.motion`, and before any
+`overlay.css`, then the lanes' own (`edge.css`, `start.css`, ...), with `firstsight.css` LAST of the head's
+stylesheets; wave B's `nav.css` and `screen.css` (right after `js/util.js`) and `dock.css` (after `glass/shell.js`) are in
+the body, after the splash's element, so the W paints without waiting for them (they came after firstsight.css while
+the lanes were built, and still do); `motion.js` right after `js/util.js` (before `glass/motion.js`, which adds to `V.motion`, and before any
 other `ui/` script), then `overlay.js` (before `glass/overlays.js`, which calls `V.overlay`).
 
 A later lane adds a file of its own (never a second writer on one of these): it writes `ui/<name>.css` (in `@layer ui`)

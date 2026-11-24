@@ -173,10 +173,7 @@ html .menu-item { --g-menu-lit: light-dark(rgba(110, 80, 200, .09), rgba(255, 25
 html .menu-item:focus { background: var(--g-menu-lit); }
 @media (hover: hover) and (pointer: fine) { html .menu-item:hover { background: var(--g-menu-lit); } }
 
-/* Toasts. */
-html #toasts { bottom: calc(var(--g-bar-space) + 14px + var(--safe-bottom)); }
-/* (2.0: a toast's rise, its leave and its slot over an open sheet's buttons are ui/overlay.js's and ui/overlay.css's; calm
-   keeps the fade in below) */
+/* (2.0: a toast's slot, rise and leave are ui/overlay.js's and ui/overlay.css's; calm keeps the fade in below) */
 
 /* ================================================================== controls */
 
@@ -248,9 +245,6 @@ html .fab {
   transition: transform .16s var(--g-spring);
 }
 @media (hover: hover) and (pointer: fine) { html .fab:hover { background: var(--g-grad); } }
-/* (R2-06: the + is placed against the screen, as the floating tab bar is, so it sits 12 px above the bar whatever the
-   screen's height or the text size: placed against the screen's scrolling box it could end under the bar, or off screen) */
-@media (max-width: 899px) { html .fab { position: fixed; bottom: calc(14px + 70px + 12px + var(--safe-bottom)); } }
 
 /* Fields (a box can't carry a light layer of its own, so the focus ring and hover edge simply change). */
 html .field { transition: none; }
@@ -288,18 +282,10 @@ html .badge:not([hidden]) { animation: g-pop .55s var(--g-spring) both; }
   html { --g-bar-space: calc(98px + var(--safe-bottom)); }
   html #app.ready:not(.gate) { grid-template-rows: minmax(0, 1fr); grid-template-areas: "view"; }
   html #app.ready[data-view=settings] { --g-bar-space: 0px; }
-  html .tabs {
-    position: fixed; left: 12px; right: 12px; bottom: calc(14px + var(--safe-bottom)); z-index: 5;
-    min-height: 0; height: 70px; padding: 0 4px; border: 0; border-radius: 26px; background: var(--g-bar);
-    -webkit-backdrop-filter: var(--g-blur); backdrop-filter: var(--g-blur);
-    box-shadow: inset 0 1px 0 var(--g-hi), inset 0 0 0 1px var(--g-ring), 0 16px 40px light-dark(rgba(76, 52, 160, .22), rgba(4, 2, 14, .6));
-    justify-content: stretch;
-  }
-  html.lite .tabs { background: var(--g-bar-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
-  html .tabs .tab { flex: 1 1 0; max-width: none; min-height: 70px; height: 70px; border-radius: 22px; }
-  /* The screens scroll under the bar and keep their last row clear of it. */
+  /* (where it is, its size, its glass, the tabs' size and the screens' room under it: ui/dock.css, lane B2) */
+  html .tabs { position: fixed; z-index: 5; border: 0; justify-content: stretch; }
+  html .tabs .tab { max-width: none; }
   html .view { padding-bottom: var(--g-bar-space); }
-  html .view[data-tab=notes] { padding-bottom: 0; }
   /* (Notes' list leaves the pick bar and the floating tab bar room, 170 px, always: the list's length never changes as picking starts and ends) */
   html .view[data-tab=notes] .list-column:not(.searching),
   html .view[data-tab=notes] .notes-layout.selecting .list-column { padding-bottom: calc(170px + var(--safe-bottom)); }
@@ -307,15 +293,9 @@ html .badge:not([hidden]) { animation: g-pop .55s var(--g-spring) both; }
   html .view[data-tab=notes] .list-column { overflow-anchor: none; }
   /* (round-3 merge: something brought into sight, by the keyboard's focus or a scrollIntoView, stops above the floating
      bar, never under it: a long press there landed on the bar, so a card's menu never opened) */
-  html .view, html .view[data-tab=notes] .list-column { scroll-padding-bottom: var(--g-bar-space); }
-  html .view:has(.files-main.picking) { scroll-padding-bottom: 190px; }  /* (classic's, which out-weighed the line above before the layers) */
-  /* A fade under the bar, like the board's, so the last words don't run into the glass. */
-  html #app.ready:not(.gate):not([data-view=settings])::after {
-    content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(128px + var(--safe-bottom)); z-index: 4; pointer-events: none;
-    background: linear-gradient(180deg, light-dark(rgba(239, 233, 255, 0), rgba(11, 9, 24, 0)), light-dark(rgba(239, 233, 255, .5), rgba(11, 9, 24, .5)) 55%, light-dark(rgba(239, 233, 255, .72), rgba(11, 9, 24, .72)));
-  }
-  html[data-black] #app.ready:not(.gate):not([data-view=settings])::after { background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, .55) 55%, rgba(0, 0, 0, .8)); }
-  html .tour-offer { bottom: calc(var(--g-bar-space) + 8px); }
+  html .view { scroll-padding-bottom: var(--g-bar-space); }
+  /* (the fog and the strip under the dock: ui/dock.css; their layer's place in the stack here) */
+  html #app.ready:not(.gate)::after { z-index: 4; }
 }
 
 /* Both: the tab itself. Its words are the one place a colour fades (a few letters, no layout): white as the pill arrives,
@@ -529,7 +509,6 @@ html .note-title { border-radius: 12px; }
   html.g-typing { --g-bar-space: 0px; }
   html #app.ready:not(.gate)::after { transition: opacity .26s var(--g-ease); }
   html.g-typing #app.ready:not(.gate)::after { opacity: 0; }
-  html.g-typing .fab { bottom: calc(12px + var(--safe-bottom)); }
   html.g-typing.calm #app > nav.tabs { transform: none; }
 }
 
