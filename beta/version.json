@@ -46,7 +46,7 @@
   "Right-click, two-finger tap or a long press opens more options on almost everything: notes, folders, flash cards, chats, pictures and files.",
   "Snap a page: take a photo of your notes or a handout (from Today, a new note or Chat) and AI turns it into a tidy note you check before it's saved. Share links, screenshots and PDFs into Wefty from other apps; on an iPhone, copy them and tap Paste into Wefty."
  ],
- "build": "1.22.6-52d37bf2585f",
+ "build": "1.22.6-dab3799c429f",
  "files": {
   "chat/index.html": {
    "sha256": "01f672bcbea6f7fa9f01d77167523683a8f482d0874f9cc5f20de69621bfe0b6",
@@ -469,8 +469,8 @@
    "size": 32607
   },
   "js/start.js": {
-   "sha256": "be27eff036e95b7e8260ca6d3e2322c3d784cedb5026dc8be9a60bc9afc6e042",
-   "size": 179808
+   "sha256": "716da85020e7d0d01aad12fa860762aa1641504a8322b99161d999cc2a06d37a",
+   "size": 181187
   },
   "js/starthere.js": {
    "sha256": "0930205a2307d0dc7ff483492c1b8f8545c9b286164b5d6e61be596fce41e1a2",
@@ -585,7 +585,7 @@
    "size": 379606
   },
   "sw.js": {
-   "sha256": "3d94345cfbfbdfa5b3215071a9a9b663b756e13a52fa091cc5ac431a28465297",
+   "sha256": "81b6e815ef89c803d27a090542d8fec5b6945cc89336604dccf7ae880aa53668",
    "size": 13539
   },
   "terms.html": {
@@ -649,8 +649,8 @@
    "size": 4781
   },
   "ui/tabs.js": {
-   "sha256": "7ecf7d860c8a8136f32e6deb8472519d00a6f588ca635bc9a92e5aa962a935b3",
-   "size": 25801
+   "sha256": "1ba8905678006b9e01678b43e9e6a8f5cd5bb7844beedb1e8976faa822c9e571",
+   "size": 26809
   },
   "ui/tokens.css": {
    "sha256": "3cf306e5a048c01a8d533b15fd365ae64300a6078a02f7305d6fe10ea3a4c635",

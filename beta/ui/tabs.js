@@ -5,9 +5,10 @@
    What a tab tapped does now (js/start.js's tapped() and show() call this):
      - in the tap's own task the pill starts (glass/shell.js, as before) and the old screen's content eases down to
        85 % (D.press, 90 ms, linear) while it waits for the new one: never a held dim screen, never an empty one;
-     - in the pill's first frame (its requestAnimationFrame, js/start.js) the old screen's own nodes go where the new
-       one will be drawn over them (aside(): a second main.view of the old tab, inert, its scroll places kept, only its
-       screenful in sight drawn again), so that work is that frame's and never the new screen's draw's (fix round 3);
+     - as the finger presses the tab (prepare(), on its pointerdown), else in the pill's first frame (js/start.js), the
+       old screen's own nodes go where the new one will be drawn over them (aside(): a second main.view of the old tab, inert, its scroll places kept, only its
+       screenful in sight drawn again), so that work is done while the finger is down, never in the new screen's draw
+       (fix round 3);
      - the new screen is drawn exactly when it was before (the task right after the pill's first frame, never later);
        the old one stays where it had got to while the new one's content comes up over it from 60 % (D.fade, 'out'),
        and goes from about half of what it showed in UNDER_MS, its header and top band at once: a fade-through over
@@ -218,8 +219,8 @@ function leave(from, to) {
 }
 
 /* The old screen, held under the new one while it comes in (critic 2's must-fix 1: with one screen on the glass the
-   change was a cut whatever the fades did). js/start.js's tapped() asks for this in the pill's first frame, right
-   after leave() (show() calls it again, which then only adopts what is held, or holds it then for a draw nothing held
+   change was a cut whatever the fades did). js/start.js asks for this on the tab's pointerdown (prepare()), else
+   (a key, a click with no press first) in the pill's first frame right after leave() (show() calls it again, which then only adopts what is held, or holds it then for a draw nothing held
    for: a page that wasn't painted): the
    old screen's own nodes (never a clone) go into a second main.view of their own, its data-tab the old one so every
    rule that drew them still does, inert and hidden from a screen reader, under main.view (#app is a stacking context:
@@ -227,12 +228,13 @@ function leave(from, to) {
    Fix round 3 (critic 3):
      - only the screenful in sight is drawn again: every part out of sight is locked first (content-visibility hidden at
        the size it had, so nothing in sight moves), so the moved tree is not styled and laid out again in the new
-       screen's draw, and the move is made a frame before that draw (must-fix 3: the first new frame came 40 ms late
+       screen's draw, and the move is made while the finger is still down (must-fix 3: the first new frame came 40 ms late
        on the phone, 80 at the Chromebook's size); a part above the screenful is left as it is;
      - its scroll places go back in this same task, before anything is painted (must-fix 1: put back a frame later,
        the first frame showed the held screen at its top; tests/test_wefty_20_tabmove.py films it);
-     - its header and the parts of its top band (BAND) go in the first three frames that show the new screen (drawn(),
-       from where the leave held them): they lay over the new header's words as a second page (must-fix 2).
+     - its header and the parts of its top band (BAND) are all but gone (BAND_FROM, then nothing two frames on) from the
+       first frame that shows the new screen (drawn()): they lay over the new header's words as a second page
+       (must-fix 2).
    Everything is read first (the layout is still the frame's), then written; all of it is undone in forget(). */
 let held = null;
 function forget() {
@@ -253,7 +255,8 @@ const DEEPEST = 14;     // (how far down a part in sight is looked into for its 
    those of them still near the top (BAND_PX under the header at most), never a list's own content. */
 const BAND = '.today-greet, .today-line, .list-column > .chips, .share-switch, [data-ui-band]';
 const BAND_PX = 12;
-const BAND_MS = 50;
+const BAND_FROM = 0.15;
+const BAND_MS = 34;
 const px = (v) => parseFloat(v) || 0;
 /* The parts of `screens` out of sight, with the content size each has (for contain-intrinsic-size), read only. */
 function outOfSight(screens) {
@@ -292,10 +295,10 @@ function topBand(main, head, body) {
   }
   return out;
 }
-function aside(main, scrolled) {
+function aside(main, scrolled, early = false) {
   if (held && main && !parts(main).screens.length) { held.leave = leaving; return !!leaving; }  // (held already, above)
   forget();
-  if (!leaving || !main || !wanted() || typeof document.createElement !== 'function') return false;
+  if ((!leaving && !early) || !main || !wanted() || typeof document.createElement !== 'function') return false;
   const { screens, head, body } = parts(main);
   if (!screens.length) return false;
   // (reads: scroll places, what is out of sight, the top band)
@@ -318,6 +321,7 @@ function aside(main, scrolled) {
     part.style.containIntrinsicSize = `${w}px ${h}px`;
     part.style.contentVisibility = 'hidden';
   }
+  const back = screens.map((x) => [x, x.nextSibling]);
   const el = document.createElement('main');
   el.className = 'view ui-tab-old';
   if (main.dataset.tab) el.dataset.tab = main.dataset.tab;
@@ -326,13 +330,32 @@ function aside(main, scrolled) {
   el.setAttribute('aria-hidden', 'true');
   for (const s of screens) el.append(s);
   main.after(el);
-  held = { el, anims: [], locks, band, leave: leaving };
+  held = { el, anims: [], locks, band, leave: leaving, main, scrolls, back };
   // (back where they were in this same task: laid out now, with only the screenful in sight to lay out)
   for (const [x, top, left] of scrolls) {
     const at = x === main ? el : x;
     try { if (top) at.scrollTop = top; if (left) at.scrollLeft = left; } catch (error) { /* gone */ }
   }
   return true;
+}
+
+/* A tab pressed (js/start.js, on its pointerdown: a finger's press comes 60 to 100 ms before its click): the old screen
+   is held already, so the work of moving it is done while the finger is still down, never in the new screen's frames.
+   It shows exactly as it did. `unprepare` puts it back where it was when no tap came of the press. */
+const prepare = (main, scrolled) => !held && !leaving && aside(main, scrolled, true);
+function unprepare() {
+  if (!held || held.leave || leaving) return;
+  const was = held;
+  const screens = [...was.el.children];
+  try {
+    for (const [x, next] of was.back) {
+      if (x.parentElement !== was.el) continue;
+      if (next && next.parentElement === was.main) was.main.insertBefore(x, next); else was.main.append(x);
+    }
+    for (const x of screens) if (x.parentElement === was.el) was.main.append(x);
+  } catch (error) { /* as it is */ }
+  forget();
+  for (const [x, top, left] of was.scrolls) { try { if (top) x.scrollTop = top; if (left) x.scrollLeft = left; } catch (error) { /* gone */ } }
 }
 
 /* js/start.js's show(), once a screen has been drawn after a tab's leave(): the new screen comes in. */
@@ -374,22 +397,17 @@ function drawn() {
     // from full over 120 ms its words read through the new ones as a second page, critic 3's must-fix 2)
     // (a frame after the new one starts rising: its parts redrawn meanwhile start on their own clock, up to a frame late)
     const going = run(under.el, [{ opacity: UNDER_START }, { opacity: 0 }], { duration: UNDER_MS, delay: FRAME, easing: 'linear', fill: 'both' }, OUT);
-    // (its header and top band gone as the new screen comes in, never before it: from where the paused leave holds
-    // them, in BAND_MS, three frames: gone in one, the gate's second-tap check saw them snap)
-    const bandGone = [];
+    // (its header and top band all but gone from the first frame that shows the new screen, never before it: from
+    // BAND_FROM over two frames, on their own clock, as a move the gate's second-tap check sees under way)
     for (const part of under.band || []) {
-      const a = run(part, [{ opacity: 0 }], { duration: BAND_MS, easing: 'linear', fill: 'forwards' }, OUT);
-      if (a) { under.anims.push(a); bandGone.push(a); }
+      const a = run(part, [{ opacity: BAND_FROM }, { opacity: 0 }], { duration: BAND_MS, easing: 'linear', fill: 'forwards' }, OUT);
+      if (a) under.anims.push(a);
     }
     // (on the new screen's clock: the old one's fade alone was started a frame or two before the new one's at the
     // Chromebook's size, which showed both dimmer for those frames)
     const lead = fades.anims[0] || wordFades.anims[0] || travels.anims[0];
     if (lead && going) {
-      // (held at their start until the new screen's own move has started, then put on its clock)
-      const sync = [going, ...bandGone];
-      for (const a of sync) { try { a.pause(); } catch (error) { /* as it is */ } }
-      lead.ready.then(() => { if (held !== under) return; for (const a of sync) { try { a.startTime = lead.startTime; } catch (error) { try { a.play(); } catch (e) { /* as it is */ } } } },
-        () => { for (const a of sync) { try { a.play(); } catch (error) { /* gone */ } } });
+      lead.ready.then(() => { if (held === under && lead.startTime !== null) { try { going.startTime = lead.startTime; } catch (error) { /* as it is */ } } }, () => {});
     }
     if (going) {
       under.anims.push(going);
@@ -421,5 +439,5 @@ function drawn() {
 /* Whether a tab's move is under way (glass/loading.js then leaves the new screen's brightening to it). */
 const moving = () => !!(leaving || coming);
 
-V.tabMove = { leave, aside, drawn, moving, IDS: [OUT, IN] };
+V.tabMove = { leave, aside, prepare, unprepare, drawn, moving, IDS: [OUT, IN] };
 })();

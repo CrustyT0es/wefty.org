@@ -319,7 +319,33 @@
   const glassTab = () => {
     try { return !!(V.look && V.look.isGlass && V.look.isGlass()) && !document.documentElement.classList.contains('calm'); } catch (error) { return false; }
   };
-  let heldFrom = null;     // the screen whose nodes ui/tabs.js already holds (its places kept in the tap's task)
+  let heldFrom = null;     // the screen whose nodes ui/tabs.js already holds (its places kept when it was held)
+  /* A tab pressed: ui/tabs.js holds the old screen already, while the finger is down (prepare), so the move costs the
+     new screen's frames nothing (critic 3's must-fix 3); put back when no tap of that tab follows. */
+  let unheld = null;
+  document.addEventListener('pointerdown', (event) => {
+    const tab = event.target && event.target.closest ? event.target.closest('#app > nav.tabs .tab') : null;
+    if (!tab || event.button > 0 || !shown || !current || NAV_OF[current] === tab.dataset.tab || heldFrom === current) return;
+    if (!glassTab() || instant() || !V.tabMove || !V.tabMove.prepare) return;
+    try {
+      keepPlace(current);
+      if (V.tabMove.prepare(shell.view, scrolledIn(shell.view))) heldFrom = current;
+    } catch (error) { console.error(error); }
+  }, true);
+  for (const type of ['pointerup', 'pointercancel']) {
+    document.addEventListener(type, () => {
+      if (heldFrom === null) return;
+      if (unheld) unheld.cancel();
+      const from = heldFrom;
+      const later = V.motion && typeof V.motion.later === 'function' ? V.motion.later : null;
+      if (!later) return;
+      unheld = later(() => {
+        if (heldFrom !== from || current !== from || (V.tabMove.moving && V.tabMove.moving())) return;
+        try { V.tabMove.unprepare(); } catch (error) { console.error(error); }
+        heldFrom = null;
+      }, 600);
+    }, true);
+  }
   let tapDraw = false;     // the draw a tab tap asked for is under way (show() puts the view at its top first)
   function tapped(id) {
     const covered = coveredTap;
