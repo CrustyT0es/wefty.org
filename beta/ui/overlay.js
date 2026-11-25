@@ -479,6 +479,9 @@ document.addEventListener('keydown', (event) => {
 
 /* What the foot of the screen claims, as the top edge of the highest thing there (page px): the tab bar on a phone, a
    full-screen note's tools and the question it asks over them, Chat's typing box, a study screen's answers. null: none. */
+/* Notes' own + on a phone, floating over the dock's right end since the dock's + went (the owner): a toast's slot sits
+   over it, never on it (footTop's `plus`; narrow, so it is let past the width rule) */
+const PLUS = '#app > main.view[data-tab=notes] > .fab';
 const FOOT = ['#app > nav.tabs', '.editor-layer.shown:not(.g-leaving) .editor-tools', '.editor-layer.shown:not(.g-leaving) .editor-ask .ask-card',
   '.chat-composer > :not([hidden])', '.layer.study-layer:not(.leaving) .study-foot', '.layer.study-layer:not(.leaving) .study-answers',
   // (Notes' pick bar, ui/dock.js's 'pick': since it covers the dock whole on a phone, a toast's place over the dock lay
@@ -494,10 +497,10 @@ function moved(el) {
   }
   return dy;
 }
-function footTop(z, below = -Infinity) {
+function footTop(z, below = -Infinity, plus = false) {
   const H = innerHeight / z;
   let top = null;
-  for (const el of document.querySelectorAll(FOOT.join(', '))) {
+  for (const el of document.querySelectorAll((plus ? FOOT.concat(PLUS) : FOOT).join(', '))) {
     if (!shows(el)) continue;
     const r = box(el, z);
     // (where it rests, not where a move has it now: a note's question rises 10 px into its place as it comes, and a
@@ -505,7 +508,7 @@ function footTop(z, below = -Infinity) {
     const lift = moved(el) / z;
     r.top -= lift; r.bottom -= lift;
     // (only what sits at the foot: a bar across the lower part of the screen, not a rail down its side)
-    if (r.top < H * 0.45 || r.height > H * 0.5 || r.width < 120 || r.bottom < below) continue;
+    if (r.top < H * 0.45 || r.height > H * 0.5 || (r.width < 120 && !el.matches(PLUS)) || r.bottom < below) continue;
     if (top === null || r.top < top) top = r.top;
   }
   return top;
@@ -1205,7 +1208,7 @@ function slot(box_) {
   if (media('(min-width: 900px)')) { box_.style.removeProperty('--ui-toast-bottom'); return; }
   // (a sheet open covers the foot: above its own buttons then)
   const sheetTop = topSheetActions(z);
-  const foot = sheetTop !== null ? sheetTop : footTop(z);
+  const foot = sheetTop !== null ? sheetTop : footTop(z, -Infinity, true);
   const bottom = foot === null ? null : H - foot + GAP;
   if (bottom === null) box_.style.removeProperty('--ui-toast-bottom');
   else box_.style.setProperty('--ui-toast-bottom', `${Math.round(bottom)}px`);

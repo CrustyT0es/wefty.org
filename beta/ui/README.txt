@@ -36,8 +36,8 @@ this before adding to it. The look brief (section 1) and `PLAN.md` say what it l
 | `nav.css` | Back and the layer (B1) | the layer's and `#stage`'s geometry |
 | `screen.css` | the header (B3) | `--x0`, a phone's one sticky header row and its collapse on the page's own scroll timeline, the Chromebook's edge at x 100 |
 | `dock.js` | the dock (B2) | `V.dock`: the one visualViewport reader (`g-typing`, `--kb`), the bars' table and claims |
-| `dock.css` | the dock (B2) | the dock, the fog, the strip, the + placed by the dock, the toast slot |
-| `tabs.js` | tab transition lane (wave B) | `V.tabMove`: a tab's arrival (the old screen fades on the compositor from the tap, the new one rises 8 px from the pill's side; js/start.js's tapped() and show() call `leave` and `drawn`) |
+| `dock.css` | the dock (B2) | the dock, the fog, the strip, Notes' own + placed over the dock (no + in the bar or the rail), the toast slot |
+| `tabs.js` | tab transition lane (wave B) | `V.tabMove`: a tab's arrival (the old screen fades on the compositor from the tap, the new one rises 12 px from the pill's side, its header and Notes' + moving with it as one; js/start.js's tapped() and show() call `leave` and `drawn`) |
 
 Load order in `index.html` (the integrator's): the sheets after `glass/swipeback.css` as `tokens.css`, `kit.css`,
 `overlay.css`, then the lanes' own (`edge.css`, `start.css`, ...), with `firstsight.css` LAST of the head's

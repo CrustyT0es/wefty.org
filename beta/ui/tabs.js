@@ -18,14 +18,14 @@
        240 ms (D.enter) on the settle spring's shape; more than 12 px cut Notes' title for a frame;
      - a screen drawn again on its own while it moves (Today on 'data', 'streak', 'status') gets the same move on
        the same clock (a MutationObserver while a move is under way);
-     - the header stays: it is never faded or moved (the screen's drift is held off it), its buttons and your picture
-       are left alone and only its words (the title, Today's mark, Notes' title and count) cross-fade: the old ones
-       ease down in the leave, the new ones come up from there in D.fade;
-     - the dock, the rail, the pill, the +, the fog and the canvas behind are never touched.
+     - the header moves with its screen, as one (the owner: "Id want the headers and the other texts and elements all
+       to move the same"): its title, its buttons and your picture fade and glide exactly as the content does, the
+       old header going with its old screen (its top band all but gone the frame the new one shows), the new one coming
+       in with its new screen;
+     - the dock, the rail, the pill, the fog and the canvas behind are never touched.
 
-   Only `translate` (on the screen's own node, main.view's child: Today's page, Notes' layout, Share's page, the Chat
-   app, and the opposite on its header) and `opacity` (on the screen's content beside the header: each sibling along
-   the way from the header up to the screen's node, or the node itself when it has no header). No layout, no filter,
+   Only `translate` and `opacity`, both on the screen's own node, main.view's child (Today's page, Notes' layout,
+   Share's page, the Chat app), so the header and everything under it share one move. No layout, no filter,
    no will-change, nothing on main.view itself (it holds Notes' fixed +). Nothing here reads the layout or a computed
    style: the parts are found by their classes, the old screen's opacity from its animation's own clock (the leave's
    one keyframe starts each part from where it is, a part still coming in on its own included, with nothing read).
@@ -50,16 +50,13 @@ const root = document.documentElement;
 const HAS = typeof Element !== 'undefined' && typeof Element.prototype.animate === 'function';
 
 const ORDER = ['today', 'notes', 'share', 'claude'];   // the tabs as they stand in the bar (and down the rail)
-/* main.view's children that are not the screen: Notes' +, the pull's pill, words for a screen reader */
-const NOT_SCREEN = '.fab, .g-pull-hint, .sr-only, [hidden], .g-tbar-wrap';
-/* ...and the parts beside a header that rest under full opacity or show nothing (Notes' and Chat's pull pill sits
-   beside their header: faded from 1, it flashed up as a stray pill on every switch away; critic 2's must-fix 2) */
-const NOT_BODY = '.g-pull-hint, .sr-only, [hidden]';
+/* main.view's children that are not the screen: the pull's pill, words for a screen reader. (Notes' own +, fixed over the
+   dock's right end, is its screen's: it fades and glides with it, as the header does.) */
+const NOT_SCREEN = '.g-pull-hint, .sr-only, [hidden], .g-tbar-wrap';
 const HEADS = '[data-ui-head], .app-head, .list-title';  // a screen's header, the first found (B3's: data-ui-head)
-/* a header's words, the only part of it that changes between tabs (its buttons and your picture stay as they are) */
-const WORDS = ':scope > :is([data-ui-title], .head-title, .head-home, .head-mark, .title-stack)';
-/* The old screen's content eases down to this while it waits for the new one (linear: no fast fall), its header's
-   words to WORDS_FLOOR; the new one comes up from where they had really got to. */
+/* The old screen (its header with it) eases down to this while it waits for the new one (linear: no fast fall); the
+   new one comes up from where it had really got to. (WORDS_FLOOR: what a header's words alone once eased to; no move
+   of their own is made now, so it only bounds the empty one.) */
 const FLOOR = 0.85;
 const WORDS_FLOOR = 0.4;
 const IN_PX = 12;    // the new screen comes in this far from the pill's side (more cut Notes' title for a frame)
@@ -87,24 +84,14 @@ const FRAME = 1000 / 60;
 const outCurve = (x) => (1 - Math.exp(-4 * x)) / (1 - Math.exp(-4));
 const shift = (axis, px) => (axis === 'X' ? `${px}px 0px` : `0px ${px}px`);
 
-/* The screen's own node(s), its header, the header's words and the content beside the header, by class alone. */
+/* The screen's own node(s) and its header, by class alone. What fades is the screen's node itself, header and all
+   (one move: the header never stands still while the rest glides); `words` is kept empty for the moves below. */
 function parts(main) {
   const screens = [];
   for (const el of main.children) if (!el.matches(NOT_SCREEN)) screens.push(el);
-  const body = [];
   let head = null;
-  let words = [];
-  for (const el of screens) {
-    const found = head ? null : el.querySelector(HEADS);
-    if (!found) { body.push(el); continue; }
-    head = found;
-    words = [...found.querySelectorAll(WORDS)];
-    // (every sibling along the way from the header up to the screen's node: all of the screen but its header)
-    for (let at = found; at !== el && at.parentElement; at = at.parentElement) {
-      for (const sib of at.parentElement.children) if (sib !== at && !sib.matches(NOT_BODY)) body.push(sib);
-    }
-  }
-  return { screens, head, words, body };
+  for (const el of screens) { head = el.querySelector(HEADS); if (head) break; }
+  return { screens, head, words: [], body: screens };
 }
 
 const wanted = () => HAS && glass() && !instant() && !calm() && !reduced();
@@ -288,10 +275,12 @@ function topBand(main, head, body) {
   if (!head) return [];
   const h = head.getBoundingClientRect();
   const out = [head];
-  for (const el of body) {
-    if (!main.contains(el)) continue;
-    const r = el.getBoundingClientRect();
-    if ((r.width || r.height) && el.matches(BAND) && r.top < h.bottom + BAND_PX) out.push(el);
+  // (the band's parts anywhere in the screen: the screen fades as one node now, so they are no longer its body's own)
+  for (const screen of body) {
+    for (const el of screen.querySelectorAll(BAND)) {
+      const r = el.getBoundingClientRect();
+      if ((r.width || r.height) && r.top < h.bottom + BAND_PX) out.push(el);
+    }
   }
   return out;
 }
@@ -385,13 +374,14 @@ function drawn() {
   const wordFades = moves(() => (wordsFrom < 0.999 ? parts(main).words.map((el) => [el, [{ opacity: wordsFrom }, { opacity: 1 }], fade]) : []), IN);
   const travels = moves(() => {
     if (!px) return [];
-    const { screens, head } = parts(main);
-    const out = screens.map((el) => [el, [{ translate: shift(was.axis, px) }, { translate: '0px 0px' }], travel]);
-    // (the header held still against the screen's drift)
-    if (head) out.push([head, [{ translate: shift(was.axis, -px) }, { translate: '0px 0px' }], travel]);
-    return out;
+    const { screens } = parts(main);
+    // (the header rides with its screen: no move of its own)
+    return screens.map((el) => [el, [{ translate: shift(was.axis, px) }, { translate: '0px 0px' }], travel]);
   }, IN);
-  for (const m of [fades, wordFades, travels]) m.again();
+  // (Notes' own + arrives with its screen, in its place: never its own pop-in under the tab's move, which glass/notes.js
+  // also stops for a tab's arrival, a task later)
+  for (const el of parts(main).screens) if (el.matches('.fab') && el.dataset) el.dataset.gnStill = '';
+  for (const m of [travels, fades, wordFades]) m.again();
   if (under) {
     // (the old screen goes as the new one covers it, from about half of what it showed (UNDER_START) in UNDER_MS:
     // from full over 120 ms its words read through the new ones as a second page, critic 3's must-fix 2)

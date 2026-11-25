@@ -570,13 +570,6 @@
     V.go('today', { top: true });
   }
 
-  /* The dock's + (2.0, ui/dock.css places it: at the dock's right end on a phone, under the mark on the rail). It is the
-     + of every tab root but Notes, whose own (.fab, in Notes' screen) takes its place there: one + at a time. */
-  function plus() {
-    return V.h('button.dock-plus', { type: 'button', 'aria-label': 'New note', title: V.appShortcuts ? 'New note (Ctrl+N)' : 'New note',
-      onclick: () => { if (V.notes && V.notes.chooseTemplate) V.notes.chooseTemplate({ fresh: true }); } }, V.icon('plus'));
-  }
-
   function buildShell() {
     let me = null;
     try { me = V.profileButton('rail-me'); } catch (error) { console.error(error); }
@@ -589,7 +582,7 @@
         // (Chat's dot while an answer is written and another screen shows; what it and the badge say, for a screen reader)
         id === 'claude' ? V.h('span.tab-dot', { hidden: true, 'aria-hidden': 'true', title: 'Writing an answer' }) : null),
       V.weave('tab-weave'), V.h('span.tab-label', { text: label }), id === 'claude' ? V.h('span.sr-only.tab-said') : null)),
-      plus(), V.h('span.rail-spacer'), me);
+      V.h('span.rail-spacer'), me);
     const view = V.h('main.view');
     shell = { nav, view, me };
     V.clear(app, nav, view);

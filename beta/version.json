@@ -46,7 +46,7 @@
   "Right-click, two-finger tap or a long press opens more options on almost everything: notes, folders, flash cards, chats, pictures and files.",
   "Snap a page: take a photo of your notes or a handout (from Today, a new note or Chat) and AI turns it into a tidy note you check before it's saved. Share links, screenshots and PDFs into Wefty from other apps; on an iPhone, copy them and tap Paste into Wefty."
  ],
- "build": "1.22.6-dab3799c429f",
+ "build": "1.22.6-6f64a8eca557",
  "files": {
   "chat/index.html": {
    "sha256": "01f672bcbea6f7fa9f01d77167523683a8f482d0874f9cc5f20de69621bfe0b6",
@@ -469,8 +469,8 @@
    "size": 32607
   },
   "js/start.js": {
-   "sha256": "716da85020e7d0d01aad12fa860762aa1641504a8322b99161d999cc2a06d37a",
-   "size": 181187
+   "sha256": "c6ee0e89e9aab992f5ec83729e8ba7edca0a42ceb1ef462349b6f9f3bafdc9c2",
+   "size": 180656
   },
   "js/starthere.js": {
    "sha256": "0930205a2307d0dc7ff483492c1b8f8545c9b286164b5d6e61be596fce41e1a2",
@@ -585,7 +585,7 @@
    "size": 379606
   },
   "sw.js": {
-   "sha256": "81b6e815ef89c803d27a090542d8fec5b6945cc89336604dccf7ae880aa53668",
+   "sha256": "419b57ff551c2f11e331800f494d3cc59252fae873796de4a9ed01cf29a22b6f",
    "size": 13539
   },
   "terms.html": {
@@ -597,12 +597,12 @@
    "size": 30645
   },
   "ui/README.txt": {
-   "sha256": "58d0d28c2160cf18b20d47be838c0bcd9d107df6902b29004d6a06f807c8a06f",
-   "size": 9590
+   "sha256": "f2d5483365e1ddb00afdff817d64cf154e3b42998fd69a0cf718859a4ed5d063",
+   "size": 9677
   },
   "ui/dock.css": {
-   "sha256": "6fafffcbbd824b5300c0be7ed7d2fc8e7830348b6ce800c203684c4ef5dc7dfc",
-   "size": 12588
+   "sha256": "e5bd2da89a048c8dec39e5118a0088533474ce150b524af05a8fc485676b3cec",
+   "size": 11001
   },
   "ui/dock.js": {
    "sha256": "ed149f71c0a605dd22b1170807e7e09996d4b3212aed1bfa7cf12b6333025cfc",
@@ -637,8 +637,8 @@
    "size": 5065
   },
   "ui/overlay.js": {
-   "sha256": "3cd2491d50d7fe7f2e064813f3432d22ecdc0cfb04b87e432104430a1caa3e42",
-   "size": 78763
+   "sha256": "01b6114c972750a8d1709c99e98f3e792a365e30f7908edf3fd9805404122842",
+   "size": 79110
   },
   "ui/screen.css": {
    "sha256": "eb6e14729a3463a6950262ecf7e82eed8cb244589bbfa7c1af350ed15cc159b7",
@@ -649,8 +649,8 @@
    "size": 4781
   },
   "ui/tabs.js": {
-   "sha256": "1ba8905678006b9e01678b43e9e6a8f5cd5bb7844beedb1e8976faa822c9e571",
-   "size": 26809
+   "sha256": "b21bd33dcd754c413c73fa867c34034752809465679dbcf1d16ab6cdca7e6688",
+   "size": 26393
   },
   "ui/tokens.css": {
    "sha256": "3cf306e5a048c01a8d533b15fd365ae64300a6078a02f7305d6fe10ea3a4c635",
